@@ -1,0 +1,19 @@
+{
+  "name": "pf2e-ai-tactical-game",
+  "version": "0.1.0",
+  "description": "AI-powered PF2e tactical combat game with modular rule engine, Node.js backend, and React frontend",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend",
+    "shared",
+    "rules-engine"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces",
+    "build": "npm run build --workspaces",
+    "start": "npm start --workspace=backend",
+    "client": "npm start --workspace=frontend",
+    "type-check": "npm run type-check --workspaces"
+  }
+}

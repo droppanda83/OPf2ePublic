@@ -1,0 +1,103 @@
+.game-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-left: 3px solid #2196F3;
+  border-radius: 8px;
+  padding: 15px;
+  max-height: 300px;
+  overflow: hidden;
+}
+
+.game-log h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #2196F3;
+}
+
+.log-output {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.log-entry {
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-left: 3px solid #666;
+  border-radius: 3px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.log-entry.action {
+  border-left-color: #2196F3;
+}
+
+.log-entry.action::before {
+  content: '⚔️ ';
+}
+
+.log-entry.damage {
+  border-left-color: #f44336;
+}
+
+.log-entry.damage::before {
+  content: '💢 ';
+}
+
+.log-entry.condition {
+  border-left-color: #FFC107;
+}
+
+.log-entry.condition::before {
+  content: '⚡ ';
+}
+
+.log-entry.death {
+  border-left-color: #9C27B0;
+  background: rgba(156, 39, 176, 0.1);
+}
+
+.log-entry.death::before {
+  content: '💀 ';
+}
+
+.log-entry.system {
+  border-left-color: #4CAF50;
+}
+
+.log-entry.system::before {
+  content: '⚙️ ';
+}
+
+.log-timestamp {
+  font-size: 10px;
+  color: #888;
+  margin-right: 5px;
+}
+
+.log-message {
+  color: #ddd;
+}
+
+.log-output::-webkit-scrollbar {
+  width: 6px;
+}
+
+.log-output::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.log-output::-webkit-scrollbar-thumb {
+  background: rgba(33, 150, 243, 0.5);
+  border-radius: 3px;
+}
+
+.log-output::-webkit-scrollbar-thumb:hover {
+  background: rgba(33, 150, 243, 0.7);
+}

@@ -1,0 +1,42 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Backend: Debug",
+      "program": "${workspaceFolder}/backend/dist/index.js",
+      "preLaunchTask": "PF2e: Build All",
+      "outFiles": [
+        "${workspaceFolder}/backend/dist/**/*.js",
+        "${workspaceFolder}/shared/dist/**/*.js",
+        "${workspaceFolder}/rules-engine/dist/**/*.js"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}/backend",
+      "env": {
+        "NODE_ENV": "development"
+      }
+    },
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Frontend: Debug",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/frontend",
+      "sourceMapPathOverride": {
+        "/src/*": "${webRoot}/src/*"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack Debug",
+      "configurations": [
+        "Backend: Debug",
+        "Frontend: Debug"
+      ],
+      "stopAll": true
+    }
+  ]
+}
