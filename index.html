@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PF2e Pathfinder Grid Encounter</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>PF2e Pathfinder Encounter Grid</h1>
+        <p>
+          Build a 2D encounter grid, place start/end points, and load Pathbuilder
+          characters for quick reference.
+        </p>
+      </div>
+      <div class="status">
+        <span id="grid-status">20 x 20 grid</span>
+        <span id="path-status">No path calculated</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel">
+        <h2>Pathbuilder Character Upload</h2>
+        <p class="hint">
+          Upload a Pathbuilder 2e export (JSON). Characters will appear below for
+          quick lookup during encounters.
+        </p>
+        <input type="file" id="character-file" accept=".json" />
+        <div id="character-error" class="error" role="alert"></div>
+        <div id="character-list" class="character-list"></div>
+      </section>
+
+      <section class="panel grid-panel">
+        <div class="controls">
+          <div>
+            <label for="grid-size">Grid size</label>
+            <select id="grid-size">
+              <option value="16">16 x 16</option>
+              <option value="20" selected>20 x 20</option>
+              <option value="24">24 x 24</option>
+              <option value="32">32 x 32</option>
+            </select>
+          </div>
+          <div>
+            <label for="mode">Click mode</label>
+            <select id="mode">
+              <option value="wall">Toggle wall</option>
+              <option value="start">Set start</option>
+              <option value="end">Set end</option>
+            </select>
+          </div>
+          <button id="clear-walls" type="button">Clear walls</button>
+          <button id="run-path" type="button">Run pathfinder</button>
+        </div>
+        <canvas id="grid" width="600" height="600" aria-label="Encounter grid"></canvas>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        Tip: Set a start, end, then run the pathfinder to view the shortest
+        path. Walls block movement on the grid.
+      </p>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
