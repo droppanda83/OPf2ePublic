@@ -1,0 +1,90 @@
+/**
+ * Shield definitions for PF2e Rebirth
+ */
+
+export interface Shield {
+  id: string;
+  name: string;
+  armorBonus: number; // AC bonus when equipped
+  hardness: number; // Damage reduced per hit before creature takes damage
+  hp: number; // Shield hit points (health)
+  maxHp: number; // Maximum shield health
+  hands: number; // How many hands needed (usually 1, can be 0 for buckler)
+  rarity: 'common' | 'uncommon' | 'rare' | 'unique';
+  traits: string[]; // Special properties
+  icon: string;
+  description: string;
+}
+
+// Shield catalog
+export const SHIELD_CATALOG: Record<string, Shield> = {
+  'wooden-shield': {
+    id: 'wooden-shield',
+    name: 'Wooden Shield',
+    armorBonus: 2,
+    hardness: 3,
+    hp: 12,
+    maxHp: 12,
+    hands: 1,
+    rarity: 'common',
+    traits: ['wooden'],
+    icon: '🛡️',
+    description: 'A basic wooden shield that provides modest protection',
+  },
+  'steel-shield': {
+    id: 'steel-shield',
+    name: 'Steel Shield',
+    armorBonus: 2,
+    hardness: 5,
+    hp: 20,
+    maxHp: 20,
+    hands: 1,
+    rarity: 'common',
+    traits: ['steel'],
+    icon: '🛡️',
+    description: 'A sturdy steel shield with good durability',
+  },
+  'tower-shield': {
+    id: 'tower-shield',
+    name: 'Tower Shield',
+    armorBonus: 2,
+    hardness: 6,
+    hp: 15,
+    maxHp: 15,
+    hands: 1,
+    rarity: 'uncommon',
+    traits: ['tower'],
+    icon: '🛡️',
+    description: 'A large tower shield providing superior protection and cover',
+  },
+  'buckler': {
+    id: 'buckler',
+    name: 'Buckler',
+    armorBonus: 1,
+    hardness: 2,
+    hp: 4,
+    maxHp: 4,
+    hands: 0, // Can be used without occupying a hand
+    rarity: 'common',
+    traits: ['light'],
+    icon: '🛡️',
+    description: 'A small ceremonial or practical buckler that leaves a hand free',
+  },
+  'crystal-shield': {
+    id: 'crystal-shield',
+    name: 'Crystal Shield',
+    armorBonus: 1,
+    hardness: 4,
+    hp: 8,
+    maxHp: 8,
+    hands: 1,
+    rarity: 'rare',
+    traits: ['magical', 'crystal'],
+    icon: '💎',
+    description: 'An enchanted crystal shield that shimmers with arcane energy',
+  },
+};
+
+export const getShield = (shieldId: string): Shield | undefined => {
+  return SHIELD_CATALOG[shieldId];
+};

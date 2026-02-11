@@ -2,7 +2,7 @@
   "name": "pf2e-shared",
   "version": "1.0.0",
   "description": "Shared types and utilities for PF2e Combat Game",
-  "main": "index.ts",
+  "main": "index.js",
   "scripts": {
     "build": "tsc",
     "type-check": "tsc --noEmit"

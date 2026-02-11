@@ -14,49 +14,23 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.calculateDistance = calculateDistance;
-exports.isCreatureAlive = isCreatureAlive;
-exports.formatHealth = formatHealth;
-exports.getCreatureStatus = getCreatureStatus;
-exports.getColor = getColor;
+exports.getSpell = void 0;
 exports.rollDice = rollDice;
-exports.rollD20 = rollD20;
-exports.sumDice = sumDice;
+exports.calculateFinalDamage = calculateFinalDamage;
+exports.applyDamageToShield = applyDamageToShield;
 // Export all shared types
 __exportStar(require("./types"), exports);
-// Utility functions
-function calculateDistance(from, to) {
-    return Math.max(Math.abs(to.x - from.x), Math.abs(to.y - from.y));
-}
-function isCreatureAlive(creature) {
-    return creature.currentHealth > 0;
-}
-function formatHealth(current, max) {
-    return `${current}/${max} HP`;
-}
-function getCreatureStatus(creature) {
-    if (!isCreatureAlive(creature)) {
-        return 'Defeated';
-    }
-    const healthPercent = (creature.currentHealth / creature.maxHealth) * 100;
-    if (healthPercent > 75)
-        return 'Healthy';
-    if (healthPercent > 50)
-        return 'Injured';
-    if (healthPercent > 25)
-        return 'Badly Wounded';
-    return 'Critical';
-}
-function getColor(status) {
-    switch (status) {
-        case 'Healthy': return '#4CAF50';
-        case 'Injured': return '#FFC107';
-        case 'Badly Wounded': return '#FF9800';
-        case 'Critical': return '#F44336';
-        case 'Defeated': return '#9E9E9E';
-        default: return '#2196F3';
-    }
-}
+__exportStar(require("./movement"), exports);
+__exportStar(require("./ac"), exports);
+__exportStar(require("./spells"), exports);
+var spells_1 = require("./spells");
+Object.defineProperty(exports, "getSpell", { enumerable: true, get: function () { return spells_1.getSpell; } });
+__exportStar(require("./weapons"), exports);
+__exportStar(require("./shields"), exports);
+__exportStar(require("./actions"), exports);
+__exportStar(require("./bonuses"), exports);
+__exportStar(require("./bestiary"), exports);
+__exportStar(require("./encounterBuilder"), exports);
 // Dice rolling utility
 function rollDice(times, sides) {
     const results = [];
@@ -65,9 +39,76 @@ function rollDice(times, sides) {
     }
     return results;
 }
-function rollD20() {
-    return rollDice(1, 20)[0];
+function calculateFinalDamage(baseDamage, damageType, target) {
+    // Check for immunity first (complete negation)
+    if (target.damageImmunities?.includes(damageType)) {
+        return { finalDamage: 0, modifier: 'immune' };
+    }
+    // Check for weakness (extra damage)
+    const weakness = target.damageWeaknesses?.find(w => w.type === damageType);
+    if (weakness) {
+        const finalDamage = baseDamage + weakness.value;
+        return { finalDamage, modifier: 'weak', modifierValue: weakness.value };
+    }
+    // Check for resistance (reduced damage)
+    const resistance = target.damageResistances?.find(r => r.type === damageType);
+    if (resistance) {
+        const finalDamage = Math.max(0, baseDamage - resistance.value);
+        return { finalDamage, modifier: 'resist', modifierValue: resistance.value };
+    }
+    return { finalDamage: baseDamage, modifier: 'normal' };
 }
-function sumDice(rolls) {
-    return rolls.reduce((a, b) => a + b, 0);
+// Shield damage calculation
+const shields_1 = require("./shields");
+function applyDamageToShield(creature, incomingDamage) {
+    const result = {
+        incomingDamage,
+        shieldAbsorbed: 0,
+        shieldTakenDamage: 0,
+        creatureTakenDamage: incomingDamage,
+        shieldBroken: false,
+        shieldHpRemaining: 0,
+    };
+    // If no shield equipped OR shield not raised, all damage goes to creature
+    if (!creature.equippedShield || !creature.shieldRaised) {
+        return result;
+    }
+    // Shield Block must be armed to apply hardness and damage to shield
+    const blockIndex = creature.conditions?.findIndex((c) => c.name === 'shield-block-ready' && ((c.usesRemaining ?? 1) > 0)) ?? -1;
+    if (blockIndex < 0) {
+        return result;
+    }
+    const shield = (0, shields_1.getShield)(creature.equippedShield);
+    if (!shield) {
+        return result;
+    }
+    // Initialize shield HP if not set
+    if (creature.currentShieldHp === undefined) {
+        creature.currentShieldHp = shield.maxHp;
+    }
+    // Apply shield hardness (flat damage reduction)
+    result.shieldAbsorbed = Math.min(incomingDamage, shield.hardness);
+    const damageAfterHardness = Math.max(0, incomingDamage - shield.hardness);
+    // Apply remaining damage to shield HP
+    result.shieldTakenDamage = Math.min(damageAfterHardness, creature.currentShieldHp);
+    creature.currentShieldHp -= result.shieldTakenDamage;
+    // Any damage that exceeds shield HP goes to creature
+    result.creatureTakenDamage = Math.max(0, damageAfterHardness - result.shieldTakenDamage);
+    // Mark shield as broken if HP reaches 0
+    if (creature.currentShieldHp <= 0) {
+        result.shieldBroken = true;
+        creature.currentShieldHp = 0;
+    }
+    result.shieldHpRemaining = creature.currentShieldHp;
+    // Consume the armed Shield Block
+    const blockCondition = creature.conditions?.[blockIndex];
+    if (blockCondition) {
+        if (typeof blockCondition.usesRemaining === 'number') {
+            blockCondition.usesRemaining -= 1;
+        }
+        if (!blockCondition.usesRemaining || blockCondition.usesRemaining <= 0) {
+            creature.conditions.splice(blockIndex, 1);
+        }
+    }
+    return result;
 }

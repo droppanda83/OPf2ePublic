@@ -1,0 +1,62 @@
+{
+  "name": "Aldrich Stormborn",
+  "playerName": "Player One",
+  "level": 3,
+  "experience": 800,
+  "alignment": "CG",
+  "size": "medium",
+  "gender": "Male",
+  "age": "28",
+  "traits": ["human", "humanoid"],
+  "abilities": {
+    "str": 16,
+    "dex": 14,
+    "con": 15,
+    "int": 12,
+    "wis": 13,
+    "cha": 10
+  },
+  "maxHP": 32,
+  "armorClass": 18,
+  "skills": {
+    "acrobatics": {
+      "proficiency": "T"
+    },
+    "athletics": {
+      "proficiency": "T"
+    },
+    "crafting": {
+      "proficiency": "T"
+    },
+    "diplomacy": {
+      "proficiency": "T"
+    },
+    "intimidation": {
+      "proficiency": "T"
+    },
+    "stealth": {
+      "proficiency": "T"
+    }
+  },
+  "saves": {
+    "fortitude": {
+      "proficiency": "T"
+    },
+    "reflex": {
+      "proficiency": "T"
+    },
+    "will": {
+      "proficiency": "T"
+    }
+  },
+  "proficiencies": {
+    "weapons": ["simple", "martial"],
+    "armor": ["light", "medium", "heavy"]
+  },
+  "equippedArmor": "plate-armor",
+  "equippedWeapon": "longsword",
+  "equippedShield": "steel-shield",
+  "equippedItems": ["backpack", "rope", "torch"],
+  "notes": "Brave fighter from the northern lands",
+  "source": "Pathbuilder 2e"
+}

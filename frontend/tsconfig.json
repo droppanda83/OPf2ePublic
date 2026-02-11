@@ -13,6 +13,9 @@
     "isolatedModules": true,
     "moduleResolution": "node"
   },
-  "include": ["src"],
+  "include": [
+    "src",
+    "../shared/**/*.ts"
+  ],
   "exclude": ["node_modules"]
 }

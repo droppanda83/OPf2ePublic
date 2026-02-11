@@ -1,0 +1,78 @@
+{
+  "name": "Lyria Moonwhisper",
+  "playerName": "Player Two",
+  "level": 3,
+  "experience": 800,
+  "alignment": "NG",
+  "size": "medium",
+  "gender": "Female",
+  "age": "24",
+  "traits": ["elf", "humanoid"],
+  "abilities": {
+    "str": 10,
+    "dex": 16,
+    "con": 13,
+    "int": 14,
+    "wis": 15,
+    "cha": 12
+  },
+  "maxHP": 28,
+  "armorClass": 17,
+  "skills": {
+    "acrobatics": {
+      "proficiency": "T"
+    },
+    "arcana": {
+      "proficiency": "T"
+    },
+    "medicine": {
+      "proficiency": "T"
+    },
+    "nature": {
+      "proficiency": "T"
+    },
+    "occultism": {
+      "proficiency": "E"
+    },
+    "performance": {
+      "proficiency": "T"
+    },
+    "religion": {
+      "proficiency": "T"
+    },
+    "stealth": {
+      "proficiency": "T"
+    }
+  },
+  "saves": {
+    "fortitude": {
+      "proficiency": "U"
+    },
+    "reflex": {
+      "proficiency": "T"
+    },
+    "will": {
+      "proficiency": "T"
+    }
+  },
+  "proficiencies": {
+    "weapons": ["simple"],
+    "armor": ["light"]
+  },
+  "equippedArmor": "leather-armor",
+  "equippedWeapon": "dagger",
+  "equippedItems": ["spellbook", "component-pouch", "torch"],
+  "spellcasting": {
+    "keyAbility": "int",
+    "spellDC": 15,
+    "spells": [
+      "magic-missile",
+      "shield",
+      "fireball",
+      "invisibility",
+      "hold-person"
+    ]
+  },
+  "notes": "Skilled wizard with a passion for ancient tomes",
+  "source": "Pathbuilder 2e"
+}
