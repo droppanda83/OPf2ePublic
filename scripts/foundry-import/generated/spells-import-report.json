@@ -1,0 +1,36 @@
+{
+  "generatedAt": "2026-02-27T09:36:14.042Z",
+  "sourceFile": "scripts/foundry-import/source/spells.source.json",
+  "outputFile": "shared/spells.ts",
+  "spellCount": 1644,
+  "rankCounts": {
+    "0": 77,
+    "1": 363,
+    "2": 216,
+    "3": 221,
+    "4": 262,
+    "5": 177,
+    "6": 108,
+    "7": 80,
+    "8": 58,
+    "9": 51,
+    "10": 31
+  },
+  "traditionCounts": {
+    "arcane": 812,
+    "primal": 619,
+    "divine": 462,
+    "occult": 667
+  },
+  "focusCount": 461,
+  "cantrips": 77,
+  "damageSpells": 456,
+  "saveSpells": 680,
+  "healingSpells": 17,
+  "buffDebuffSpells": 807,
+  "meetsPhase13Target": true,
+  "rankRange": {
+    "min": 0,
+    "max": 10
+  }
+}

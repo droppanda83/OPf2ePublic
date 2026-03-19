@@ -1,9 +1,14 @@
 import React from 'react';
 import './BattleGrid.css';
+import { renderTileMap, preloadAtlas, renderTreeOverhangs } from '../rendering/TileRenderer';
+import type { TileType } from '../../../shared/mapGenerator';
+import { calculatePartyLineOfSight, getVisionRange } from '../../../shared/mapGenerator';
+import type { LightingLevel } from '../../../shared/mapGenerator';
+import type { GameState, Creature, GroundObject } from '../../../shared/types';
 
 interface BattleGridProps {
-  gameState: any;
-  creatures?: any[];
+  gameState: GameState;
+  creatures?: Creature[];
   selectedTarget: string | null;
   selectedAction: any | null;
   movementInfo: {
@@ -13,13 +18,27 @@ interface BattleGridProps {
   } | null;
   onSelectTarget: (id: string) => void;
   onCreatureClick?: (id: string) => void;
+  explorationMode?: boolean;
+  explorationCreatureId?: string | null;
+  onExplorationMove?: (x: number, y: number) => void;
+  /** Position overrides for animated movement (creatureId → {x,y}) */
+  positionOverrides?: Map<string, { x: number; y: number }>;
 }
 
-const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, selectedAction, movementInfo, onSelectTarget, onCreatureClick }) => {
+const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, selectedAction, movementInfo, onSelectTarget, onCreatureClick, explorationMode, explorationCreatureId, onExplorationMove, positionOverrides }) => {
   const [panX, setPanX] = React.useState(0);
   const [panY, setPanY] = React.useState(0);
   const [zoom, setZoom] = React.useState(1);
   const gridContainerRef = React.useRef<HTMLDivElement>(null);
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const overlayCanvasRef = React.useRef<HTMLCanvasElement>(null);
+  const revealedCellsRef = React.useRef<Set<string>>(new Set());
+  const [atlasLoaded, setAtlasLoaded] = React.useState(false);
+
+  // Preload LPC atlas textures and re-render canvas once ready
+  React.useEffect(() => {
+    preloadAtlas().then(() => setAtlasLoaded(true));
+  }, []);
 
   // Debug logging for AoE spell selection and targeting
   React.useEffect(() => {
@@ -66,9 +85,144 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
-  const mapSize = gameState.map.width;
+  const mapWidth = gameState.map.width;
+  const mapHeight = gameState.map.height || gameState.map.width;
   const cellSize = 40; // pixels
-  const gridSize = mapSize * cellSize;
+  const gridWidthPx = mapWidth * cellSize;
+  const gridHeightPx = mapHeight * cellSize;
+  const mapImageUrl: string | undefined = gameState.map.mapImageUrl;
+  const mapTheme: string = gameState.map.mapTheme || 'dungeon';
+  const tiles: TileType[][] | undefined = gameState.map.tiles;
+  const overlays = gameState.map.overlays;
+  const hasTiles = !!tiles && tiles.length > 0;
+
+  // Map lighting level — determined by the backend based on theme.
+  // Falls back to 'bright' when not set (e.g. legacy saves).
+  const lightingLevel: LightingLevel = gameState.map.lightingLevel || 'bright';
+
+  // Gather player creatures for fog-of-war (alive only)
+  const playerCreatures = React.useMemo(() => {
+    return gameState.creatures.filter(
+      (c: Creature) => c.type === 'player' && c.currentHealth > 0
+    );
+  }, [gameState.creatures]);
+
+  const playerPositions = React.useMemo(() => {
+    return playerCreatures.map((c: Creature) => c.positions);
+  }, [playerCreatures]);
+
+  // Compute per-creature vision range based on senses + lighting
+  const perCreatureVisionRanges = React.useMemo(() => {
+    const maxDim = Math.max(mapWidth, mapHeight);
+    const ranges = playerCreatures.map((c: Creature) => {
+      // Combine creature.senses and creature.specials (Pathbuilder imports put senses in specials)
+      const allSenses = [
+        ...(c.senses || []),
+        ...((c.specials || []).filter((s: string) =>
+          /darkvision|low[- ]?light|greater darkvision/i.test(s)
+        )),
+      ];
+      const range = getVisionRange(allSenses, lightingLevel, maxDim);
+      console.log(`👁️ [LoS] ${c.name}: senses=${JSON.stringify(allSenses)}, lighting=${lightingLevel}, maxDim=${maxDim} → range=${range}`);
+      return range;
+    });
+    console.log(`👁️ [LoS] perCreatureVisionRanges:`, ranges, `mapSize=${mapWidth}x${mapHeight}`);
+    return ranges;
+  }, [playerCreatures, lightingLevel, mapWidth, mapHeight]);
+
+  const visibleCells = React.useMemo(() => {
+    if (!hasTiles || !tiles || playerPositions.length === 0) return null;
+    const vis = calculatePartyLineOfSight(tiles, playerPositions, perCreatureVisionRanges);
+    console.log(`👁️ [LoS] visibleCells count: ${vis.size} / total map cells: ${mapWidth * mapHeight}`);
+    // Accumulate revealed cells
+    for (const cell of vis) {
+      revealedCellsRef.current.add(cell);
+    }
+    return vis;
+  }, [hasTiles, tiles, playerPositions, perCreatureVisionRanges]);
+
+  const visibleCreatureNamesByCell = React.useMemo(() => {
+    const map = new Map<string, string[]>();
+    const creatures = gameState.creatures || [];
+    for (const creature of creatures) {
+      if (!creature || creature.currentHealth <= 0) continue;
+      const key = `${creature.positions.x},${creature.positions.y}`;
+      const isVisible = creature.type === 'player' || !visibleCells || visibleCells.has(key);
+      if (!isVisible) continue;
+      const names = map.get(key) || [];
+      names.push(creature.name || creature.id || 'Unknown');
+      map.set(key, names);
+    }
+    return map;
+  }, [gameState.creatures, visibleCells]);
+
+  const groundObjectNamesByCell = React.useMemo(() => {
+    const map = new Map<string, string[]>();
+    const objs = gameState.groundObjects || [];
+    for (const obj of objs) {
+      if (!obj?.position) continue;
+      const key = `${obj.position.x},${obj.position.y}`;
+      const names = map.get(key) || [];
+      names.push(obj?.weapon?.display || (obj?.weapon as any)?.name || 'Ground Object');
+      map.set(key, names);
+    }
+    return map;
+  }, [gameState.groundObjects]);
+
+  const revealedCells = revealedCellsRef.current;
+
+  // Render procedural tile map to canvas
+  React.useEffect(() => {
+    if (!hasTiles || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(gridWidthPx * dpr);
+    canvas.height = Math.floor(gridHeightPx * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+
+    renderTileMap(ctx, tiles!, {
+      cellSize,
+      showGrid: true,
+      gridColor: 'rgba(255,255,255,0.12)',
+      gridOpacity: 1,
+      detailMode: 'high',
+      radialLighting: true,
+      // Adjust ambient light based on map lighting level:
+      // bright → well-lit (0.85), dim → moderate (0.38), dark → very low (0.12)
+      ambientLight: lightingLevel === 'bright' ? 0.85 : lightingLevel === 'dark' ? 0.12 : 0.38,
+      elevation: (gameState.map as any)?.elevation,
+      showElevation: !!(gameState.map as any)?.elevation,
+      showCoverQuality: true,
+      fogOfWar: !!visibleCells,
+      visibleCells: visibleCells ?? undefined,
+      revealedCells: revealedCells.size > 0 ? revealedCells : undefined,
+      overlays: overlays,
+    });
+  }, [hasTiles, tiles, overlays, gridWidthPx, gridHeightPx, cellSize, visibleCells, atlasLoaded, lightingLevel]);
+
+  // Render tree canopy overhangs onto an overlay canvas above creature tokens
+  React.useEffect(() => {
+    if (!hasTiles || !overlayCanvasRef.current || !atlasLoaded) return;
+    const canvas = overlayCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(gridWidthPx * dpr);
+    canvas.height = Math.floor(gridHeightPx * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, gridWidthPx, gridHeightPx);
+
+    renderTreeOverhangs(ctx, tiles!, cellSize, {
+      fogOfWar: !!visibleCells,
+      visibleCells: visibleCells ?? undefined,
+      revealedCells: revealedCells.size > 0 ? revealedCells : undefined,
+    });
+  }, [hasTiles, tiles, gridWidthPx, gridHeightPx, cellSize, atlasLoaded, visibleCells]);
 
   const formatMovementCostDisplay = (value: number): string => {
     if (!Number.isFinite(value)) {
@@ -88,7 +242,7 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
 
   const rangeForSelection = movementInfo?.maxDistance ?? selectedAction?.range ?? 6;
   const currentCreatureId = gameState.currentRound?.turnOrder?.[gameState.currentRound?.currentTurnIndex];
-  const currentCreature = gameState.creatures.find((c: any) => c.id === currentCreatureId);
+  const currentCreature = gameState.creatures.find((c: Creature) => c.id === currentCreatureId);
 
   // Determine if a creature is a valid target
   const isValidTarget = (creature: any) => {
@@ -98,34 +252,97 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
     }
     if (!currentCreature) return true;
 
-    const distance = calculateDistance(currentCreature.positions, creature.positions);
-    const range = selectedAction.range || 1;
-    return distance <= range;
+    const range = selectedAction.range ?? 1;
+
+    // Use Chebyshev (grid) distance for all targeting — PF2e measures range in squares
+    // Multi-tile aware: find minimum distance between any pair of occupied squares
+    const aSpace = Math.max(1, Math.ceil(currentCreature.space || 1));
+    const bSpace = Math.max(1, Math.ceil(creature.space || 1));
+    let minDist = Infinity;
+    for (let ay = 0; ay < aSpace; ay++) {
+      for (let ax = 0; ax < aSpace; ax++) {
+        for (let by = 0; by < bSpace; by++) {
+          for (let bx = 0; bx < bSpace; bx++) {
+            const dx = Math.abs((currentCreature.positions.x + ax) - (creature.positions.x + bx));
+            const dy = Math.abs((currentCreature.positions.y + ay) - (creature.positions.y + by));
+            const d = Math.max(dx, dy);
+            if (d < minDist) minDist = d;
+          }
+        }
+      }
+    }
+    return minDist <= range;
   };
 
   const renderCreatures = () => {
-    return gameState.creatures.map((creature: any) => {
+    return gameState.creatures
+      .filter((creature: any) => {
+        // Always show player creatures; hide enemies/NPCs in fog
+        if (creature.type === 'player') return true;
+        if (!visibleCells) return true; // No fog active, show all
+        // Multi-tile: visible if ANY occupied square is in fog-revealed area
+        const space = Math.max(1, Math.ceil(creature.space || 1));
+        for (let dy = 0; dy < space; dy++) {
+          for (let dx = 0; dx < space; dx++) {
+            const key = `${creature.positions.x + dx},${creature.positions.y + dy}`;
+            if (visibleCells.has(key)) return true;
+          }
+        }
+        return false;
+      })
+      .map((creature: any) => {
       const isSelected = creature.id === selectedTarget || (selectedAction?.aoe && selectedTarget === `${creature.positions.x}-${creature.positions.y}`);
       const isDefeated = creature.currentHealth <= 0;
       const isValid = isValidTarget(creature);
       const isAoEClickable = selectedAction?.aoe;
       const healthPercent = (creature.currentHealth / creature.maxHealth) * 100;
 
+      // Use position override if animating, otherwise use actual position
+      const displayPos = positionOverrides?.get(creature.id) || creature.positions;
+      const isAnimating = positionOverrides?.has(creature.id);
+
+      // Determine icon based on creature type
+      let icon = '👹';
+      if (creature.type === 'player') {
+        icon = '🛡️';
+      } else if (creature.type === 'npc') {
+        // Use custom icon stored in specials, or default NPC icon
+        icon = creature.specials?.[0] || '🧑';
+      }
+
+      // Check for custom token image (Foundry VTT compatible format)
+      const hasTokenImage = !!creature.tokenImageUrl;
+      // Generate a per-creature hue shift for SVG tokens so identical types look distinct
+      const isTypeToken = hasTokenImage && creature.tokenImageUrl?.startsWith('/tokens/');
+      let tokenHueShift = 0;
+      if (isTypeToken && creature.name) {
+        let hash = 0;
+        for (let i = 0; i < creature.name.length; i++) {
+          hash = ((hash << 5) - hash + creature.name.charCodeAt(i)) | 0;
+        }
+        tokenHueShift = ((hash % 60) + 60) % 60 - 30; // -30 to +30 degree shift
+      }
+
+      // Multi-tile creature size: use space field (default 1 for small/medium)
+      const creatureSpace = Math.max(1, Math.ceil(creature.space || 1));
+      const tokenSizePx = creatureSpace * cellSize;
+
       return (
         <div
           key={creature.id}
-          className={`creature ${creature.type} ${isSelected ? 'selected' : ''} ${isDefeated ? 'defeated' : ''} ${creature.id === currentCreatureId ? 'current-turn' : ''} ${selectedAction && !isValid && !isAoEClickable ? 'invalid-target' : ''} ${selectedAction && (isValid || isAoEClickable) ? 'valid-target' : ''}`}
+          className={`creature ${creature.type} ${isSelected ? 'selected' : ''} ${isDefeated ? 'defeated' : ''} ${creature.id === currentCreatureId ? 'current-turn' : ''} ${selectedAction && !isValid && !isAoEClickable ? 'invalid-target' : ''} ${selectedAction && (isValid || isAoEClickable) ? 'valid-target' : ''} ${creatureSpace > 1 ? 'multi-tile' : ''}`}
           style={{
-            left: `${creature.positions.x * cellSize}px`,
-            top: `${creature.positions.y * cellSize}px`,
-            width: `${cellSize}px`,
-            height: `${cellSize}px`,
+            left: `${displayPos.x * cellSize}px`,
+            top: `${displayPos.y * cellSize}px`,
+            transition: isAnimating ? 'left 0.3s ease-out, top 0.3s ease-out' : 'none',
+            width: `${tokenSizePx}px`,
+            height: `${tokenSizePx}px`,
             opacity: selectedAction && !isValid && !isAoEClickable ? 0.3 : 1,
             cursor: !selectedAction ? 'pointer' : (selectedAction && (isValid || isAoEClickable)) ? 'pointer' : 'default'
           }}
           onClick={() => {
             if (!selectedAction) {
-              // No action selected - show creature stats
+              // Allow selecting any creature to view stats
               onCreatureClick?.(creature.id);
             } else if (selectedAction.aoe) {
               // AoE spells target a position, not a creature
@@ -135,9 +352,39 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
             }
           }}
         >
-          <div className="creature-icon">
-            {creature.type === 'player' ? '🛡️' : '👹'}
+          <div className={`creature-icon ${hasTokenImage ? 'has-token-image' : ''}`}>
+            {hasTokenImage ? (
+              <img 
+                src={creature.tokenImageUrl} 
+                alt={creature.name} 
+                className="token-image"
+                draggable={false}
+                style={isTypeToken ? { filter: `hue-rotate(${tokenHueShift}deg)` } : undefined}
+              />
+            ) : (
+              icon
+            )}
+            {isTypeToken && creature.name && (
+              <span className="token-initial">{creature.name.charAt(0).toUpperCase()}</span>
+            )}
           </div>
+          {creature.type === 'npc' && (
+            <div className="creature-name-label" style={{
+              position: 'absolute',
+              bottom: '-14px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              fontSize: '9px',
+              fontWeight: 700,
+              color: '#ffcc66',
+              textShadow: '0 0 3px #000, 0 0 6px #000',
+              whiteSpace: 'nowrap',
+              pointerEvents: 'none',
+              zIndex: 15,
+            }}>
+              {creature.name}
+            </div>
+          )}
         </div>
       );
     });
@@ -146,7 +393,7 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
   const renderGroundObjects = () => {
     if (!gameState.groundObjects) return [];
     
-    return gameState.groundObjects.map((groundObj: any) => {
+    return gameState.groundObjects.map((groundObj: GroundObject) => {
       const isSelected = selectedTarget === groundObj.id;
       const isValidPickupTarget = selectedAction?.id === 'pick-up-weapon' && currentCreature && 
         calculateDistance(currentCreature.positions, groundObj.position) <= Math.sqrt(2) + 0.1;
@@ -193,7 +440,7 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
     if (!selectedAction || !currentCreature) return false;
 
     // Check if there's a creature at this position
-    const hasCreature = gameState.creatures.some((c: any) => (
+    const hasCreature = gameState.creatures.some((c: Creature) => (
       c.positions.x === x &&
       c.positions.y === y &&
       c.id !== currentCreature.id &&
@@ -209,9 +456,14 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
       return !isOrigin && (movementInfo?.costMap.has(costKey) ?? false);
     }
 
-    // AoE spells (like Fireball): can click on any empty space
+    // AoE spells (like Fireball): can click on any cell within spell range
     if (selectedAction.aoe) {
-      return true;
+      if (!currentCreature) return true;
+      const spellRange = selectedAction.range ?? 24;
+      const dx = Math.abs(currentCreature.positions.x - x);
+      const dy = Math.abs(currentCreature.positions.y - y);
+      const gridDistance = Math.max(dx, dy);
+      return gridDistance <= spellRange;
     }
 
     return false;
@@ -246,14 +498,14 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
         const distance = Math.sqrt(dx * dx + dy * dy);
         return distance <= radius;
       })
-      .map((c: any) => c.id);
+      .map((c: Creature) => c.id);
   };
 
   const renderGrid = () => {
     const cells = [];
 
-    for (let y = 0; y < mapSize; y++) {
-      for (let x = 0; x < mapSize; x++) {
+    for (let y = 0; y < mapHeight; y++) {
+      for (let x = 0; x < mapWidth; x++) {
         // Safe terrain access with fallback
         const terrainRow = gameState.map?.terrain?.[y];
         const terrainTile = terrainRow?.[x];
@@ -264,6 +516,17 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
         const isOriginCell = movementInfo && movementInfo.origin.x === x && movementInfo.origin.y === y;
         const isInAoERadius = isInAoE(x, y);
 
+        // Check if this cell is a valid exploration move target
+        const isOccupied = gameState.creatures.some((c: Creature) =>
+          c.positions.x === x && c.positions.y === y && c.currentHealth > 0
+        );
+        const isImpassableTerrain = terrain.type === 'impassable';
+        const tileAtPos = tiles?.[y]?.[x];
+        const impassableTileTypes = ['wall', 'water-deep', 'lava', 'pit', 'pillar', 'tree', 'rock', 'void'];
+        const isImpassableTile = tileAtPos ? impassableTileTypes.includes(tileAtPos) : false;
+        // Only allow exploration click-to-move when NO combat action is selected
+        const isExplorationTarget = explorationMode && !selectedAction && !isOccupied && !isImpassableTerrain && !isImpassableTile;
+
         let movementCost: number | undefined;
         if (movementInfo) {
           movementCost = movementInfo.costMap.get(`${x},${y}`);
@@ -273,21 +536,38 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
 
         const showCost = (selectedAction?.id === 'move' || selectedAction?.id === 'stride') && movementCost !== undefined && movementCost !== null && movementCost > 0 && movementCost <= rangeForSelection + 1e-6;
         
+        // When canvas tiles are present, grid cells only render interaction overlays (no terrain coloring)
+        const terrainClass = hasTiles ? '' : `terrain-${terrain.type}`;
+        const cellKey = `${x},${y}`;
+        const creaturesHere = visibleCreatureNamesByCell.get(cellKey) || [];
+        const objectsHere = groundObjectNamesByCell.get(cellKey) || [];
+        const tooltipLines = [
+          `Cell: ${x}, ${y}`,
+          tileAtPos ? `Tile: ${tileAtPos}` : 'Tile: none',
+          terrain?.type && terrain.type !== 'empty' ? `Terrain: ${terrain.type}` : null,
+          creaturesHere.length > 0 ? `Creatures: ${creaturesHere.join(', ')}` : null,
+          objectsHere.length > 0 ? `Objects: ${objectsHere.join(', ')}` : null,
+        ].filter(Boolean).join('\n');
+
         cells.push(
           <div
             key={`${x}-${y}`}
-            className={`grid-cell terrain-${terrain.type} ${isValidMovement ? 'valid-movement' : ''} ${isSelectedPosition ? 'selected-position' : ''} ${isOriginCell ? 'movement-origin' : ''} ${isInAoERadius ? 'aoe-affected' : ''}`}
+            className={`grid-cell ${terrainClass} ${isValidMovement ? 'valid-movement' : ''} ${isSelectedPosition ? 'selected-position' : ''} ${isOriginCell ? 'movement-origin' : ''} ${isInAoERadius ? 'aoe-affected' : ''} ${isExplorationTarget ? 'exploration-target' : ''}`}
+            title={tooltipLines}
             style={{
               left: `${x * cellSize}px`,
               top: `${y * cellSize}px`,
               width: `${cellSize}px`,
               height: `${cellSize}px`,
-              cursor: isValidMovement ? 'pointer' : 'default',
+              cursor: (isValidMovement || isExplorationTarget) ? 'pointer' : 'default',
               opacity: (selectedAction?.id === 'move' || selectedAction?.id === 'stride') && !isValidMovement ? 0.3 : 1
             }}
             onClick={() => {
               if (isValidMovement) {
+                // Combat movement/AoE takes priority when an action is selected
                 onSelectTarget(`${x}-${y}`);
+              } else if (isExplorationTarget && onExplorationMove) {
+                onExplorationMove(x, y);
               }
             }}
           >
@@ -315,39 +595,81 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
       </div>
 
       <div
-        className="battle-grid"
+        className={`battle-grid${mapImageUrl && !hasTiles ? ' has-map-image' : ''} ${hasTiles ? 'has-tiles' : ''} theme-${mapTheme}`}
         style={{
-          width: `${gridSize}px`,
-          height: `${gridSize}px`,
-          backgroundImage: `
-            linear-gradient(0deg, #e0e0e0 1px, transparent 1px),
-            linear-gradient(90deg, #e0e0e0 1px, transparent 1px)
-          `,
-          backgroundSize: `${cellSize}px ${cellSize}px`,
+          width: `${gridWidthPx}px`,
+          height: `${gridHeightPx}px`,
+          backgroundImage: mapImageUrl && !hasTiles
+            ? `url(${mapImageUrl})`
+            : undefined,
+          backgroundSize: mapImageUrl && !hasTiles ? `${gridWidthPx}px ${gridHeightPx}px` : undefined,
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'top left',
           transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
           transformOrigin: 'top left',
           transition: 'none',
           position: 'relative'
         }}
       >
+        {/* Canvas layer for procedurally-generated tile maps */}
+        {hasTiles && (
+          <canvas
+            ref={canvasRef}
+            width={gridWidthPx}
+            height={gridHeightPx}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: `${gridWidthPx}px`,
+              height: `${gridHeightPx}px`,
+              zIndex: 0,
+              pointerEvents: 'none',
+              imageRendering: 'auto',
+            }}
+          />
+        )}
+        {/* Grid overlay lines when a map image is present (no tiles) */}
+        {mapImageUrl && !hasTiles && (
+          <div
+            className="grid-overlay"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              backgroundImage: `
+                linear-gradient(0deg, rgba(255,255,255,0.15) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.15) 1px, transparent 1px)
+              `,
+              backgroundSize: `${cellSize}px ${cellSize}px`,
+              pointerEvents: 'none',
+              zIndex: 1,
+            }}
+          />
+        )}
         {renderGrid()}
         {renderGroundObjects()}
         {renderCreatures()}
-      </div>
-
-      <div className="grid-legend">
-        <div className="legend-item">
-          <span className="legend-color empty-cell"></span>
-          <span>Empty</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color difficult"></span>
-          <span>Difficult Terrain</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color impassable"></span>
-          <span>Impassable</span>
-        </div>
+        {/* Overlay canvas for tree canopy overhangs (renders ABOVE creature tokens) */}
+        {hasTiles && (
+          <canvas
+            ref={overlayCanvasRef}
+            width={gridWidthPx}
+            height={gridHeightPx}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: `${gridWidthPx}px`,
+              height: `${gridHeightPx}px`,
+              zIndex: 20,
+              pointerEvents: 'none',
+              imageRendering: 'auto',
+            }}
+          />
+        )}
       </div>
     </div>
   );

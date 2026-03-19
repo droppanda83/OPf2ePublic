@@ -19,6 +19,126 @@
   flex-shrink: 0;
 }
 
+/* ─── Theme backgrounds (CSS only, no images needed) ─── */
+
+/* Dungeon: dark stone texture */
+.battle-grid.theme-dungeon {
+  background-color: #1c1916;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 39px,
+      rgba(80, 70, 55, 0.25) 39px,
+      rgba(80, 70, 55, 0.25) 40px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 39px,
+      rgba(80, 70, 55, 0.25) 39px,
+      rgba(80, 70, 55, 0.25) 40px
+    ),
+    radial-gradient(ellipse at 20% 50%, rgba(60, 45, 30, 0.3) 0%, transparent 70%),
+    radial-gradient(ellipse at 80% 30%, rgba(50, 40, 25, 0.2) 0%, transparent 60%);
+}
+
+/* Wilderness: earthy green ground */
+.battle-grid.theme-wilderness {
+  background-color: #1a2614;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 39px,
+      rgba(50, 90, 40, 0.2) 39px,
+      rgba(50, 90, 40, 0.2) 40px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 39px,
+      rgba(50, 90, 40, 0.2) 39px,
+      rgba(50, 90, 40, 0.2) 40px
+    ),
+    radial-gradient(ellipse at 30% 70%, rgba(40, 80, 25, 0.3) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 20%, rgba(60, 100, 30, 0.2) 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 50%, rgba(80, 60, 30, 0.15) 0%, transparent 40%);
+}
+
+/* Urban: grey cobblestone */
+.battle-grid.theme-urban {
+  background-color: #1e1e22;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 39px,
+      rgba(120, 115, 110, 0.2) 39px,
+      rgba(120, 115, 110, 0.2) 40px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 39px,
+      rgba(120, 115, 110, 0.2) 39px,
+      rgba(120, 115, 110, 0.2) 40px
+    ),
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 20px,
+      rgba(100, 95, 85, 0.08) 20px,
+      rgba(100, 95, 85, 0.08) 21px
+    ),
+    radial-gradient(ellipse at 40% 60%, rgba(90, 85, 75, 0.2) 0%, transparent 50%);
+}
+
+/* Indoor: warm wood / stone interior */
+.battle-grid.theme-indoor {
+  background-color: #1f1a15;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 39px,
+      rgba(100, 75, 50, 0.2) 39px,
+      rgba(100, 75, 50, 0.2) 40px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 39px,
+      rgba(100, 75, 50, 0.2) 39px,
+      rgba(100, 75, 50, 0.2) 40px
+    ),
+    radial-gradient(ellipse at 50% 50%, rgba(120, 90, 50, 0.2) 0%, transparent 60%),
+    radial-gradient(ellipse at 20% 80%, rgba(80, 60, 35, 0.15) 0%, transparent 40%);
+}
+
+/* Special: mystical purple/dark */
+.battle-grid.theme-special {
+  background-color: #16141e;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 39px,
+      rgba(80, 60, 120, 0.2) 39px,
+      rgba(80, 60, 120, 0.2) 40px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 39px,
+      rgba(80, 60, 120, 0.2) 39px,
+      rgba(80, 60, 120, 0.2) 40px
+    ),
+    radial-gradient(ellipse at 50% 50%, rgba(100, 60, 150, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(60, 40, 120, 0.2) 0%, transparent 40%),
+    radial-gradient(ellipse at 15% 85%, rgba(120, 50, 80, 0.1) 0%, transparent 35%);
+}
+
 .grid-cell {
   position: absolute;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -30,17 +150,41 @@
 }
 
 .grid-cell.terrain-empty {
-  background-color: #1a1a1a;
+  background-color: transparent;
 }
 
 .grid-cell.terrain-difficult {
-  background-color: #2a2a2a;
-  opacity: 0.7;
+  background-color: rgba(180, 130, 50, 0.25);
 }
 
 .grid-cell.terrain-impassable {
-  background-color: #0f0f0f;
-  opacity: 0.8;
+  background-color: rgba(0, 0, 0, 0.55);
+}
+
+/* ─── Map-image mode: terrain cells become transparent overlays ─── */
+.battle-grid.has-map-image .grid-cell.terrain-empty {
+  background-color: transparent;
+}
+
+.battle-grid.has-map-image .grid-cell.terrain-difficult {
+  background-color: rgba(180, 130, 50, 0.35);
+  opacity: 1;
+}
+
+.battle-grid.has-map-image .grid-cell.terrain-impassable {
+  background-color: rgba(0, 0, 0, 0.45);
+  opacity: 1;
+}
+
+/* ─── Procedural tile mode: canvas handles visuals, cells are transparent ─── */
+.battle-grid.has-tiles {
+  background-color: transparent;
+  background-image: none;
+}
+
+.battle-grid.has-tiles .grid-cell {
+  background-color: transparent;
+  border-color: transparent;
 }
 
 .grid-cell.valid-movement {
@@ -52,6 +196,16 @@
 .grid-cell.valid-movement:hover {
   background-color: rgba(0, 221, 221, 0.3);
   box-shadow: inset 0 0 10px rgba(0, 221, 221, 0.6), 0 0 10px rgba(0, 221, 221, 0.4);
+}
+
+.grid-cell.exploration-target {
+  cursor: pointer;
+}
+
+.grid-cell.exploration-target:hover {
+  background-color: rgba(80, 200, 100, 0.2);
+  box-shadow: inset 0 0 8px rgba(80, 200, 100, 0.4);
+  border: 1px solid rgba(80, 200, 100, 0.4);
 }
 
 .grid-cell.aoe-affected {
@@ -102,6 +256,7 @@
   box-sizing: border-box;
   font-size: 10px;
   overflow: visible;
+  z-index: 10;
 }
 
 .creature.player {
@@ -114,6 +269,18 @@
 
 .creature.npc {
   border-color: #ffcc66;
+  background: rgba(40, 30, 10, 0.85);
+  box-shadow: 0 0 10px rgba(255, 204, 102, 0.4);
+}
+
+.creature.npc .creature-icon {
+  font-size: 22px;
+  filter: drop-shadow(0 0 2px rgba(0,0,0,0.8));
+}
+
+.creature.npc:hover {
+  box-shadow: 0 0 15px rgba(255, 204, 102, 0.5), inset 0 0 8px rgba(255, 204, 102, 0.2);
+  transform: scale(1.05);
 }
 
 .creature.current-turn {
@@ -162,6 +329,64 @@
   justify-content: center;
   width: 100%;
   height: 100%;
+  position: relative;
+}
+
+/* Token image rendering (replaces emoji when custom token uploaded) */
+.creature-icon.has-token-image {
+  padding: 0;
+}
+
+.creature-icon .token-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  pointer-events: none;
+  image-rendering: auto;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+}
+
+.creature.player .creature-icon .token-image {
+  border-color: rgba(88, 244, 198, 0.6);
+  box-shadow: 0 0 6px rgba(88, 244, 198, 0.3);
+}
+
+.creature.creature .creature-icon .token-image {
+  border-color: rgba(255, 100, 100, 0.5);
+  box-shadow: 0 0 6px rgba(255, 100, 100, 0.3);
+}
+
+.creature.npc .creature-icon .token-image {
+  border-color: rgba(255, 204, 102, 0.5);
+  box-shadow: 0 0 6px rgba(255, 204, 102, 0.3);
+}
+
+.creature.current-turn .creature-icon .token-image {
+  border-color: rgba(255, 255, 0, 0.8);
+  box-shadow: 0 0 8px rgba(255, 255, 0, 0.5);
+}
+
+/* Token initial letter overlay — shows creature's first letter on type-based SVG tokens */
+.token-initial {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 800;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  pointer-events: none;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
 }
 
 .creature-name {
@@ -268,4 +493,22 @@
 
 .legend-color.impassable {
   background-color: #0f0f0f;
+}
+
+/* ─── Multi-tile creature tokens (Large, Huge, Gargantuan) ─── */
+.creature.multi-tile {
+  border-radius: 6px;
+  z-index: 11;
+}
+
+.creature.multi-tile .creature-icon {
+  font-size: clamp(20px, 2.5vw, 40px);
+}
+
+.creature.multi-tile .creature-icon .token-image {
+  border-radius: 8px;
+}
+
+.creature.multi-tile .creature-name-label {
+  font-size: 11px !important;
 }

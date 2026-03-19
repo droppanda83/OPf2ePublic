@@ -11,7 +11,7 @@ attackType?: 'melee' | 'ranged'): {
 };
 /**
  * Calculate Armor Class.
- * PF2e: 10 + DEX mod + armor proficiency bonus + item bonus (armor) + stacked modifiers
+ * PF2e: 10 + DEX mod (capped by armor) + armor proficiency bonus + item bonus (armor) + stacked modifiers
  */
 export declare function calculateAC(creature: Creature, attackerId?: string, attackType?: 'melee' | 'ranged'): number;
 /**
@@ -58,6 +58,17 @@ export declare function getAttackResult(d20: number, total: number, targetAC: nu
  */
 export type DegreeOfSuccess = 'critical-success' | 'success' | 'failure' | 'critical-failure';
 export declare function getDegreeOfSuccess(d20: number, total: number, dc: number): DegreeOfSuccess;
+/**
+ * Apply equipment-based degree-of-success adjustments.
+ * Items like Armbands of the Gorgon can upgrade success → critical success on saves vs incapacitation,
+ * or Headbands of Translocation can upgrade critical failure → failure on skill checks.
+ *
+ * @param result - The base degree of success
+ * @param equippedWornItems - IDs of equipped worn/held items
+ * @param selector - The check type ('saving-throw', 'skill-check', 'attack-roll')
+ * @returns The adjusted degree of success
+ */
+export declare function applyDegreeAdjustments(result: DegreeOfSuccess, equippedWornItems: string[] | undefined, selector: string): DegreeOfSuccess;
 /**
  * Calculate weapon damage bonus for attacks
  * PF2e: Damage always uses STR for melee (finesse only affects attack rolls, not damage)

@@ -1,0 +1,547 @@
+/* ═══════════════════════════════════════════════════════
+   PartyStash.css — Shared party inventory UI
+   ═══════════════════════════════════════════════════════ */
+
+/* ─── Collapsed header ────────────────────────────────── */
+
+.stash-section {
+  position: relative;
+}
+
+.stash-header-collapsed {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.stash-header-collapsed h2 {
+  margin: 0;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.stash-summary {
+  font-size: 0.78em;
+  color: #a09080;
+  font-weight: 400;
+}
+
+.stash-expand-icon {
+  color: #a09080;
+  font-size: 0.8em;
+  transition: transform 0.2s ease;
+}
+
+/* ─── Expanded header ─────────────────────────────────── */
+
+.stash-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 4px;
+}
+
+.stash-header h2 {
+  margin: 0;
+}
+
+/* ─── Treasury ────────────────────────────────────────── */
+
+.stash-treasury {
+  background: rgba(30, 18, 12, 0.5);
+  border: 1px solid rgba(200, 150, 80, 0.15);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+
+.treasury-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.treasury-label {
+  font-size: 0.88em;
+  color: #c49a6c;
+  font-weight: 600;
+}
+
+.treasury-amount {
+  font-size: 1.05em;
+  color: #ead8be;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.treasury-controls {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.treasury-btn {
+  padding: 3px 10px;
+  border: 1px solid rgba(160, 120, 80, 0.25);
+  border-radius: 5px;
+  background: rgba(25, 14, 10, 0.5);
+  color: #c49a6c;
+  font-size: 0.78em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.treasury-btn:hover {
+  background: rgba(50, 30, 20, 0.8);
+  border-color: rgba(200, 150, 80, 0.5);
+  color: #ead8be;
+}
+
+.treasury-btn.subtract {
+  color: #cf6679;
+  border-color: rgba(207, 102, 121, 0.25);
+}
+
+.treasury-btn.subtract:hover {
+  border-color: rgba(207, 102, 121, 0.6);
+  background: rgba(207, 102, 121, 0.1);
+}
+
+.treasury-btn.set {
+  color: #8bc34a;
+  border-color: rgba(139, 195, 74, 0.3);
+}
+
+.treasury-btn.set:hover {
+  border-color: rgba(139, 195, 74, 0.6);
+  background: rgba(139, 195, 74, 0.1);
+}
+
+.treasury-custom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+}
+
+.treasury-input {
+  width: 70px;
+  padding: 3px 6px;
+  border: 1px solid rgba(160, 120, 80, 0.25);
+  border-radius: 5px;
+  background: rgba(10, 6, 6, 0.6);
+  color: #ead8be;
+  font-size: 0.78em;
+  font-family: inherit;
+  text-align: center;
+}
+
+.treasury-input::placeholder {
+  color: #6a5a4a;
+}
+
+.treasury-input:focus {
+  outline: none;
+  border-color: rgba(200, 150, 80, 0.5);
+}
+
+/* ─── Stash Items ─────────────────────────────────────── */
+
+.stash-items {
+  margin-bottom: 10px;
+}
+
+.stash-items-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.stash-items-title {
+  font-size: 0.85em;
+  color: #a09080;
+  font-weight: 600;
+}
+
+.stash-total-value {
+  font-weight: 400;
+  color: #8a7a6a;
+  font-size: 0.92em;
+}
+
+.stash-catalog-toggle {
+  padding: 5px 12px;
+  border: 1px solid rgba(160, 120, 80, 0.3);
+  border-radius: 6px;
+  background: rgba(30, 16, 12, 0.6);
+  color: #c49a6c;
+  font-size: 0.82em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.stash-catalog-toggle:hover {
+  border-color: rgba(200, 150, 80, 0.6);
+  color: #ead8be;
+  background: rgba(50, 30, 20, 0.8);
+}
+
+.stash-catalog-toggle.active {
+  border-color: rgba(207, 102, 121, 0.5);
+  color: #cf6679;
+}
+
+.stash-catalog-toggle.active:hover {
+  border-color: rgba(207, 102, 121, 0.8);
+}
+
+.stash-empty {
+  text-align: center;
+  color: #6a5a4a;
+  font-size: 0.85em;
+  padding: 16px 0;
+}
+
+.stash-empty strong {
+  color: #c49a6c;
+}
+
+/* ─── Stash Item Rows ─────────────────────────────────── */
+
+.stash-item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.stash-item-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.stash-item-list::-webkit-scrollbar-thumb {
+  background: rgba(160, 120, 80, 0.3);
+  border-radius: 4px;
+}
+
+.stash-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: rgba(18, 10, 8, 0.4);
+  border: 1px solid rgba(120, 80, 50, 0.15);
+  border-radius: 6px;
+  transition: border-color 0.15s ease;
+}
+
+.stash-item-row:hover {
+  border-color: rgba(120, 80, 50, 0.35);
+}
+
+.stash-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.stash-item-name {
+  font-size: 0.88em;
+  font-weight: 600;
+  color: #ead8be;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stash-item-qty {
+  color: #c49a6c;
+  font-weight: 400;
+  font-size: 0.9em;
+}
+
+.stash-item-meta {
+  font-size: 0.75em;
+  color: #7a6a5a;
+}
+
+.stash-item-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.stash-item-btn {
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(120, 80, 50, 0.25);
+  border-radius: 5px;
+  background: rgba(25, 14, 10, 0.5);
+  color: #a09080;
+  font-size: 0.78em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.stash-item-btn.give:hover {
+  border-color: rgba(139, 195, 74, 0.5);
+  color: #8bc34a;
+  background: rgba(139, 195, 74, 0.1);
+}
+
+.stash-item-btn.remove:hover {
+  border-color: rgba(244, 67, 54, 0.5);
+  color: #f44336;
+  background: rgba(244, 67, 54, 0.08);
+}
+
+/* ─── Give Dropdown ───────────────────────────────────── */
+
+.give-menu-wrapper {
+  position: relative;
+}
+
+.give-dropdown {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+  background: rgba(30, 18, 12, 0.97);
+  border: 1px solid rgba(160, 120, 80, 0.35);
+  border-radius: 6px;
+  min-width: 140px;
+  max-width: 200px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.give-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  color: #d0c3b4;
+  font-size: 0.82em;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.give-dropdown-item:hover {
+  background: rgba(200, 150, 80, 0.12);
+  color: #ead8be;
+}
+
+.give-dropdown-item + .give-dropdown-item {
+  border-top: 1px solid rgba(120, 80, 50, 0.15);
+}
+
+/* ─── Catalog Browser ─────────────────────────────────── */
+
+.stash-catalog {
+  border-top: 1px solid rgba(120, 80, 50, 0.2);
+  padding-top: 10px;
+}
+
+.catalog-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.catalog-tab {
+  padding: 4px 10px;
+  border: 1px solid rgba(120, 80, 50, 0.2);
+  border-radius: 6px;
+  background: rgba(20, 12, 10, 0.6);
+  color: #a09080;
+  font-size: 0.78em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.catalog-tab:hover {
+  border-color: rgba(160, 120, 80, 0.4);
+  color: #d0c3b4;
+}
+
+.catalog-tab.active {
+  background: rgba(200, 150, 80, 0.12);
+  border-color: #ead8be;
+  color: #ead8be;
+}
+
+.tab-icon {
+  font-size: 1em;
+}
+
+.tab-label {
+  font-family: inherit;
+}
+
+.catalog-search {
+  width: 100%;
+  padding: 7px 12px;
+  border: 1px solid rgba(160, 120, 80, 0.2);
+  border-radius: 6px;
+  background: rgba(10, 6, 6, 0.6);
+  color: #ead8be;
+  font-size: 0.85em;
+  font-family: inherit;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+
+.catalog-search::placeholder {
+  color: #6a5a4a;
+}
+
+.catalog-search:focus {
+  outline: none;
+  border-color: rgba(200, 150, 80, 0.5);
+}
+
+/* ─── Catalog Results ─────────────────────────────────── */
+
+.catalog-results {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.catalog-results::-webkit-scrollbar {
+  width: 5px;
+}
+
+.catalog-results::-webkit-scrollbar-thumb {
+  background: rgba(160, 120, 80, 0.3);
+  border-radius: 4px;
+}
+
+.catalog-no-results {
+  text-align: center;
+  color: #6a5a4a;
+  font-size: 0.85em;
+  padding: 16px 0;
+}
+
+.catalog-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 10px;
+  border: 1px solid rgba(120, 80, 50, 0.1);
+  border-radius: 5px;
+  background: rgba(15, 9, 8, 0.3);
+  transition: border-color 0.12s ease;
+}
+
+.catalog-item-row:hover {
+  border-color: rgba(120, 80, 50, 0.3);
+}
+
+.catalog-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.catalog-item-name {
+  font-size: 0.85em;
+  font-weight: 600;
+  color: #d0c3b4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.catalog-item-level {
+  color: #8a7a6a;
+  font-weight: 400;
+  font-size: 0.88em;
+}
+
+.catalog-item-desc {
+  font-size: 0.72em;
+  color: #7a6a5a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.catalog-item-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-left: 8px;
+}
+
+.catalog-item-price {
+  font-size: 0.78em;
+  color: #c49a6c;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.catalog-add-btn {
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(139, 195, 74, 0.3);
+  border-radius: 5px;
+  background: rgba(139, 195, 74, 0.05);
+  color: #8bc34a;
+  font-size: 1em;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.catalog-add-btn:hover {
+  border-color: rgba(139, 195, 74, 0.6);
+  background: rgba(139, 195, 74, 0.15);
+  color: #a4d65e;
+}
+
+.catalog-overflow {
+  text-align: center;
+  color: #6a5a4a;
+  font-size: 0.78em;
+  padding: 8px 0;
+  border-top: 1px solid rgba(120, 80, 50, 0.15);
+  margin-top: 4px;
+}

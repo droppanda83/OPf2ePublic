@@ -1,0 +1,17 @@
+{
+  "seasonTypes": [
+    "spring",
+    "summer",
+    "autumn",
+    "winter"
+  ],
+  "assignments": {
+    "object:Autum treetop2": [
+      "autumn",
+      "summer"
+    ],
+    "object:Autumn Tree top1": [
+      "autumn"
+    ]
+  }
+}

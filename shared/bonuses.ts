@@ -22,6 +22,8 @@ export interface Bonus {
   value: number;
   source: string;
   applyTo?: string; // e.g. 'ac', 'attack', 'reflex', 'damage', 'spell-dc', ...
+  /** Optional condition for when this bonus applies (e.g. 'action:demoralize', 'vs:visual') */
+  condition?: string;
 }
 
 export interface Penalty {

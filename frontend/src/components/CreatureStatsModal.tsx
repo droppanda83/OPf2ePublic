@@ -27,6 +27,9 @@ export const CreatureStatsModal: React.FC<CreatureStatsModalProps> = ({ creature
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Creature Stats"
       style={{
         position: 'fixed',
         top: 0,
@@ -59,6 +62,7 @@ export const CreatureStatsModal: React.FC<CreatureStatsModalProps> = ({ creature
           <h2 style={{ margin: 0, color: '#00d4aa' }}>{creature.name}</h2>
           <button
             onClick={onClose}
+            aria-label="Close"
             style={{
               backgroundColor: 'transparent',
               border: '1px solid #666',
@@ -71,6 +75,37 @@ export const CreatureStatsModal: React.FC<CreatureStatsModalProps> = ({ creature
             ✕
           </button>
         </div>
+
+        {/* Portrait */}
+        {(creature.portraitImageUrl || creature.tokenImageUrl) && (
+          <div style={{ display: 'flex', gap: '16px', marginBottom: '15px', alignItems: 'flex-start' }}>
+            <img
+              src={creature.portraitImageUrl || creature.tokenImageUrl}
+              alt={creature.name}
+              style={{
+                width: '120px',
+                height: creature.portraitImageUrl ? '160px' : '120px',
+                objectFit: 'cover',
+                borderRadius: creature.portraitImageUrl ? '8px' : '50%',
+                border: '2px solid #00d4aa',
+                boxShadow: '0 0 12px rgba(0, 212, 170, 0.3)',
+                flexShrink: 0,
+              }}
+            />
+            <div style={{ fontSize: '13px', color: '#999' }}>
+              <div style={{ marginBottom: '4px' }}>
+                <span style={{ color: '#888', textTransform: 'uppercase', fontSize: '10px' }}>Type</span>
+                <div style={{ color: '#ccc' }}>{creature.type === 'player' ? 'Player Character' : creature.type === 'npc' ? 'NPC' : 'Creature'}</div>
+              </div>
+              {creature.characterClass && (
+                <div>
+                  <span style={{ color: '#888', textTransform: 'uppercase', fontSize: '10px' }}>Class</span>
+                  <div style={{ color: '#ccc' }}>{creature.characterClass}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Vitals */}
         <div style={{ marginBottom: '15px' }}>

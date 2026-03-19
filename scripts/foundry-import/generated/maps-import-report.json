@@ -1,0 +1,12 @@
+{
+  "generatedAt": "2026-02-19T23:19:13.995Z",
+  "sourceFile": "scripts/foundry-import/source/maps.source.json",
+  "outputFile": "shared/foundryEncounterMaps.ts",
+  "mapCount": 14,
+  "themeCounts": {
+    "dungeon": 5,
+    "urban": 1,
+    "wilderness": 5,
+    "indoor": 3
+  }
+}

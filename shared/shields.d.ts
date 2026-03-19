@@ -9,6 +9,7 @@ export interface Shield {
     hp: number;
     maxHp: number;
     hands: number;
+    price: number;
     rarity: 'common' | 'uncommon' | 'rare' | 'unique';
     traits: string[];
     icon: string;

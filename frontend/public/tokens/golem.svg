@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#616161" stroke="#424242" stroke-width="3"/>
+  <!-- Blocky golem shape -->
+  <rect x="38" y="20" width="24" height="22" fill="#9e9e9e" stroke="#757575" stroke-width="1.5" rx="3"/>
+  <!-- Eyes (glowing) -->
+  <rect x="41" y="28" width="7" height="5" fill="#ffeb3b" rx="1"/>
+  <rect x="52" y="28" width="7" height="5" fill="#ffeb3b" rx="1"/>
+  <!-- Body -->
+  <rect x="33" y="42" width="34" height="28" fill="#9e9e9e" stroke="#757575" stroke-width="1.5" rx="2"/>
+  <!-- Rune/sigil on chest -->
+  <circle cx="50" cy="55" r="6" fill="none" stroke="#ffeb3b" stroke-width="1.5"/>
+  <path d="M50 49 L53 55 L47 55 Z" fill="#ffeb3b"/>
+  <!-- Arms -->
+  <rect x="22" y="44" width="11" height="8" fill="#9e9e9e" stroke="#757575" stroke-width="1" rx="2"/>
+  <rect x="67" y="44" width="11" height="8" fill="#9e9e9e" stroke="#757575" stroke-width="1" rx="2"/>
+  <!-- Cracks -->
+  <path d="M40 50 L42 48 L44 52" stroke="#616161" stroke-width="1" fill="none"/>
+  <path d="M58 46 L60 50 L56 52" stroke="#616161" stroke-width="1" fill="none"/>
+</svg>

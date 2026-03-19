@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#311b92" stroke="#1a0a5e" stroke-width="3"/>
+  <!-- Cape -->
+  <path d="M25 35 Q22 55 20 80 L40 65 L50 80 L60 65 L80 80 Q78 55 75 35" fill="#4a148c" stroke="#7b1fa2" stroke-width="1"/>
+  <!-- Face -->
+  <path d="M38 38 Q38 25 50 22 Q62 25 62 38 L62 50 Q62 58 50 60 Q38 58 38 50 Z" fill="#e8eaf6" stroke="#9fa8da" stroke-width="1"/>
+  <!-- Hair -->
+  <path d="M38 38 Q38 25 50 22 Q62 25 62 38 L60 35 Q55 28 50 30 Q45 28 40 35 Z" fill="#1a0a5e"/>
+  <!-- Red eyes -->
+  <ellipse cx="44" cy="40" rx="4" ry="3" fill="#d50000"/>
+  <circle cx="44" cy="40" r="1.5" fill="#1a0a0a"/>
+  <ellipse cx="56" cy="40" rx="4" ry="3" fill="#d50000"/>
+  <circle cx="56" cy="40" r="1.5" fill="#1a0a0a"/>
+  <!-- Fangs -->
+  <path d="M45 52 L47 58" stroke="#e8eaf6" stroke-width="2" stroke-linecap="round"/>
+  <path d="M55 52 L53 58" stroke="#e8eaf6" stroke-width="2" stroke-linecap="round"/>
+  <!-- Blood drop -->
+  <path d="M47 58 Q48 62 47 64 Q46 62 47 58" fill="#d50000"/>
+</svg>

@@ -1,10 +1,12 @@
 import { Creature, Condition } from './types';
 import { getShield } from './shields';
 import { getWeapon } from './weapons';
+import { getArmor, getArmorDexCap } from './armor';
 import {
   Bonus, Penalty, ProficiencyRank,
   getProficiencyBonus, resolveStacking, calculateMAP
 } from './bonuses';
+import { getEquipmentBonusesFor, getEquipmentDexCap, getEquipmentDegreeAdjustments, getEquipmentModifierAdjustments } from './equipmentBonuses';
 
 // ─── Condition → Modifier Mapping ────────────────────
 
@@ -145,6 +147,49 @@ export function getConditionModifiers(
       case 'dazzled':
         // Dazzled: All creatures/objects are concealed to you (handled in attack resolution)
         break;
+      
+      // ═══════════════════════════════════════════════════════════
+      // ACTIVE FEAT CONDITIONS
+      // ═══════════════════════════════════════════════════════════
+      
+      case 'nimble-dodge':
+        // Nimble Dodge (Rogue): +2 circumstance bonus to AC for 1 round
+        if (applyTo === 'ac') {
+          bonuses.push({ type: 'circumstance', value: val, source: 'Nimble Dodge' });
+        }
+        break;
+      
+      case 'mirror-dodge':
+        // Mirror Dodge (Reflection): +2 circumstance bonus to AC for 1 round
+        if (applyTo === 'ac') {
+          bonuses.push({ type: 'circumstance', value: val, source: 'Mirror Dodge' });
+        }
+        break;
+      
+      case 'bon-mot':
+        // Bon Mot: -2/-3 status penalty to Perception and Will saves
+        if (['will', 'perception'].includes(applyTo)) {
+          penalties.push({ type: 'status', value: val, source: `Bon Mot -${val}` });
+        }
+        break;
+      
+      case 'point-blank-stance':
+        // Point-Blank Stance: +2 circumstance bonus to ranged Strike damage
+        if (applyTo === 'damage' && attackType === 'ranged') {
+          bonuses.push({ type: 'circumstance', value: val, source: 'Point-Blank Stance' });
+        }
+        break;
+      
+      case 'stunned':
+        // Stunned: lose actions, -4 to AC (simplified)
+        if (applyTo === 'ac') {
+          penalties.push({ type: 'status', value: val, source: `Stunned ${val}` });
+        }
+        break;
+      
+      case 'slowed':
+        // Slowed: lose actions (effect handled in engine, no stat penalty)
+        break;
     }
   }
 
@@ -176,6 +221,33 @@ function gatherModifiers(
     }
   }
 
+  // Equipment bonuses from worn/held magic items
+  if (creature.equippedWornItems && creature.equippedWornItems.length > 0) {
+    const equipBonuses = getEquipmentBonusesFor(creature.equippedWornItems, applyTo);
+    for (const b of equipBonuses) {
+      bonuses.push(b);
+    }
+
+    // Apply equipment modifier adjustments (e.g., compass removes no-compass penalty)
+    const modAdj = getEquipmentModifierAdjustments(creature.equippedWornItems, applyTo);
+    for (const adj of modAdj) {
+      if (adj.mode === 'remove') {
+        // Remove penalties matching the slug (e.g., 'no-compass', 'no-crowbar')
+        const idx = penalties.findIndex(p => p.source?.toLowerCase().replace(/\s+/g, '-') === adj.slug || p.applyTo === adj.slug);
+        if (idx >= 0) penalties.splice(idx, 1);
+      } else if (adj.mode === 'override' && adj.value !== undefined) {
+        // Override: set a specific modifier value (e.g., Pactmaster's Grace override saves to +3)
+        bonuses.push({
+          type: 'item',
+          value: adj.value,
+          source: adj.source,
+          applyTo,
+          condition: adj.condition,
+        });
+      }
+    }
+  }
+
   return { bonuses, penalties };
 }
 
@@ -183,14 +255,35 @@ function gatherModifiers(
 
 /**
  * Calculate Armor Class.
- * PF2e: 10 + DEX mod + armor proficiency bonus + item bonus (armor) + stacked modifiers
+ * PF2e: 10 + DEX mod (capped by armor) + armor proficiency bonus + item bonus (armor) + stacked modifiers
  */
 export function calculateAC(
   creature: Creature,
   attackerId?: string,
   attackType?: 'melee' | 'ranged'
 ): number {
-  const dexMod = creature.abilities?.dexterity ?? 0;
+  const rawDexMod = creature.abilities?.dexterity ?? 0;
+  
+  // Apply DEX cap from equipped armor (if any)
+  let dexCap: number | undefined = undefined;
+  if (creature.equippedArmor) {
+    const armor = getArmor(creature.equippedArmor);
+    if (armor) {
+      const cap = getArmorDexCap(armor);
+      dexCap = cap !== null ? cap : undefined;
+    }
+  }
+
+  // Also check equipment DEX cap (e.g., Bands of Force impose DEX cap 5)
+  if (creature.equippedWornItems && creature.equippedWornItems.length > 0) {
+    const equipDexCap = getEquipmentDexCap(creature.equippedWornItems);
+    if (equipDexCap !== undefined) {
+      // Use the lower of armor DEX cap and equipment DEX cap
+      dexCap = dexCap !== undefined ? Math.min(dexCap, equipDexCap) : equipDexCap;
+    }
+  }
+
+  const dexMod = dexCap !== undefined ? Math.min(rawDexMod, dexCap) : rawDexMod;
 
   const armorProfRank: ProficiencyRank = creature.armorBonus > 0
     ? (creature.proficiencies?.lightArmor ?? 'trained')
@@ -233,11 +326,15 @@ export function calculateAttackBonus(creature: Creature, attackType?: 'melee' | 
     if (map < 0) {
       penalties.push({ type: 'untyped', value: Math.abs(map), source: 'Multiple Attack Penalty' });
     }
-    return creature.pbAttackBonus + map + resolveStacking(bonuses, penalties);
+    const pbResult = creature.pbAttackBonus + map + resolveStacking(bonuses, penalties);
+    console.log(`[ATK CALC] ${creature.name} pbAttackBonus path: pb=${creature.pbAttackBonus} MAP=${map} mods=${resolveStacking(bonuses, penalties)} => ${pbResult}`);
+    return pbResult;
   }
 
   const weapon = creature.equippedWeapon ? getWeapon(creature.equippedWeapon) : null;
   const effectiveType = attackType ?? weapon?.type ?? 'melee';
+  
+  console.log(`[ATK CALC] ${creature.name}: equippedWeapon="${creature.equippedWeapon}" weaponFound=${!!weapon} weaponCat=${weapon?.proficiencyCategory ?? 'N/A'}`);
   
   // DEBUG: Log the calculation details
   const isIsera = creature.name && creature.name.includes('Isera');
@@ -267,12 +364,22 @@ Bonuses Array:
 
   // Weapon proficiency
   let profRank: ProficiencyRank = creature.proficiencies?.unarmed ?? 'trained';
+  const hasAdvancedWeaponTraining = creature.feats?.some((feat: any) => {
+    const name = typeof feat === 'string' ? feat : feat?.name;
+    return typeof name === 'string' && name.toLowerCase().trim() === 'advanced weapon training';
+  }) || creature.specials?.some((entry: any) =>
+    typeof entry === 'string' && entry.toLowerCase().trim() === 'advanced weapon training'
+  );
   if (weapon) {
     const cat = weapon.proficiencyCategory ?? 'simple';
     switch (cat) {
       case 'simple':   profRank = creature.proficiencies?.simpleWeapons ?? 'trained'; break;
       case 'martial':  profRank = creature.proficiencies?.martialWeapons ?? 'untrained'; break;
-      case 'advanced': profRank = creature.proficiencies?.advancedWeapons ?? 'untrained'; break;
+      case 'advanced':
+        profRank = hasAdvancedWeaponTraining
+          ? (creature.proficiencies?.martialWeapons ?? 'untrained')
+          : (creature.proficiencies?.advancedWeapons ?? 'untrained');
+        break;
       case 'unarmed':  profRank = creature.proficiencies?.unarmed ?? 'trained'; break;
     }
   }
@@ -319,6 +426,9 @@ Bonuses Array:
 
   const finalModifier = resolveStacking(bonuses, penalties);
   total += finalModifier;
+  
+  console.log(`[ATK CALC] ${creature.name}: abilityMod=${abilityMod} profRank=${profRank} profBonus=${profBonus} MAP=${map} mods=${finalModifier} => total=${total} (level=${creature.level}, attacksMade=${creature.attacksMadeThisTurn})`);
+  console.log(`[ATK CALC] ${creature.name}: bonuses=[${bonuses.map(b => `${b.type}:${b.value}(${b.source})`).join(', ')}] penalties=[${penalties.map(p => `${p.type}:${p.value}(${p.source})`).join(', ')}]`);
   
   if (isIsera) {
     console.log(`
@@ -511,6 +621,53 @@ export function getDegreeOfSuccess(d20: number, total: number, dc: number): Degr
   }
 
   return result;
+}
+
+/**
+ * Apply equipment-based degree-of-success adjustments.
+ * Items like Armbands of the Gorgon can upgrade success → critical success on saves vs incapacitation,
+ * or Headbands of Translocation can upgrade critical failure → failure on skill checks.
+ *
+ * @param result - The base degree of success
+ * @param equippedWornItems - IDs of equipped worn/held items
+ * @param selector - The check type ('saving-throw', 'skill-check', 'attack-roll')
+ * @returns The adjusted degree of success
+ */
+export function applyDegreeAdjustments(
+  result: DegreeOfSuccess,
+  equippedWornItems: string[] | undefined,
+  selector: string
+): DegreeOfSuccess {
+  if (!equippedWornItems || equippedWornItems.length === 0) return result;
+
+  const adjustments = getEquipmentDegreeAdjustments(equippedWornItems, selector);
+  let adjusted = result;
+
+  for (const adj of adjustments) {
+    // Parse adjustment string: "success:one-degree-better,criticalFailure:one-degree-better"
+    const parts = adj.adjustment.split(',');
+    for (const part of parts) {
+      const [fromDeg, direction] = part.split(':');
+      if (adjusted !== fromDeg && adjusted !== camelToKebab(fromDeg)) continue;
+
+      if (direction === 'one-degree-better') {
+        if (adjusted === 'critical-failure') adjusted = 'failure';
+        else if (adjusted === 'failure') adjusted = 'success';
+        else if (adjusted === 'success') adjusted = 'critical-success';
+      } else if (direction === 'one-degree-worse') {
+        if (adjusted === 'critical-success') adjusted = 'success';
+        else if (adjusted === 'success') adjusted = 'failure';
+        else if (adjusted === 'failure') adjusted = 'critical-failure';
+      }
+    }
+  }
+
+  return adjusted;
+}
+
+/** Convert camelCase degree name to kebab-case (e.g., 'criticalFailure' → 'critical-failure') */
+function camelToKebab(s: string): string {
+  return s.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
 }
 
 // ─── Damage Calculation ──────────────────────────────

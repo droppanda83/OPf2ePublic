@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#1b5e20" stroke="#0d3b0e" stroke-width="3"/>
+  <!-- Trunk -->
+  <rect x="46" y="50" width="8" height="25" fill="#795548" rx="2"/>
+  <!-- Leaves -->
+  <path d="M50 45 Q35 35 30 25 Q45 30 50 45" fill="#4caf50" stroke="#2e7d32" stroke-width="1"/>
+  <path d="M50 45 Q65 35 70 25 Q55 30 50 45" fill="#4caf50" stroke="#2e7d32" stroke-width="1"/>
+  <path d="M50 40 Q30 42 20 38 Q30 48 50 45" fill="#66bb6a" stroke="#2e7d32" stroke-width="1"/>
+  <path d="M50 40 Q70 42 80 38 Q70 48 50 45" fill="#66bb6a" stroke="#2e7d32" stroke-width="1"/>
+  <!-- Thorns -->
+  <path d="M46 55 L42 52" stroke="#795548" stroke-width="2" stroke-linecap="round"/>
+  <path d="M54 60 L58 57" stroke="#795548" stroke-width="2" stroke-linecap="round"/>
+  <path d="M46 65 L42 62" stroke="#795548" stroke-width="2" stroke-linecap="round"/>
+</svg>

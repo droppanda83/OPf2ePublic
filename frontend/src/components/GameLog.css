@@ -3,7 +3,7 @@
   flex-direction: column;
   gap: 8px;
   background: rgba(0, 0, 0, 0.3);
-  border-left: 3px solid #0dd;
+  border-left: 3px solid #d4af37;
   border-radius: 8px;
   padding: 10px;
   flex: 1;
@@ -14,7 +14,7 @@
 .game-log h3 {
   margin: 0;
   font-size: 14px;
-  color: #0dd;
+  color: #d4af37;
   flex-shrink: 0;
 }
 
@@ -38,7 +38,7 @@
 }
 
 .log-entry.action {
-  border-left-color: #2196F3;
+  border-left-color: #b8860b;
 }
 
 .log-entry.action::before {
@@ -62,8 +62,8 @@
 }
 
 .log-entry.death {
-  border-left-color: #9C27B0;
-  background: rgba(156, 39, 176, 0.1);
+  border-left-color: #8b1a1a;
+  background: rgba(139, 26, 26, 0.1);
 }
 
 .log-entry.death::before {
@@ -98,12 +98,12 @@
 }
 
 .log-output::-webkit-scrollbar-thumb {
-  background: rgba(33, 150, 243, 0.5);
+  background: rgba(184, 134, 11, 0.5);
   border-radius: 3px;
 }
 
 .log-output::-webkit-scrollbar-thumb:hover {
-  background: rgba(33, 150, 243, 0.7);
+  background: rgba(184, 134, 11, 0.7);
 }
 
 /* Hover details */
@@ -113,7 +113,7 @@
 }
 
 .log-entry.has-details:hover {
-  background: rgba(33, 150, 243, 0.08);
+  background: rgba(184, 134, 11, 0.08);
 }
 
 .log-detail-hint {
@@ -124,8 +124,8 @@
 .log-tooltip {
   position: fixed;
   z-index: 1000;
-  background: #1a1f2e;
-  border: 1px solid #3a4055;
+  background: #1a1410;
+  border: 1px solid #3a2a20;
   border-radius: 6px;
   padding: 10px 14px;
   font-size: 12px;
@@ -140,10 +140,10 @@
 }
 
 .tooltip-header {
-  color: #58f4c6;
+  color: #d4af37;
   font-weight: bold;
   margin-top: 4px;
-  border-bottom: 1px solid #2a3042;
+  border-bottom: 1px solid #3a2a20;
   padding-bottom: 2px;
   margin-bottom: 2px;
 }
@@ -154,4 +154,18 @@
 
 .tooltip-line {
   color: #bbb;
+}
+
+/* ─── Narrative Text ─────────────────────────────────── */
+
+.log-narrative {
+  font-size: 10px;
+  color: #d4b06a;
+  font-style: italic;
+  margin-top: 2px;
+  padding: 3px 6px;
+  background: rgba(240, 192, 64, 0.06);
+  border-left: 2px solid rgba(240, 192, 64, 0.3);
+  border-radius: 0 4px 4px 0;
+  line-height: 1.4;
 }

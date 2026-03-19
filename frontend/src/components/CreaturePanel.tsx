@@ -37,9 +37,25 @@ const CreaturePanel: React.FC<CreaturePanelProps> = ({ creatures, currentRound, 
               (e.currentTarget as any).style.backgroundColor = creature.id === currentCreatureId ? '#1a2a3a' : '#1a1f2a';
             }}
           >
-            <div>
-              {creature.name}
-              {creature.dying && <span style={{ color: '#ff4444', marginLeft: '5px' }}>💀 DYING</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {(creature.tokenImageUrl || creature.portraitImageUrl) && (
+                <img
+                  src={creature.portraitImageUrl || creature.tokenImageUrl}
+                  alt=""
+                  style={{
+                    width: '24px',
+                    height: creature.portraitImageUrl ? '32px' : '24px',
+                    borderRadius: creature.tokenImageUrl && !creature.portraitImageUrl ? '50%' : '4px',
+                    objectFit: 'cover',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+              <span>
+                {creature.name}
+                {creature.dying && <span style={{ color: '#ff4444', marginLeft: '5px' }}>💀 DYING</span>}
+              </span>
             </div>
             <div style={styles.health}>
               <div
@@ -134,4 +150,4 @@ const styles = {
   },
 };
 
-export default CreaturePanel;
+export default React.memo(CreaturePanel);

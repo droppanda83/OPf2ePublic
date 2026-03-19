@@ -16,8 +16,9 @@ export interface PF2eAction {
  * Core PF2e actions available to all creatures
  */
 export declare const CORE_ACTIONS: PF2eAction[];
+import { Creature } from './types';
 /**
  * Get all available actions for a creature
  * Filters based on what the creature has equipped/can do
  */
-export declare function getAvailableActions(creature: any): PF2eAction[];
+export declare function getAvailableActions(creature: Partial<Creature>): PF2eAction[];

@@ -14,6 +14,26 @@
     "build": "npm run build --workspaces",
     "start": "npm start --workspace=backend",
     "client": "npm start --workspace=frontend",
-    "type-check": "npm run type-check --workspaces"
+    "type-check": "npm run type-check --workspaces",
+    "lint": "eslint shared/**/*.ts backend/src/**/*.ts frontend/src/**/*.{ts,tsx}",
+    "lint:fix": "eslint --fix shared/**/*.ts backend/src/**/*.ts frontend/src/**/*.{ts,tsx}",
+    "format": "prettier --write \"shared/**/*.ts\" \"backend/src/**/*.ts\" \"frontend/src/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"shared/**/*.ts\" \"backend/src/**/*.ts\" \"frontend/src/**/*.{ts,tsx}\"",
+    "test": "npx tsx --test backend/src/game/*.test.ts",
+    "import:foundry": "node scripts/foundry-import/index.js",
+    "convert:foundry:scenes": "node scripts/foundry-import/convert-foundry-scenes.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@google/generative-ai": "^0.24.1",
+    "jspdf": "^4.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.0.2",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "prettier": "^3.8.1",
+    "typescript-eslint": "^8.56.1"
   }
 }

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#d32f2f" stroke="#b71c1c" stroke-width="3"/>
+  <!-- Monster silhouette -->
+  <path d="M30 70 L35 45 L28 35 L35 38 L40 25 L45 35 L50 22 L55 35 L60 25 L65 38 L72 35 L65 45 L70 70 Q60 75 50 72 Q40 75 30 70 Z" fill="#ffcdd2" stroke="#ef5350" stroke-width="1.5"/>
+  <!-- Eyes -->
+  <circle cx="42" cy="50" r="4" fill="#ffeb3b"/>
+  <circle cx="42" cy="50" r="2" fill="#1a0a0a"/>
+  <circle cx="58" cy="50" r="4" fill="#ffeb3b"/>
+  <circle cx="58" cy="50" r="2" fill="#1a0a0a"/>
+  <!-- Teeth -->
+  <path d="M40 60 L43 65 L46 60 L49 65 L52 60 L55 65 L58 60" stroke="#ffcdd2" stroke-width="1.5" fill="none"/>
+</svg>

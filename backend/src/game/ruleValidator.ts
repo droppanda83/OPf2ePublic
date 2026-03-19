@@ -66,32 +66,25 @@ export function validateAction(
 
   // 2. ACTION COST VALIDATION
   // ──────────────────────────
-  
-  // TODO Phase 0: Action economy tracking not fully implemented yet.
-  // Need to add `actionsRemaining` property to Creature type and track it per turn.
-  // For now, action cost validation is disabled.
-  
-  /*
+
   const actionCost = getActionCost(actionId);
   const availableActions = actor.actionsRemaining ?? 3;
 
-  if (actionCost > availableActions) {
+  if (actionCost === 'reaction') {
+    if (actor.reactionUsed) {
+      return {
+        valid: false,
+        reason: `${actor.name} has already used their reaction this round.`,
+        errorCode: 'REACTION_USED'
+      };
+    }
+  } else if (actionCost !== 'free' && actionCost > availableActions) {
     return {
       valid: false,
       reason: `${actor.name} needs ${actionCost} action(s) but only has ${availableActions} remaining.`,
       errorCode: 'INSUFFICIENT_ACTIONS'
     };
   }
-
-  // Reactions require unused reaction
-  if (actionCost === 'reaction' && actor.reactionUsed) {
-    return {
-      valid: false,
-      reason: `${actor.name} has already used their reaction this round.`,
-      errorCode: 'REACTION_USED'
-    };
-  }
-  */
 
   // 3. TRAIT RESTRICTION VALIDATION
   // ─────────────────────────────────
@@ -323,51 +316,340 @@ export function validateAction(
 /**
  * Get the action cost for an action ID.
  * Returns number of actions (1-3), 'reaction', or 'free'.
+ *
+ * Reference: PF2e Player Core (Remaster) action tables.
+ * Spell costs are NOT handled here — spellActions resolves those from spell data.
  */
-function getActionCost(actionId: string): number | 'reaction' | 'free' {
-  // Reactions
-  if (['reactive-strike', 'shield-block', 'attack-of-opportunity'].includes(actionId)) {
-    return 'reaction';
-  }
+export function getActionCost(actionId: string): number | 'reaction' | 'free' {
+  const COST_TABLE: Record<string, number | 'reaction' | 'free'> = {
+    // ── Reactions ─────────────────────────────────────────
+    'reactive-strike':              'reaction',
+    'shield-block':                 'reaction',
+    'attack-of-opportunity':        'reaction',
+    'attack-of-opportunity-reactive': 'reaction',
+    'execute-ready':                'reaction',
+    'aid':                          'reaction',
+    'youre-next':                   'reaction',
+    'opportune-backstab':           'reaction',
+    'cognitive-loophole':           'reaction',
+    'clever-gambit':                'reaction',
+    'reactive-pursuit':             'reaction',
+    'sidestep':                     'reaction',
+    'leave-an-opening':             'reaction',
+    'reactive-interference':        'reaction',
+    'champion-reaction':            'reaction',
+    'counter-performance':          'reaction',
+    'blade-brake':                  'reaction',
+    'reactive-shield':              'reaction',
+    'nimble-dodge':                 'reaction',
+    'mirror-dodge':                 'reaction',
+    'hydraulic-deflection':         'reaction',
+    'intercept-strike':             'reaction',
 
-  // Free actions
-  if (['drop-weapon', 'release-grip', 'lower-shield', 'teleport'].includes(actionId)) {
-    return 'free';
-  }
+    // ── Free actions ──────────────────────────────────────
+    'drop-weapon':                  'free',
+    'release-grip':                 'free',
+    'lower-shield':                 'free',
+    'teleport':                     'free',
+    'resume-delay':                 'free',
+    'delay':                        'free',
+    'end-rage':                     'free',
+    'dismiss-aura':                 'free',
+    'revert-form':                  'free',
+    'end-courageous-anthem':        'free',
+    'unleash-psyche':               'free',
+    'gain-panache':                 'free',
+    'stance-savant':                'free',
+    'kip-up':                       'free',
+    'retching':                     'free',
+    'resolve-pending-damage':       'free',
+    'stabilize-with-hero-points':   'free',
 
-  // 3-action activities
-  if (['sudden-charge'].includes(actionId)) {
-    return 3;
-  }
+    // ── 3-action activities ───────────────────────────────
+    'sudden-charge':                3,
+    'whirlwind-strike':             3,
+    'impossible-volley':            3,
+    'manifest-eidolon':             3,
 
-  // 2-action activities
-  if (['power-attack', 'double-slice', 'intimidating-strike', 'knockdown', 'shove', 'trip', 'warp-step'].includes(actionId)) {
-    return 2;
-  }
+    // ── 2-action activities ───────────────────────────────
+    'vicious-swing':                2,
+    'double-slice':                 2,
+    'intimidating-strike':          2,
+    'knockdown':                    2,
+    'swipe':                        2,
+    'double-shot':                  2,
+    'triple-shot':                  2,
+    'dazing-blow':                  2,
+    'incredible-aim':               2,
+    'positioning-assault':          2,
+    'fighter-debilitating-shot':    2,
+    'overwhelming-blow':            2,
+    'barreling-charge':             2,
+    'parting-shot':                 2,
+    'revealing-stab':               2,
+    'felling-strike':               2,
+    'sudden-leap':                  2,
+    'felling-shot':                 2,
+    'twin-feint':                   2,
+    'fantastic-leap':               2,
+    'dragon-breath':                2,
+    'ready':                        2,
+    'spellstrike':                  2,
+    'wild-shape':                   2,
+    'warp-step':                    2,
+    'warp-step-amped':              2,
+    'explode':                      2,
+    'spark-transcendence':          2,
+    'elemental-blast-2':            2,
 
-  // Most actions are 1 action
-  return 1;
+    // ── 1-action activities (explicit) ────────────────────
+    'strike':                       1,
+    'stride':                       1,
+    'move':                         1,
+    'step':                         1,
+    'stand':                        1,
+    'crawl':                        1,
+    'raise-shield':                 1,
+    'take-cover':                   1,
+    'draw-weapon':                  1,
+    'stow-weapon':                  1,
+    'pick-up-weapon':               1,
+    'use-item':                     1,
+    'interact':                     1,
+    'demoralize':                   1,
+    'feint':                        1,
+    'grapple':                      1,
+    'trip':                         1,
+    'shove':                        1,
+    'disarm':                       1,
+    'battle-medicine':              1,
+    'tumble-through':               1,
+    'recall-knowledge':             1,
+    'escape':                       1,
+    'seek':                         1,
+    'hide':                         1,
+    'sneak':                        1,
+    'exacting-strike':              1,
+    'snagging-strike':              1,
+    'brutish-shove':                1,
+    'combat-grab':                  1,
+    'dueling-parry':                1,
+    'lunge':                        1,
+    'twin-parry':                   1,
+    'shatter-defenses':             1,
+    'combat-assessment':            1,
+    'point-blank-stance':           1,
+    'assisting-shot':               1,
+    'sleek-reposition':             1,
+    'dual-handed-assault':          1,
+    'quick-reversal':               1,
+    'advantageous-assault':         1,
+    'certain-strike':               1,
+    'spring-attack':                1,
+    'brutal-finish':                1,
+    'rebounding-toss':              1,
+    'disarming-stance':             1,
+    'ricochet-stance':              1,
+    'disruptive-stance':            1,
+    'incredible-ricochet':          1,
+    'lunging-stance':               1,
+    'determination':                1,
+    'guiding-finish':               1,
+    'multishot-stance':             1,
+    'battle-assessment':            1,
+    'poison-weapon':                1,
+    'twist-the-knife':              1,
+    'blur-slam':                    1,
+    'instant-opening':              1,
+    'perfect-distraction':          1,
+    'spring-from-the-shadows':      1,
+    'bon-mot':                      1,
+    'dirty-trick':                  1,
+    'scare-to-death':               1,
+    'quick-draw':                   1,
+    'skirmish-strike':              1,
+    'running-reload':               1,
+    'elemental-assault':            1,
+    'heroic-presence':              1,
+    'rage':                         1,
+    'flurry-of-blows':              1,
+    'hunt-prey':                    1,
+    'lay-on-hands':                 1,
+    'channel-elements':             1,
+    'elemental-blast':              1,
+    'courageous-anthem':            1,
+    'recharge-spellstrike':         1,
+    'arcane-cascade':               1,
+    'devise-a-stratagem':           1,
+    'taunt':                        1,
+    'finisher':                     1,
+    'exploit-vulnerability':        1,
+    'commanders-order':             1,
+    'slingers-reload':              1,
+    'overdrive':                    1,
+    'revelation-spell':             1,
+    'quick-alchemy':                1,
+    'shift-immanence':              1,
+  };
+
+  return COST_TABLE[actionId] ?? 1;
 }
 
 /**
- * Get action traits (Attack, Flourish, Press, Open, etc.)
+ * Get action traits (Attack, Flourish, Press, Open, Move, Stance, etc.)
+ *
+ * These traits drive validation:
+ *  - attack:   increments MAP, triggers reactive-strike AoO
+ *  - flourish: once per turn
+ *  - press:    requires prior attack this turn (MAP ≥ 1)
+ *  - open:     must be the first attack of the turn (MAP = 0)
+ *  - move:     triggers reactive-strike for movement
+ *  - stance:   one active stance at a time (not yet enforced)
  */
 function getActionTraits(actionId: string): string[] {
   const traitMap: Record<string, string[]> = {
-    'strike': ['attack'],
-    'vicious-swing': ['attack', 'flourish'],
-    'power-attack': ['attack', 'flourish'],
-    'double-slice': ['attack', 'flourish'],
-    'intimidating-strike': ['attack', 'flourish'],
-    'knockdown': ['attack', 'flourish'],
-    'exacting-strike': ['attack', 'press'],
-    'snagging-strike': ['attack'],
-    'grapple': ['attack'],
-    'trip': ['attack'],
-    'shove': ['attack'],
-    'disarm': ['attack'],
-    'feint': [],
-    'demoralize': [],
+    // ── Core combat ──────────────────────────────────────
+    'strike':                       ['attack'],
+    'raise-shield':                 [],
+    'lower-shield':                 [],
+    'reactive-strike':              [],
+    'shield-block':                 [],
+    'take-cover':                   [],
+
+    // ── Movement ─────────────────────────────────────────
+    'stride':                       ['move'],
+    'move':                         ['move'],
+    'step':                         ['move'],
+    'stand':                        ['move'],
+    'crawl':                        ['move'],
+    'tumble-through':               ['move'],
+    'sneak':                        ['move'],
+
+    // ── Weapon interaction ───────────────────────────────
+    'draw-weapon':                  ['interact'],
+    'stow-weapon':                  ['interact'],
+    'pick-up-weapon':               ['interact'],
+    'use-item':                     ['interact'],
+
+    // ── Skill actions ────────────────────────────────────
+    'demoralize':                   ['auditory', 'concentrate', 'emotion', 'mental'],
+    'feint':                        ['mental'],
+    'grapple':                      ['attack'],
+    'trip':                         ['attack'],
+    'shove':                        ['attack'],
+    'disarm':                       ['attack'],
+    'escape':                       ['attack'],
+    'battle-medicine':              ['healing', 'manipulate'],
+    'recall-knowledge':             ['concentrate', 'secret'],
+    'seek':                         ['concentrate', 'secret'],
+    'hide':                         [],
+    'aid':                          [],
+
+    // ── Fighter feats (L1–4) ─────────────────────────────
+    'vicious-swing':                ['attack', 'flourish'],
+    'sudden-charge':                ['flourish', 'open', 'move'],
+    'double-slice':                 ['attack', 'flourish'],
+    'intimidating-strike':          ['attack', 'flourish'],
+    'exacting-strike':              ['attack', 'press'],
+    'snagging-strike':              ['attack'],
+    'knockdown':                    ['attack', 'flourish'],
+    'brutish-shove':                ['attack', 'press'],
+    'combat-grab':                  ['attack', 'press'],
+    'dueling-parry':                [],
+    'lunge':                        ['attack'],
+    'combat-assessment':            [],
+
+    // ── Fighter feats (L6–10) ────────────────────────────
+    'swipe':                        ['attack', 'flourish'],
+    'twin-parry':                   [],
+    'shatter-defenses':             ['attack', 'press'],
+    'point-blank-stance':           ['stance'],
+    'assisting-shot':               ['attack'],
+    'sleek-reposition':             ['attack', 'press'],
+    'dual-handed-assault':          ['attack', 'flourish'],
+    'quick-reversal':               ['attack', 'flourish', 'press'],
+    'double-shot':                  ['attack', 'flourish'],
+    'dazing-blow':                  ['attack', 'flourish'],
+    'advantageous-assault':         ['attack', 'press'],
+    'incredible-aim':               ['attack', 'concentrate'],
+    'positioning-assault':          ['attack', 'flourish'],
+
+    // ── Fighter feats (L12–20) ───────────────────────────
+    'certain-strike':               ['attack', 'press'],
+    'fighter-debilitating-shot':    ['attack', 'flourish'],
+    'spring-attack':                ['attack', 'move'],
+    'brutal-finish':                ['attack', 'press'],
+    'overwhelming-blow':            ['attack', 'flourish'],
+    'rebounding-toss':              ['attack'],
+    'barreling-charge':             ['attack', 'flourish', 'move'],
+    'parting-shot':                 ['attack', 'move'],
+    'disarming-stance':             ['stance'],
+    'revealing-stab':               ['attack'],
+    'ricochet-stance':              ['stance'],
+    'triple-shot':                  ['attack', 'flourish'],
+    'felling-strike':               ['attack', 'flourish'],
+    'sudden-leap':                  ['attack'],
+    'disruptive-stance':            ['stance'],
+    'incredible-ricochet':          ['attack', 'press'],
+    'lunging-stance':               ['stance'],
+    'determination':                [],
+    'guiding-finish':               ['attack'],
+    'multishot-stance':             ['stance'],
+    'impossible-volley':            ['attack', 'flourish', 'open'],
+    'whirlwind-strike':             ['attack', 'flourish', 'open'],
+
+    // ── Rogue feats ──────────────────────────────────────
+    'battle-assessment':            [],
+    'poison-weapon':                [],
+    'twist-the-knife':              ['attack'],
+    'blur-slam':                    ['attack'],
+    'felling-shot':                 ['attack'],
+    'spring-from-the-shadows':      ['attack'],
+    'instant-opening':              [],
+    'perfect-distraction':          [],
+    'reactive-pursuit':             ['move'],
+
+    // ── Skill / General / Ancestry feats ─────────────────
+    'bon-mot':                      ['auditory', 'concentrate', 'emotion', 'linguistic'],
+    'dirty-trick':                  ['attack'],
+    'kip-up':                       ['move'],
+    'scare-to-death':               ['emotion', 'incapacitation'],
+    'nimble-dodge':                 [],
+    'quick-draw':                   [],
+    'skirmish-strike':              ['attack'],
+    'twin-feint':                   ['attack'],
+    'fantastic-leap':               ['move'],
+    'running-reload':               [],
+    'dragon-breath':                ['arcane', 'evocation'],
+    'elemental-assault':            [],
+    'heroic-presence':              ['aura', 'emotion'],
+
+    // ── Class actions ────────────────────────────────────
+    'spellstrike':                  ['attack'],
+    'recharge-spellstrike':         [],
+    'arcane-cascade':               ['stance'],
+    'rage':                         ['concentrate', 'emotion', 'mental'],
+    'flurry-of-blows':              ['attack', 'flourish'],
+    'hunt-prey':                    ['concentrate'],
+    'lay-on-hands':                 ['healing', 'necromancy'],
+    'channel-elements':             [],
+    'elemental-blast':              ['attack'],
+    'elemental-blast-2':            ['attack'],
+    'wild-shape':                   ['concentrate', 'polymorph'],
+    'courageous-anthem':            ['auditory', 'composition', 'emotion', 'mental'],
+    'counter-performance':          ['auditory', 'composition'],
+    'devise-a-stratagem':           ['concentrate'],
+    'taunt':                        ['auditory', 'emotion'],
+    'finisher':                     ['attack', 'finisher'],
+    'exploit-vulnerability':        ['concentrate'],
+    'commanders-order':             ['auditory'],
+    'overdrive':                    ['manipulate'],
+    'explode':                      ['fire', 'manipulate'],
+    'quick-alchemy':                ['manipulate'],
+
+    // ── Turn management ──────────────────────────────────
+    'ready':                        ['concentrate'],
+    'delay':                        [],
   };
 
   return traitMap[actionId] || [];
@@ -382,44 +664,51 @@ function validateAttackRange(
   gameState: GameState,
   weaponId?: string
 ): ValidationResult {
-  if (!weaponId) {
-    return {
-      valid: false,
-      reason: 'No weapon selected for attack range validation.',
-      errorCode: 'NO_WEAPON_FOR_RANGE'
-    };
+  // Resolve weapon: explicit weaponId, active weapon, or first held weapon
+  let weapon = weaponId
+    ? actor.weaponInventory?.find((ws) => ws.weapon.id === weaponId)?.weapon
+    : undefined;
+  if (!weapon && (actor as any).activeWeaponId) {
+    weapon = actor.weaponInventory?.find((ws) => ws.weapon.id === (actor as any).activeWeaponId)?.weapon;
   }
-
-  const weapon = actor.weaponInventory?.find((ws) => ws.weapon.id === weaponId)?.weapon;
   if (!weapon) {
-    return {
-      valid: false,
-      reason: 'Weapon not found.',
-      errorCode: 'WEAPON_NOT_FOUND'
-    };
+    weapon = actor.weaponInventory?.find((ws) => ws.state === 'held')?.weapon;
+  }
+  if (!weapon) {
+    // No weapon found — skip range validation here; combatActions will handle it
+    return { valid: true };
   }
 
-  const distance = Math.abs(actor.positions.x - target.positions.x) + 
-                   Math.abs(actor.positions.y - target.positions.y);
+  const isRanged = weapon.attackType === 'ranged';
 
-  const reach = weapon.range || (weapon.attackType === 'melee' ? 1 : 6);
-
-  // Reach trait adds +1 to melee range
-  if (weapon.traits?.includes('reach') && weapon.attackType === 'melee') {
-    const reachBonus = 1;
-    if (distance > reach + reachBonus) {
+  if (isRanged) {
+    // Ranged: Euclidean distance with range increments
+    const dx = actor.positions.x - target.positions.x;
+    const dy = actor.positions.y - target.positions.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const rangeIncrementSq = (weapon.range || 60) / 5;
+    const maxRangeSq = rangeIncrementSq * 6;
+    if (distance > maxRangeSq + 1e-6) {
       return {
         valid: false,
-        reason: `Target is ${distance} squares away, but weapon reach is ${reach + reachBonus}.`,
+        reason: `Target is beyond maximum range! (${Math.round(distance * 5)}ft away, max ${Math.round(maxRangeSq * 5)}ft)`,
         errorCode: 'OUT_OF_RANGE'
       };
     }
-  } else if (distance > reach) {
-    return {
-      valid: false,
-      reason: `Target is ${distance} squares away, but weapon range is ${reach}.`,
-      errorCode: 'OUT_OF_RANGE'
-    };
+  } else {
+    // Melee: Chebyshev distance (diagonals count as 1 square)
+    const dx = Math.abs(actor.positions.x - target.positions.x);
+    const dy = Math.abs(actor.positions.y - target.positions.y);
+    const gridDistance = Math.max(dx, dy);
+    const hasReach = weapon.traits?.includes('reach');
+    const maxReach = hasReach ? 2 : 1;
+    if (gridDistance > maxReach) {
+      return {
+        valid: false,
+        reason: `Target is out of melee reach${hasReach ? ' (10ft reach)' : ''}! Move closer first.`,
+        errorCode: 'OUT_OF_RANGE'
+      };
+    }
   }
 
   return { valid: true };

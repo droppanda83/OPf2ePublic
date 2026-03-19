@@ -10,6 +10,7 @@ export interface Shield {
   hp: number; // Shield hit points (health)
   maxHp: number; // Maximum shield health
   hands: number; // How many hands needed (usually 1, can be 0 for buckler)
+  price: number; // GP cost
   rarity: 'common' | 'uncommon' | 'rare' | 'unique';
   traits: string[]; // Special properties
   icon: string;
@@ -26,6 +27,7 @@ export const SHIELD_CATALOG: Record<string, Shield> = {
     hp: 12,
     maxHp: 12,
     hands: 1,
+    price: 1,
     rarity: 'common',
     traits: ['wooden'],
     icon: '🛡️',
@@ -39,6 +41,7 @@ export const SHIELD_CATALOG: Record<string, Shield> = {
     hp: 20,
     maxHp: 20,
     hands: 1,
+    price: 2,
     rarity: 'common',
     traits: ['steel'],
     icon: '🛡️',
@@ -52,6 +55,7 @@ export const SHIELD_CATALOG: Record<string, Shield> = {
     hp: 15,
     maxHp: 15,
     hands: 1,
+    price: 10,
     rarity: 'uncommon',
     traits: ['tower'],
     icon: '🛡️',
@@ -65,6 +69,7 @@ export const SHIELD_CATALOG: Record<string, Shield> = {
     hp: 4,
     maxHp: 4,
     hands: 0, // Can be used without occupying a hand
+    price: 1,
     rarity: 'common',
     traits: ['light'],
     icon: '🛡️',
@@ -78,6 +83,7 @@ export const SHIELD_CATALOG: Record<string, Shield> = {
     hp: 8,
     maxHp: 8,
     hands: 1,
+    price: 50,
     rarity: 'rare',
     traits: ['magical', 'crystal'],
     icon: '💎',

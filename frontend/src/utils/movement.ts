@@ -3,6 +3,9 @@
  * (Frontend copy to avoid monorepo import issues during dev)
  */
 
+import type { Creature } from '../../../shared/types';
+import { calculateSpeedPenalty, getArmor } from '../../../shared/armor';
+
 export interface Position {
   x: number;
   y: number;
@@ -218,4 +221,25 @@ export function formatMovementCost(value: number): string {
   return Math.abs(value - Math.round(value)) < 0.05
     ? Math.round(value).toString()
     : value.toFixed(1);
+}
+
+/**
+ * PHASE 9.4: Get effective speed including armor speed penalty
+ * PF2e: Medium armor -5ft (0 if STR req met), Heavy armor -10ft (-5ft if STR req met)
+ */
+export function getEffectiveSpeed(creature: Creature): number {
+  const baseSpeed = creature.speed ?? 25;
+  
+  if (!creature.equippedArmor) {
+    return baseSpeed;
+  }
+  
+  // Apply armor speed penalty
+  const armor = getArmor(creature.equippedArmor);
+  if (!armor) {
+    return baseSpeed;
+  }
+  
+  const speedPenalty = calculateSpeedPenalty(armor, creature.abilities?.strength ?? 0);
+  return baseSpeed + speedPenalty; // Penalty is negative, so we add it
 }

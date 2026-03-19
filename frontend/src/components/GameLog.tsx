@@ -6,6 +6,7 @@ interface LogEntry {
   type: string;
   message: string;
   details?: any;
+  narrative?: string;
 }
 
 interface GameLogProps {
@@ -189,6 +190,11 @@ const GameLog: React.FC<GameLogProps> = ({ log }) => {
             >
               <span className="log-message">{entry.message}</span>
               {hasDetails && <span className="log-detail-hint"> 🔍</span>}
+              {entry.narrative && (
+                <div className="log-narrative">
+                  🎭 {entry.narrative}
+                </div>
+              )}
               {showTooltip && tooltipPos && (
                 <div className="log-tooltip" style={{ top: tooltipPos.top, left: tooltipPos.left }}>
                   {tooltipLines.map((line, j) => (
@@ -206,4 +212,4 @@ const GameLog: React.FC<GameLogProps> = ({ log }) => {
   );
 };
 
-export default GameLog;
+export default React.memo(GameLog);

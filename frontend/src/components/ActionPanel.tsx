@@ -1,8 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { getSpell } from '../utils/spellsWrapper';
+import { getSpell, resolveSpellId } from '../utils/spellsWrapper';
 import { WEAPON_CATALOG } from '../../../shared/weapons';
 import { getShield } from '../../../shared/shields';
 import './ActionPanel.css';
+import type { GameState, Creature, GroundObject } from '../../../shared/types';
+import { PF2eActionDiamond, PF2eReactionIcon, PF2eHeroPoints, ActionCostIcon } from './ActionIcons';
+import WeaponPicker from './WeaponPicker';
+import WeaponManager from './WeaponManager';
+import SpellstrikeSelector from './SpellstrikeSelector';
 
 interface Action {
   id: string;
@@ -16,6 +21,9 @@ interface Action {
   aoeRadius?: number;
   weaponId?: string;
   targetId?: string;
+  readyActionId?: string;
+  itemId?: string;
+  spellId?: string;
   usesD20?: boolean;
   movementType?: 'walk' | 'teleport';
 }
@@ -41,7 +49,7 @@ interface ActionDefinition extends Action {
 }
 
 interface ActionPanelProps {
-  currentCreature: any;
+  currentCreature: Creature;
   selectedAction: Action | null;
   selectedTarget: string | null;
   movementInfo: {
@@ -49,7 +57,7 @@ interface ActionPanelProps {
     maxDistance: number;
   } | null;
   actionPoints: number;
-  gameState?: any;
+  gameState?: GameState;
   onSelectAction: (action: Action) => void;
   onConfirmAction: () => void;
   onCancel: () => void;
@@ -59,195 +67,7 @@ interface ActionPanelProps {
   loading: boolean;
 }
 
-// PF2e Action Icon - Three diamonds, one per action
-const PF2eActionDiamond: React.FC<{ count: number; used?: number }> = ({ count, used = 0 }) => {
-  const usedCount = Math.min(3, Math.max(0, used));
-  const baseColor = 'currentColor';
-  const usedFill = 'rgba(0, 0, 0, 0.55)';
-
-  const diamondWidth = 22;
-  const diamondHeight = 26;
-  const overlap = 6;
-  const startX = 0;
-  const startY = 4;
-
-  const renderDiamond = (x: number, y: number, usedState: boolean) => {
-    const cx = x + diamondWidth / 2;
-    const cy = y + diamondHeight / 2;
-    const opacity = usedState ? 0.35 : 0.95;
-    const fill = usedState ? usedFill : baseColor;
-
-    return (
-      <g key={`${x}-${y}`}>
-        <polygon
-          points={`${cx},${y} ${x + diamondWidth},${cy} ${cx},${y + diamondHeight} ${x},${cy}`}
-          fill={fill}
-          stroke={baseColor}
-          strokeWidth={1.2}
-          opacity={opacity}
-        />
-        {!usedState && (
-          <polygon
-            points={`${cx},${y + 1} ${x + diamondWidth - 2},${cy} ${cx},${cy} ${x + 2},${cy}`}
-            fill="rgba(255,255,255,0.15)"
-          />
-        )}
-      </g>
-    );
-  };
-
-  const diamonds = Array.from({ length: count }).map((_, i) => {
-    const x = startX + i * (diamondWidth - overlap);
-    const usedState = i >= (count - usedCount);
-    return renderDiamond(x, startY, usedState);
-  });
-
-  const svgWidth = diamondWidth + (count - 1) * (diamondWidth - overlap);
-  const svgHeight = diamondHeight + startY * 2;
-
-  return (
-    <svg
-      viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-      className="pf2e-action-diamonds"
-      style={{ width: `${svgWidth * 0.8}px`, height: `${svgHeight * 0.8}px` }}
-    >
-      {diamonds}
-    </svg>
-  );
-};
-
-// PF2e Reaction Icon - single diamond with R
-const PF2eReactionIcon: React.FC<{ used?: boolean }> = ({ used = false }) => {
-  const size = 22;
-  const center = size / 2;
-  const diamond = `${center},2 ${size - 2},${center} ${center},${size - 2} 2,${center}`;
-  const opacity = used ? 0.35 : 0.95;
-  return (
-    <svg
-      viewBox={`0 0 ${size} ${size}`}
-      style={{ width: '20px', height: '20px' }}
-      className="pf2e-reaction-icon"
-    >
-      <polygon
-        points={diamond}
-        fill="#7c5ce1"
-        stroke="#c9b8ff"
-        strokeWidth="1"
-        opacity={opacity}
-      />
-      {!used && (
-        <polygon
-          points={`${center},3 ${size - 4},${center} ${center},${center} 4,${center}`}
-          fill="rgba(255,255,255,0.18)"
-        />
-      )}
-      <text
-        x={center}
-        y={center + 4}
-        textAnchor="middle"
-        fill={used ? '#c9b8ff' : '#1e1e1e'}
-        fontSize="12"
-        fontWeight="bold"
-        opacity={opacity}
-      >
-        R
-      </text>
-    </svg>
-  );
-};
-
-// PF2e Hero Points - up to 3 circles showing filled/empty + selectable spend
-const PF2eHeroPoints: React.FC<{
-  count: number;
-  selectedSpend: number;
-  onSelectSpend: (value: number) => void;
-}> = ({ count, selectedSpend, onSelectSpend }) => {
-  const maxHeroPoints = 3;
-  const filledCount = Math.min(Math.max(count, 0), maxHeroPoints);
-  return (
-    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-      {Array(maxHeroPoints).fill(null).map((_, index) => {
-        const spendValue = index + 1;
-        const usedState = index >= filledCount;
-        const isSelected = spendValue === selectedSpend;
-        const opacity = usedState ? 0.35 : 0.95;
-        const canSelect = !usedState;
-        const tooltipText = canSelect ? `Spend ${spendValue} Hero Point${spendValue === 1 ? '' : 's'}` : 'No Hero Points';
-        return (
-          <svg
-            key={index}
-            viewBox="0 0 24 24"
-            style={{
-              width: '24px',
-              height: '24px',
-              cursor: canSelect ? 'pointer' : 'not-allowed',
-              filter: isSelected ? 'drop-shadow(0 0 4px rgba(255, 215, 0, 0.8))' : 'none'
-            }}
-            onClick={() => {
-              if (!canSelect) return;
-              onSelectSpend(isSelected ? 0 : spendValue);
-            }}
-          >
-            <title>{tooltipText}</title>
-            <circle
-              cx="12"
-              cy="12"
-              r="10"
-              fill={usedState ? 'rgba(60, 10, 10, 0.6)' : '#d64545'}
-              stroke={isSelected ? '#ffd700' : usedState ? '#7a2b2b' : '#ff9b9b'}
-              strokeWidth={isSelected ? '2' : '1'}
-              opacity={opacity}
-            />
-            <text
-              x="12"
-              y="15"
-              textAnchor="middle"
-              fill={usedState ? 'rgba(255,255,255,0.45)' : '#2a0b0b'}
-              fontSize="12"
-              fontWeight="bold"
-              opacity={opacity}
-            >
-              H
-            </text>
-          </svg>
-        );
-      })}
-    </div>
-  );
-};
-
-// Inline action cost icon - small diamonds showing AP cost
-const ActionCostIcon: React.FC<{ cost: number }> = ({ cost }) => {
-  const dw = 10;
-  const dh = 12;
-  const ov = 3;
-  const count = Math.min(cost, 3);
-  const svgW = dw + (count - 1) * (dw - ov);
-  const svgH = dh + 4;
-  return (
-    <svg
-      viewBox={`0 0 ${svgW} ${svgH}`}
-      style={{ width: `${svgW}px`, height: `${svgH}px`, verticalAlign: 'middle', flexShrink: 0 }}
-      className="action-cost-icon"
-    >
-      {Array.from({ length: count }).map((_, i) => {
-        const x = i * (dw - ov);
-        const cx = x + dw / 2;
-        const cy = 2 + dh / 2;
-        return (
-          <polygon
-            key={i}
-            points={`${cx},2 ${x + dw},${cy} ${cx},${2 + dh} ${x},${cy}`}
-            fill="#0dd"
-            stroke="#0dd"
-            strokeWidth="0.6"
-            opacity="0.9"
-          />
-        );
-      })}
-    </svg>
-  );
-};
+// Icon components extracted to ActionIcons.tsx (C.2)
 
 const ActionPanel: React.FC<ActionPanelProps> = ({
   currentCreature,
@@ -271,6 +91,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
   const [hideUnavailable, setHideUnavailable] = useState(false);
   const [weaponPickerOpen, setWeaponPickerOpen] = useState(false);
   const [weaponManageOpen, setWeaponManageOpen] = useState(false);
+  const [spellstrikeModalOpen, setSpellstrikeModalOpen] = useState(false);
   const heroPoints = Math.max(0, Math.min(currentCreature?.heroPoints ?? 1, 3));
   const reactionUsed = currentCreature?.reactionUsed === true;
 
@@ -374,7 +195,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
             {currentCreature.name} is unconscious. They must make a recovery check each turn.
           </div>
           <div style={{ fontSize: '12px', color: '#ccc', marginBottom: '15px' }}>
-            <div>💀 Dying: {(currentCreature as any).conditions?.find((c: any) => c.name === 'dying')?.value ?? 1} / 4</div>
+            <div>💀 Dying: {(currentCreature as any).conditions?.find((c: Creature) => c.name === 'dying')?.value ?? 1} / 4</div>
             {currentCreature.wounded > 0 && <div>🩹 Wounded: {currentCreature.wounded}</div>}
           </div>
           <div style={{ marginBottom: '12px' }}>
@@ -392,7 +213,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
                 id: 'death-save',
                 name: 'Recovery Check',
                 cost: 0,
-                description: `Flat check vs DC ${10 + ((currentCreature as any).conditions?.find((c: any) => c.name === 'dying')?.value ?? 1)}`,
+                description: `Flat check vs DC ${10 + ((currentCreature as any).conditions?.find((c: Creature) => c.name === 'dying')?.value ?? 1)}`,
                 icon: '💀',
                 requiresTarget: false,
                 usesD20: true
@@ -517,8 +338,16 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     }
     return { ok: traitCheck.ok };
   });
+
+  const READY_ACTION_OPTIONS = [
+    { id: 'strike', label: 'Strike' },
+    { id: 'raise-shield', label: 'Raise Shield' },
+    { id: 'shield-block', label: 'Shield Block' },
+    { id: 'hide', label: 'Hide' },
+    { id: 'seek', label: 'Seek' },
+  ];
   const reqProne = requirement('prone', 'Must be prone', (creature) => ({
-    ok: creature?.conditions?.some((c: any) => c.name === 'prone') || false
+    ok: creature?.conditions?.some((c: Creature) => c.name === 'prone') || false
   }));
   const reqNotActed = requirement('not-acted', 'Must not have acted yet', (creature) => ({
     ok: actionPoints >= 3 && (creature?.attacksMadeThisTurn ?? 0) === 0
@@ -689,13 +518,105 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
       requirements: [reqDisarmTraitOrFreeHand]
     },
     {
+      id: 'battle-medicine',
+      name: 'Battle Medicine',
+      cost: 1,
+      description: 'Heal an ally with Medicine (once per day per creature)',
+      icon: '🩹',
+      requiresTarget: true,
+      category: 'combat',
+      usesD20: true
+    },
+    {
+      id: 'tumble-through',
+      name: 'Tumble Through',
+      cost: 1,
+      description: 'Move through an enemy\'s space with Acrobatics',
+      icon: '🤸',
+      requiresTarget: true,
+      category: 'combat',
+      usesD20: true
+    },
+    {
+      id: 'escape',
+      name: 'Escape',
+      cost: 1,
+      description: 'Break free from grabbed/restrained using Athletics or Acrobatics',
+      icon: '🦶',
+      requiresTarget: false,
+      category: 'combat',
+      usesD20: true
+    },
+    {
+      id: 'hide',
+      name: 'Hide',
+      cost: 1,
+      description: 'Become hidden with Stealth (requires cover or concealment)',
+      icon: '🫥',
+      requiresTarget: false,
+      category: 'combat',
+      usesD20: true
+    },
+    {
+      id: 'sneak',
+      name: 'Sneak',
+      cost: 1,
+      description: 'Move while hidden with Stealth',
+      icon: '🥷',
+      requiresTarget: false,
+      category: 'combat',
+      usesD20: true
+    },
+    {
+      id: 'recall-knowledge',
+      name: 'Recall Knowledge',
+      cost: 1,
+      description: 'Identify creature weakness or abilities (once per creature)',
+      icon: '📖',
+      requiresTarget: true,
+      category: 'combat',
+      usesD20: true
+    },
+    {
+      id: 'seek',
+      name: 'Seek',
+      cost: 1,
+      description: 'Search for hidden creatures with Perception',
+      icon: '🔍',
+      requiresTarget: false,
+      category: 'combat',
+      usesD20: true
+    },
+    {
+      id: 'crawl',
+      name: 'Crawl',
+      cost: 1,
+      description: 'Move 5ft while prone (does not trigger reactions)',
+      icon: '🦞',
+      requiresTarget: true,
+      category: 'combat',
+      movementType: 'walk' as const,
+      range: 1
+    },
+    {
+      id: 'aid',
+      name: 'Aid',
+      cost: 0,
+      description: 'Grant +1 bonus to ally\'s action (prepare as reaction)',
+      icon: '🤝',
+      requiresTarget: true,
+      category: 'combat',
+      usesD20: true
+    },
+    {
       id: 'ready',
       name: 'Ready',
       cost: 2,
       description: 'Prepare a reaction to a trigger',
       icon: '⏳',
       requiresTarget: false,
-      category: 'combat'
+      category: 'combat',
+      readyActionId: 'strike'
     },
     {
       id: 'delay',
@@ -704,8 +625,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
       description: 'Wait and take your turn later in the round',
       icon: '⏸️',
       requiresTarget: false,
-      category: 'combat',
-      requirements: [reqNotActed]
+      category: 'combat'
     },
     {
       id: 'pick-up-weapon',
@@ -724,6 +644,16 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
       icon: '👐',
       requiresTarget: false,
       category: 'combat'
+    },
+    {
+      id: 'use-item',
+      name: 'Use Item',
+      cost: 1,
+      description: 'Activate a consumable item (potion, elixir, scroll)',
+      icon: '💊',
+      requiresTarget: false,
+      category: 'combat',
+      usesD20: false
     },
     {
       id: 'escape',
@@ -887,7 +817,33 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
   if (Array.isArray(currentCreature.spells)) {
     creatureSpellIds = currentCreature.spells;
   } else if (typeof currentCreature.spells === 'string' && currentCreature.spells) {
-    creatureSpellIds = currentCreature.spells.split(' ').filter((s: string) => s.length > 0);
+    creatureSpellIds = (currentCreature.spells as unknown as string).split(' ').filter((s: string) => s.length > 0);
+  }
+
+  // Also pull spells from the modern spellcasters[] system (if creature.spells is empty)
+  if (creatureSpellIds.length === 0 && Array.isArray(currentCreature.spellcasters)) {
+    const spellcasterIds = new Set<string>();
+    for (const tradition of currentCreature.spellcasters) {
+      if (Array.isArray(tradition.spells)) {
+        for (const castable of tradition.spells) {
+          const id = resolveSpellId(castable.name);
+          spellcasterIds.add(id);
+        }
+      }
+    }
+    creatureSpellIds = Array.from(spellcasterIds);
+  }
+
+  // Also include focus spells (psi cantrips, conflux spells, etc.)
+  if (Array.isArray(currentCreature.focusSpells)) {
+    const existingIds = new Set(creatureSpellIds);
+    for (const fs of currentCreature.focusSpells) {
+      const id = resolveSpellId(fs.name);
+      if (!existingIds.has(id)) {
+        creatureSpellIds.push(id);
+        existingIds.add(id);
+      }
+    }
   }
   
   const spells = creatureSpellIds
@@ -962,6 +918,26 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
       category: 'combat',
       unique: true
     });
+    uniqueActions.push({
+      id: 'recharge-spellstrike',
+      name: 'Recharge Spellstrike',
+      cost: 1,
+      description: 'Recharge your Spellstrike after using it',
+      icon: '🔄✨',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+    uniqueActions.push({
+      id: 'arcane-cascade',
+      name: 'Arcane Cascade',
+      cost: 1,
+      description: 'Enter stance to empower melee Strikes',
+      icon: '🌀',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
   }
 
   if (className.includes('thaumaturge') || hasFeat('exploit vulnerability')) {
@@ -982,8 +958,18 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
       id: 'rage',
       name: 'Rage',
       cost: 1,
-      description: 'Enter a rage for extra damage',
+      description: 'Enter a rage for extra damage (+2 melee damage, -1 AC)',
       icon: '🔥',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+    uniqueActions.push({
+      id: 'end-rage',
+      name: 'End Rage',
+      cost: 0,
+      description: 'End your rage (fatigued for 1 round)',
+      icon: '💨',
       requiresTarget: false,
       category: 'combat',
       unique: true
@@ -995,8 +981,21 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
       id: 'flurry-of-blows',
       name: 'Flurry of Blows',
       cost: 1,
-      description: 'Make two Strikes in rapid succession',
+      description: 'Make two unarmed Strikes for one action',
       icon: '🥋',
+      requiresTarget: true,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  if (className.includes('monk') && hasFeat('stunning fist')) {
+    uniqueActions.push({
+      id: 'stunning-fist',
+      name: 'Stunning Fist',
+      cost: 0,
+      description: 'Free action: if your Flurry of Blows critically hit, target must Fort save or be stunned',
+      icon: '💫',
       requiresTarget: true,
       category: 'combat',
       unique: true
@@ -1008,9 +1007,146 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
       id: 'hunt-prey',
       name: 'Hunt Prey',
       cost: 1,
-      description: 'Designate a target as your prey',
+      description: 'Designate a target as your prey for hunter\'s edge bonuses',
       icon: '🎯',
       requiresTarget: true,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  if (className.includes('champion')) {
+    uniqueActions.push({
+      id: 'champion-reaction',
+      name: 'Champion\'s Reaction',
+      cost: 0,
+      description: 'Reaction: Retributive Strike (Paladin), Liberating Step (Liberator), or Glimpse of Redemption (Redeemer)',
+      icon: '🛡️⚡',
+      requiresTarget: true,
+      category: 'combat',
+      unique: true
+    });
+    uniqueActions.push({
+      id: 'lay-on-hands',
+      name: 'Lay on Hands',
+      cost: 1,
+      description: 'Focus spell: heal an ally or deal vitality damage to undead',
+      icon: '✋✨',
+      requiresTarget: true,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  if (className.includes('psychic') || hasFeat('unleash psyche')) {
+    uniqueActions.push({
+      id: 'unleash-psyche',
+      name: 'Unleash Psyche',
+      cost: 2,
+      description: 'Unleash your full psychic potential (+2 spell damage, lasts 2 rounds, then stupefied 1)',
+      icon: '🧠💥',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  if (className.includes('kineticist')) {
+    uniqueActions.push({
+      id: 'channel-elements',
+      name: 'Channel Elements',
+      cost: 1,
+      description: 'Activate your kinetic aura (10-ft emanation). Can include a 1-action Elemental Blast or stance impulse.',
+      icon: '🌀🔥',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+    uniqueActions.push({
+      id: 'elemental-blast',
+      name: 'Elemental Blast',
+      cost: 1,
+      description: '1-action: Make an impulse attack with your kinetic element',
+      icon: '🔥💨',
+      requiresTarget: true,
+      category: 'combat',
+      unique: true
+    });
+    uniqueActions.push({
+      id: 'elemental-blast-2',
+      name: 'Elemental Blast (2-action)',
+      cost: 2,
+      description: '2-action: Make an impulse attack with CON added to damage',
+      icon: '🔥🔥',
+      requiresTarget: true,
+      category: 'combat',
+      unique: true
+    });
+    uniqueActions.push({
+      id: 'dismiss-aura',
+      name: 'Dismiss Aura',
+      cost: 0,
+      description: 'Dismiss your kinetic aura (free action)',
+      icon: '❌🌀',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  // ── Druid Class Actions ──
+  if (className.includes('druid')) {
+    uniqueActions.push({
+      id: 'wild-shape',
+      name: 'Wild Shape',
+      cost: 2,
+      description: 'Transform into a battle form (polymorph). Your stats are replaced by the battle form\'s stats for 10 rounds.',
+      icon: '🐻🌿',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+    uniqueActions.push({
+      id: 'revert-form',
+      name: 'Revert Form',
+      cost: 1,
+      description: 'End your wild shape early and return to your normal form.',
+      icon: '🧑🌿',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  // ── Bard Class Actions ──
+  if (className.includes('bard')) {
+    uniqueActions.push({
+      id: 'courageous-anthem',
+      name: 'Courageous Anthem',
+      cost: 1,
+      description: 'Composition cantrip: Allies within 60 feet gain a +1 status bonus to attack rolls, damage rolls, and saves against fear until the start of your next turn.',
+      icon: '🎵⚔️',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+    uniqueActions.push({
+      id: 'end-courageous-anthem',
+      name: 'End Anthem',
+      cost: 0,
+      description: 'End your active Courageous Anthem composition (free action).',
+      icon: '🔇🎵',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+    uniqueActions.push({
+      id: 'counter-performance',
+      name: 'Counter Performance',
+      cost: 0,
+      description: 'Reaction (1 FP): An ally within 60 feet can use your Performance check in place of their saving throw against an auditory or visual effect.',
+      icon: '🎵🛡️',
+      requiresTarget: false,
       category: 'combat',
       unique: true
     });
@@ -1021,9 +1157,280 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
       id: 'devise-a-stratagem',
       name: 'Devise a Stratagem',
       cost: 1,
-      description: 'Assess a foe for a decisive strike',
+      description: 'Roll a d20 to use in place of your attack roll for a Strike against this foe this turn',
       icon: '🧮',
       requiresTarget: true,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  // ── Guardian Class Actions ──
+  if (className.includes('guardian')) {
+    uniqueActions.push({
+      id: 'taunt',
+      name: 'Taunt',
+      cost: 1,
+      description: 'Force an enemy to focus on you. They take penalties for attacking others.',
+      icon: '🛡️📢',
+      requiresTarget: true,
+      category: 'combat',
+      unique: true
+    });
+    uniqueActions.push({
+      id: 'intercept-strike',
+      name: 'Intercept Strike',
+      cost: 0,
+      description: 'Reaction: Redirect attack targeting adjacent ally to yourself.',
+      icon: '🛡️⚡',
+      requiresTarget: true,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  // ── Swashbuckler Class Actions ──
+  if (className.includes('swashbuckler')) {
+    uniqueActions.push({
+      id: 'gain-panache',
+      name: 'Gain Panache',
+      cost: 0,
+      description: 'Gain Panache via style-specific action (+5 Speed, enables Finishers).',
+      icon: '⚔️✨',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+    uniqueActions.push({
+      id: 'finisher',
+      name: 'Confident Finisher',
+      cost: 1,
+      description: 'Strike consuming Panache for double Precise Strike damage.',
+      icon: '⚔️🎯',
+      requiresTarget: true,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  // ── Commander Class Actions ──
+  if (className.includes('commander')) {
+    uniqueActions.push({
+      id: 'commanders-order',
+      name: "Commander's Order",
+      cost: 1,
+      description: 'Issue an order to an ally, granting them a reaction to Strike or Step.',
+      icon: '📢⚔️',
+      requiresTarget: true,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  // ── Gunslinger Class Actions ──
+  if (className.includes('gunslinger')) {
+    uniqueActions.push({
+      id: 'slingers-reload',
+      name: "Slinger's Reload",
+      cost: 1,
+      description: 'Reload your firearm/crossbow with a Way-specific bonus action.',
+      icon: '🔫🔄',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  // ── Inventor Class Actions ──
+  if (className.includes('inventor')) {
+    uniqueActions.push({
+      id: 'overdrive',
+      name: 'Overdrive',
+      cost: 1,
+      description: 'Crafting check to boost your innovation, adding extra damage to Strikes.',
+      icon: '⚙️🔥',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+    uniqueActions.push({
+      id: 'explode',
+      name: 'Explode',
+      cost: 2,
+      description: 'Unstable: Your innovation explodes dealing fire damage in a 20-foot emanation.',
+      icon: '💥⚙️',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  // ── Oracle Class Actions ──
+  if (className.includes('oracle')) {
+    uniqueActions.push({
+      id: 'revelation-spell',
+      name: 'Revelation Spell',
+      cost: 1,
+      description: 'Cast a revelation spell (1 Focus Point). Advances your Oracular Curse.',
+      icon: '✨🔮',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  // ── Alchemist Class Actions ──
+  if (className.includes('alchemist')) {
+    uniqueActions.push({
+      id: 'quick-alchemy',
+      name: 'Quick Alchemy',
+      cost: 1,
+      description: 'Spend 1 infused reagent to create an alchemical item on the fly.',
+      icon: '⚗️⚡',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  // ── Exemplar Class Actions ──
+  if (className.includes('exemplar')) {
+    uniqueActions.push({
+      id: 'shift-immanence',
+      name: 'Shift Immanence',
+      cost: 0,
+      description: 'Free action: Move your immanence to a different ikon.',
+      icon: '✦🔄',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+    uniqueActions.push({
+      id: 'spark-transcendence',
+      name: 'Spark Transcendence',
+      cost: 0,
+      description: 'Free action: Activate your current ikon\'s powerful transcendence effect.',
+      icon: '🌟✦',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  // ── Summoner Class Actions ──
+  if (className.includes('summoner')) {
+    uniqueActions.push({
+      id: 'manifest-eidolon',
+      name: 'Manifest Eidolon',
+      cost: 3,
+      description: 'Summon your Eidolon to an adjacent space (3 actions).',
+      icon: '✨🤝',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+    uniqueActions.push({
+      id: 'act-together',
+      name: 'Act Together',
+      cost: 0,
+      description: 'You and your Eidolon act in concert — one takes 1 action, the other takes 1-2.',
+      icon: '🤝⚔️',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  // ── Rogue Class Actions & Feats ──
+  if (className.includes('rogue') || hasFeat('quick draw')) {
+    uniqueActions.push({
+      id: 'quick-draw',
+      name: 'Quick Draw',
+      cost: 1,
+      description: 'Draw a weapon and Strike in one motion',
+      icon: '⚡⚔️',
+      requiresTarget: true,
+      category: 'combat',
+      unique: true,
+      usesD20: true
+    });
+  }
+
+  if (hasFeat('skirmish strike')) {
+    uniqueActions.push({
+      id: 'skirmish-strike',
+      name: 'Skirmish Strike',
+      cost: 1,
+      description: 'Step and Strike, or Strike and Step',
+      icon: '🏃⚔️',
+      requiresTarget: true,
+      category: 'combat',
+      unique: true,
+      usesD20: true
+    });
+  }
+
+  if (hasFeat('battle assessment')) {
+    uniqueActions.push({
+      id: 'battle-assessment',
+      name: 'Battle Assessment',
+      cost: 1,
+      description: 'Use Perception to learn about a foe',
+      icon: '🔍',
+      requiresTarget: true,
+      category: 'combat',
+      unique: true,
+      usesD20: true
+    });
+  }
+
+  if (hasFeat('poison weapon')) {
+    uniqueActions.push({
+      id: 'poison-weapon',
+      name: 'Poison Weapon',
+      cost: 1,
+      description: 'Apply poison to your weapon',
+      icon: '☠️',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  if (hasFeat('running reload')) {
+    uniqueActions.push({
+      id: 'running-reload',
+      name: 'Running Reload',
+      cost: 1,
+      description: 'Stride/Step/Sneak and reload',
+      icon: '🏃🔫',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  if (hasFeat('twist the knife')) {
+    uniqueActions.push({
+      id: 'twist-the-knife',
+      name: 'Twist the Knife',
+      cost: 1,
+      description: 'Add persistent bleed equal to sneak attack dice after hitting',
+      icon: '🗡️🩸',
+      requiresTarget: false,
+      category: 'combat',
+      unique: true
+    });
+  }
+
+  if (hasFeat('vicious debilitation')) {
+    uniqueActions.push({
+      id: 'vicious-debilitation',
+      name: 'Vicious Debilitation',
+      cost: 0,
+      description: 'Apply two debilitations instead of one',
+      icon: '💀',
+      requiresTarget: false,
       category: 'combat',
       unique: true
     });
@@ -1056,6 +1463,626 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     });
   }
 
+  // ── Fighter Feats (Strike-based, already implemented in backend) ──
+  if (hasFeat('sudden charge')) {
+    uniqueActions.push({
+      id: 'sudden-charge', name: 'Sudden Charge', cost: 2,
+      description: 'Stride twice, then make a melee Strike',
+      icon: '🏃⚔️', requiresTarget: true, category: 'combat', unique: true,
+      tags: ['Flourish', 'Open'], requirements: [reqFlourish], usesD20: true
+    });
+  }
+  if (hasFeat('double slice')) {
+    uniqueActions.push({
+      id: 'double-slice', name: 'Double Slice', cost: 2,
+      description: 'Make two Strikes, both at your current MAP',
+      icon: '⚔️⚔️', requiresTarget: true, category: 'combat', unique: true,
+      tags: ['Flourish'], requirements: [reqFlourish], usesD20: true
+    });
+  }
+  if (hasFeat('exacting strike')) {
+    uniqueActions.push({
+      id: 'exacting-strike', name: 'Exacting Strike', cost: 1,
+      description: 'Strike; a miss doesn\'t count for MAP',
+      icon: '🎯', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('snagging strike')) {
+    uniqueActions.push({
+      id: 'snagging-strike', name: 'Snagging Strike', cost: 1,
+      description: 'Strike; hit makes target off-guard until your next turn',
+      icon: '🪝', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('intimidating strike')) {
+    uniqueActions.push({
+      id: 'intimidating-strike', name: 'Intimidating Strike', cost: 2,
+      description: 'Strike; hit makes target frightened 1 (crit = frightened 2)',
+      icon: '😤⚔️', requiresTarget: true, category: 'combat', unique: true,
+      tags: ['Emotion', 'Mental'], usesD20: true
+    });
+  }
+  if (hasFeat('brutish shove')) {
+    uniqueActions.push({
+      id: 'brutish-shove', name: 'Brutish Shove', cost: 1,
+      description: 'Strike; hit pushes target 5ft and makes them off-guard',
+      icon: '💪', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('knockdown')) {
+    uniqueActions.push({
+      id: 'knockdown', name: 'Knockdown', cost: 2,
+      description: 'Strike, then Trip target on a hit',
+      icon: '🦵', requiresTarget: true, category: 'combat', unique: true,
+      tags: ['Flourish'], requirements: [reqFlourish], usesD20: true
+    });
+  }
+  if (hasFeat('dueling parry')) {
+    uniqueActions.push({
+      id: 'dueling-parry', name: 'Dueling Parry', cost: 1,
+      description: '+2 circumstance bonus to AC (one-handed melee, free hand)',
+      icon: '🤺', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('lunge')) {
+    uniqueActions.push({
+      id: 'lunge', name: 'Lunge', cost: 1,
+      description: 'Strike with +5 feet reach',
+      icon: '🗡️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('twin parry')) {
+    uniqueActions.push({
+      id: 'twin-parry', name: 'Twin Parry', cost: 1,
+      description: '+1 AC (or +2 with two melee weapons)',
+      icon: '⚔️🛡️', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('shatter defenses')) {
+    uniqueActions.push({
+      id: 'shatter-defenses', name: 'Shatter Defenses', cost: 1,
+      description: 'Strike a frightened foe; hit makes them off-guard',
+      icon: '💥', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('combat assessment')) {
+    uniqueActions.push({
+      id: 'combat-assessment', name: 'Combat Assessment', cost: 1,
+      description: 'Strike + learn target weakness/resistance on hit',
+      icon: '🔍⚔️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('assisting shot')) {
+    uniqueActions.push({
+      id: 'assisting-shot', name: 'Assisting Shot', cost: 1,
+      description: 'Ranged Strike; hit gives ally +1 vs target',
+      icon: '🏹🤝', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('sleek reposition')) {
+    uniqueActions.push({
+      id: 'sleek-reposition', name: 'Sleek Reposition', cost: 1,
+      description: 'Strike; hit moves target 5ft within your reach',
+      icon: '🔄⚔️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('dual-handed assault') || hasFeat('dual handed assault')) {
+    uniqueActions.push({
+      id: 'dual-handed-assault', name: 'Dual-Handed Assault', cost: 1,
+      description: 'Two-hand your weapon for an extra damage die',
+      icon: '🗡️💪', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('quick reversal')) {
+    uniqueActions.push({
+      id: 'quick-reversal', name: 'Quick Reversal', cost: 1,
+      description: 'Strike a creature flanking you (Press)',
+      icon: '🔁⚔️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('double shot')) {
+    uniqueActions.push({
+      id: 'double-shot', name: 'Double Shot', cost: 2,
+      description: 'Two ranged Strikes at different targets, same MAP',
+      icon: '🏹🏹', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('dazing blow')) {
+    uniqueActions.push({
+      id: 'dazing-blow', name: 'Dazing Blow', cost: 1,
+      description: 'Strike; hit forces Fort save or stunned 1',
+      icon: '💫⚔️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('advantageous assault')) {
+    uniqueActions.push({
+      id: 'advantageous-assault', name: 'Advantageous Assault', cost: 1,
+      description: 'Strike grabbed/prone target for extra damage',
+      icon: '⚔️📌', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('incredible aim')) {
+    uniqueActions.push({
+      id: 'incredible-aim', name: 'Incredible Aim', cost: 2,
+      description: 'Ranged Strike with +2 bonus, ignore concealment',
+      icon: '🎯🏹', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('positioning assault')) {
+    uniqueActions.push({
+      id: 'positioning-assault', name: 'Positioning Assault', cost: 2,
+      description: 'Strike; hit moves target 10ft within reach (Flourish)',
+      icon: '📐⚔️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('certain strike')) {
+    uniqueActions.push({
+      id: 'certain-strike', name: 'Certain Strike', cost: 1,
+      description: 'Strike (Press); miss still deals minimum damage',
+      icon: '✅⚔️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('debilitating shot')) {
+    uniqueActions.push({
+      id: 'fighter-debilitating-shot', name: 'Debilitating Shot', cost: 2,
+      description: 'Ranged Strike; hit slows target 1',
+      icon: '🎯🦵', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('spring attack')) {
+    uniqueActions.push({
+      id: 'spring-attack', name: 'Spring Attack', cost: 1,
+      description: 'Stride + Strike at any point during movement',
+      icon: '🏃⚔️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('brutal finish')) {
+    uniqueActions.push({
+      id: 'brutal-finish', name: 'Brutal Finish', cost: 1,
+      description: 'Strike + bonus dice equal to Strikes made this turn',
+      icon: '💀⚔️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('point-blank stance') || hasFeat('point blank stance')) {
+    uniqueActions.push({
+      id: 'point-blank-stance', name: 'Point-Blank Stance', cost: 1,
+      description: 'Stance: +2 damage to close-range ranged Strikes',
+      icon: '🏹📍', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('overwhelming blow')) {
+    uniqueActions.push({
+      id: 'overwhelming-blow', name: 'Overwhelming Blow', cost: 3,
+      description: 'Strike that deals maximum damage (Flourish)',
+      icon: '⚔️💥', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('combat grab')) {
+    uniqueActions.push({
+      id: 'combat-grab', name: 'Combat Grab', cost: 1,
+      description: 'Strike; hit = target grabbed (requires free hand)',
+      icon: '✊⚔️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('swipe')) {
+    uniqueActions.push({
+      id: 'swipe', name: 'Swipe', cost: 2,
+      description: 'Strike 2 adjacent enemies with one attack roll (Flourish)',
+      icon: '⚔️↔️', requiresTarget: true, category: 'combat', unique: true,
+      tags: ['Flourish'], requirements: [reqFlourish], usesD20: true
+    });
+  }
+  if (hasFeat('whirlwind strike')) {
+    uniqueActions.push({
+      id: 'whirlwind-strike', name: 'Whirlwind Strike', cost: 3,
+      description: 'Strike every enemy within reach (Flourish)',
+      icon: '🌪️⚔️', requiresTarget: true, category: 'combat', unique: true,
+      tags: ['Flourish'], requirements: [reqFlourish], usesD20: true
+    });
+  }
+  if (hasFeat('blade brake')) {
+    uniqueActions.push({
+      id: 'blade-brake', name: 'Blade Brake', cost: 1,
+      description: '+2 circumstance to Fort/Reflex DC vs Shove and Trip',
+      icon: '🗡️🛑', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('rebounding toss')) {
+    uniqueActions.push({
+      id: 'rebounding-toss', name: 'Rebounding Toss', cost: 1,
+      description: 'Thrown Strike; hit bounces to 2nd target within 10ft (Flourish)',
+      icon: '🪃', requiresTarget: true, category: 'combat', unique: true,
+      tags: ['Flourish'], requirements: [reqFlourish], usesD20: true
+    });
+  }
+  if (hasFeat('barreling charge')) {
+    uniqueActions.push({
+      id: 'barreling-charge', name: 'Barreling Charge', cost: 2,
+      description: 'Stride through enemies + Strike (Flourish)',
+      icon: '🐂⚔️', requiresTarget: true, category: 'combat', unique: true,
+      tags: ['Flourish'], requirements: [reqFlourish], usesD20: true
+    });
+  }
+  if (hasFeat('parting shot')) {
+    uniqueActions.push({
+      id: 'parting-shot', name: 'Parting Shot', cost: 2,
+      description: 'Step + ranged Strike',
+      icon: '🏹👋', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('disarming stance')) {
+    uniqueActions.push({
+      id: 'disarming-stance', name: 'Disarming Stance', cost: 1,
+      description: 'Stance: +1 to Disarm, can disarm 2 sizes larger',
+      icon: '🤺🔓', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('revealing stab')) {
+    uniqueActions.push({
+      id: 'revealing-stab', name: 'Revealing Stab', cost: 2,
+      description: 'Piercing Strike; hit reveals concealed/invisible target',
+      icon: '🗡️👁️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('ricochet stance')) {
+    uniqueActions.push({
+      id: 'ricochet-stance', name: 'Ricochet Stance', cost: 1,
+      description: 'Stance: thrown weapons return after Strike',
+      icon: '🪃📍', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('triple shot')) {
+    uniqueActions.push({
+      id: 'triple-shot', name: 'Triple Shot', cost: 2,
+      description: '3 ranged Strikes at -2, each counts as 1 for MAP (Flourish)',
+      icon: '🏹🏹🏹', requiresTarget: true, category: 'combat', unique: true,
+      tags: ['Flourish'], requirements: [reqFlourish], usesD20: true
+    });
+  }
+  if (hasFeat('felling strike')) {
+    uniqueActions.push({
+      id: 'felling-strike', name: 'Felling Strike', cost: 2,
+      description: 'Melee Strike; hit grounds a flying target',
+      icon: '⚔️⬇️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('sudden leap')) {
+    uniqueActions.push({
+      id: 'sudden-leap', name: 'Sudden Leap', cost: 2,
+      description: 'Leap + melee Strike at any point during jump',
+      icon: '🦘⚔️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('disruptive stance')) {
+    uniqueActions.push({
+      id: 'disruptive-stance', name: 'Disruptive Stance', cost: 1,
+      description: 'Stance: Reactive Strikes trigger on concentrate actions too',
+      icon: '⚔️🚫', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('incredible ricochet')) {
+    uniqueActions.push({
+      id: 'incredible-ricochet', name: 'Incredible Ricochet', cost: 1,
+      description: 'Thrown Strike; hit ricochets to additional targets (Press)',
+      icon: '🪃💥', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('lunging stance')) {
+    uniqueActions.push({
+      id: 'lunging-stance', name: 'Lunging Stance', cost: 1,
+      description: 'Stance: all melee Strikes gain +5ft reach',
+      icon: '🗡️📏', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('determination')) {
+    uniqueActions.push({
+      id: 'determination', name: 'Determination', cost: 1,
+      description: 'Counteract one condition or ongoing spell effect',
+      icon: '💪🧠', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('guiding finish')) {
+    uniqueActions.push({
+      id: 'guiding-finish', name: 'Guiding Finish', cost: 1,
+      description: 'Strike; hit lets you move target 10ft within reach',
+      icon: '⚔️➡️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('stance savant')) {
+    uniqueActions.push({
+      id: 'stance-savant', name: 'Stance Savant', cost: 0,
+      description: 'Enter a stance as a free action at start of turn',
+      icon: '🧘⚡', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('multishot stance')) {
+    uniqueActions.push({
+      id: 'multishot-stance', name: 'Multishot Stance', cost: 1,
+      description: 'Stance: Double Shot/Triple Shot cost 1 fewer action',
+      icon: '🏹📍', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('impossible volley')) {
+    uniqueActions.push({
+      id: 'impossible-volley', name: 'Impossible Volley', cost: 3,
+      description: 'Ranged Strike all enemies in 10ft burst (Flourish)',
+      icon: '🏹🌧️', requiresTarget: true, category: 'combat', unique: true,
+      tags: ['Flourish'], requirements: [reqFlourish], usesD20: true
+    });
+  }
+
+  // ── Fighter Feats (Reactions, already implemented in backend) ──
+  if (hasFeat('reactive shield')) {
+    uniqueActions.push({
+      id: 'reactive-shield', name: 'Reactive Shield', cost: 0,
+      description: 'Reaction: Raise Shield when attacked',
+      icon: '🛡️⚡', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('reflexive shield')) {
+    uniqueActions.push({
+      id: 'reflexive-shield', name: 'Reflexive Shield', cost: 0,
+      description: 'Automatic Raise Shield at start of each turn',
+      icon: '🛡️🔄', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+
+  // ── Fighter Self-Buff Feats (already implemented in backend) ──
+  if (hasFeat('fearless')) {
+    uniqueActions.push({
+      id: 'fearless', name: 'Fearless', cost: 1,
+      description: 'Reduce frightened condition by 1',
+      icon: '💪😤', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('iron will')) {
+    uniqueActions.push({
+      id: 'iron-will', name: 'Iron Will', cost: 0,
+      description: 'Reaction: Reroll failed Will save',
+      icon: '🧠', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+
+  // ── Rogue Feats ──
+  if (hasFeat('nimble dodge')) {
+    uniqueActions.push({
+      id: 'nimble-dodge', name: 'Nimble Dodge', cost: 0,
+      description: 'Reaction: +2 AC vs triggering attack',
+      icon: '🏃💨', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('quick draw')) {
+    uniqueActions.push({
+      id: 'quick-draw', name: 'Quick Draw', cost: 1,
+      description: 'Draw a weapon and Strike in one action',
+      icon: '⚡⚔️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('skirmish strike')) {
+    uniqueActions.push({
+      id: 'skirmish-strike', name: 'Skirmish Strike', cost: 1,
+      description: 'Step then Strike, or Strike then Step',
+      icon: '🏃⚔️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('twin feint')) {
+    uniqueActions.push({
+      id: 'twin-feint', name: 'Twin Feint', cost: 2,
+      description: 'Two melee Strikes; second target is off-guard',
+      icon: '🃏⚔️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat("you're next") || hasFeat('youre next')) {
+    uniqueActions.push({
+      id: 'youre-next', name: "You're Next", cost: 0,
+      description: 'Reaction: Demoralize with +2 after downing a foe',
+      icon: '👊😤', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('battle assessment')) {
+    uniqueActions.push({
+      id: 'battle-assessment', name: 'Battle Assessment', cost: 1,
+      description: 'Perception check to learn foe strengths and weaknesses',
+      icon: '🔍🎯', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('poison weapon')) {
+    uniqueActions.push({
+      id: 'poison-weapon', name: 'Poison Weapon', cost: 1,
+      description: 'Apply poison to weapon; next hit applies poison damage',
+      icon: '🧪🗡️', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('twist the knife')) {
+    uniqueActions.push({
+      id: 'twist-the-knife', name: 'Twist the Knife', cost: 1,
+      description: 'After sneak attack, deal persistent bleed = sneak dice',
+      icon: '🔪🩸', requiresTarget: true, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('blur slam')) {
+    uniqueActions.push({
+      id: 'blur-slam', name: 'Blur Slam', cost: 2,
+      description: 'Stride twice + melee Strike (Flourish)',
+      icon: '💨👊', requiresTarget: true, category: 'combat', unique: true,
+      tags: ['Flourish'], requirements: [reqFlourish], usesD20: true
+    });
+  }
+  if (hasFeat('opportune backstab')) {
+    uniqueActions.push({
+      id: 'opportune-backstab', name: 'Opportune Backstab', cost: 0,
+      description: 'Reaction: Strike when ally crits adjacent foe',
+      icon: '🗡️🎯', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('defensive roll')) {
+    uniqueActions.push({
+      id: 'defensive-roll', name: 'Defensive Roll', cost: 0,
+      description: 'Free: Halve physical damage from one attack',
+      icon: '🛡️🏃', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('felling shot')) {
+    uniqueActions.push({
+      id: 'felling-shot', name: 'Felling Shot', cost: 2,
+      description: 'Ranged Strike; hit grounds a flying target',
+      icon: '🏹⬇️', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('spring from the shadows')) {
+    uniqueActions.push({
+      id: 'spring-from-the-shadows', name: 'Spring from the Shadows', cost: 1,
+      description: 'Strike from hidden; foe is off-guard (Flourish)',
+      icon: '🌑⚔️', requiresTarget: true, category: 'combat', unique: true,
+      tags: ['Flourish'], requirements: [reqFlourish], usesD20: true
+    });
+  }
+  if (hasFeat('instant opening')) {
+    uniqueActions.push({
+      id: 'instant-opening', name: 'Instant Opening', cost: 1,
+      description: 'Target within 30ft is off-guard vs you until end of next turn',
+      icon: '👁️🔓', requiresTarget: true, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('perfect distraction')) {
+    uniqueActions.push({
+      id: 'perfect-distraction', name: 'Perfect Distraction', cost: 1,
+      description: 'Become invisible and Create a Diversion',
+      icon: '🎭👻', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('cognitive loophole')) {
+    uniqueActions.push({
+      id: 'cognitive-loophole', name: 'Cognitive Loophole', cost: 0,
+      description: 'Reaction: Suppress a mental effect for 1 round',
+      icon: '🧠🔓', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('clever gambit')) {
+    uniqueActions.push({
+      id: 'clever-gambit', name: 'Clever Gambit', cost: 0,
+      description: 'Reaction: Ally adjacent to target makes a melee Strike (Mastermind)',
+      icon: '🧠⚔️', requiresTarget: true, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('reactive pursuit')) {
+    uniqueActions.push({
+      id: 'reactive-pursuit', name: 'Reactive Pursuit', cost: 0,
+      description: 'Reaction: Stride to pursue enemy who moves away',
+      icon: '🏃💨', requiresTarget: true, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('sidestep')) {
+    uniqueActions.push({
+      id: 'sidestep', name: 'Sidestep', cost: 0,
+      description: 'Reaction: Redirect missed melee attack to adjacent creature',
+      icon: '🔄', requiresTarget: true, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('leave an opening')) {
+    uniqueActions.push({
+      id: 'leave-an-opening', name: 'Leave an Opening', cost: 0,
+      description: 'Reaction: Strike when target critically fails attack/skill',
+      icon: '⚡🔓', requiresTarget: true, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('reactive interference')) {
+    uniqueActions.push({
+      id: 'reactive-interference', name: 'Reactive Interference', cost: 0,
+      description: 'Reaction: -2 to enemy reaction roll',
+      icon: '🚫', requiresTarget: true, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('fantastic leap')) {
+    uniqueActions.push({
+      id: 'fantastic-leap', name: 'Fantastic Leap', cost: 2,
+      description: 'Leap up to full Speed in any direction',
+      icon: '🦘', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('running reload')) {
+    uniqueActions.push({
+      id: 'running-reload', name: 'Running Reload', cost: 1,
+      description: 'Stride/Step then reload weapon',
+      icon: '🏃🔄', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+
+  // ── Skill Feats ──
+  if (hasFeat('bon mot')) {
+    uniqueActions.push({
+      id: 'bon-mot', name: 'Bon Mot', cost: 1,
+      description: 'Diplomacy vs Will DC: target takes -2 to Perception and Will',
+      icon: '🎭', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('dirty trick')) {
+    uniqueActions.push({
+      id: 'dirty-trick', name: 'Dirty Trick', cost: 1,
+      description: 'Thievery vs Reflex DC: clumsy 1 or enfeebled 1',
+      icon: '🤏', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+  if (hasFeat('kip up')) {
+    uniqueActions.push({
+      id: 'kip-up', name: 'Kip Up', cost: 0,
+      description: 'Stand from prone as a free action without triggering reactions',
+      icon: '🤸', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('scare to death')) {
+    uniqueActions.push({
+      id: 'scare-to-death', name: 'Scare to Death', cost: 1,
+      description: 'Intimidation vs Will DC: may kill on crit success',
+      icon: '💀😱', requiresTarget: true, category: 'combat', unique: true, usesD20: true
+    });
+  }
+
+  // ── Ancestry/Heritage Active Feats ──
+  if (hasFeat('dragon breath')) {
+    uniqueActions.push({
+      id: 'dragon-breath', name: 'Dragon Breath', cost: 2,
+      description: '15ft cone or 30ft line breath weapon',
+      icon: '🐉🔥', requiresTarget: true, category: 'combat', unique: true,
+      aoe: true, aoeRadius: 3, usesD20: true
+    });
+  }
+  if (hasFeat('elemental assault')) {
+    uniqueActions.push({
+      id: 'elemental-assault', name: 'Elemental Assault', cost: 1,
+      description: 'Strikes deal +1d6 elemental damage for 1 minute',
+      icon: '🌊⚡', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('mirror dodge')) {
+    uniqueActions.push({
+      id: 'mirror-dodge', name: 'Mirror Dodge', cost: 0,
+      description: 'Reaction: +2 circumstance AC vs one attack',
+      icon: '🪞', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('hydraulic deflection')) {
+    uniqueActions.push({
+      id: 'hydraulic-deflection', name: 'Hydraulic Deflection', cost: 0,
+      description: 'Reaction: resist physical damage = level for one attack',
+      icon: '🌊🛡️', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('iron body')) {
+    uniqueActions.push({
+      id: 'iron-body', name: 'Iron Body', cost: 1,
+      description: 'Resist all physical damage = level for 1 minute',
+      icon: '🦾', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+  if (hasFeat('heroic presence')) {
+    uniqueActions.push({
+      id: 'heroic-presence', name: 'Heroic Presence', cost: 1,
+      description: 'All allies within 30ft gain temp HP = your level',
+      icon: '👑✨', requiresTarget: false, category: 'combat', unique: true
+    });
+  }
+
   const allActions: ActionDefinition[] = [...actions, ...uniqueActions];
   const allSpells: ActionDefinition[] = spells;
 
@@ -1067,7 +2094,25 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     }
 
     // Always show weapon picker when Strike-style actions are clicked
-    if (action.id === 'strike' || action.id === 'vicious-swing') {
+    const strikeActions = new Set([
+      'strike', 'vicious-swing', 'sudden-charge', 'double-slice',
+      'exacting-strike', 'snagging-strike', 'intimidating-strike',
+      'brutish-shove', 'knockdown', 'lunge', 'shatter-defenses',
+      'quick-draw', 'skirmish-strike',
+      'combat-assessment', 'assisting-shot', 'sleek-reposition',
+      'dual-handed-assault', 'quick-reversal', 'double-shot',
+      'dazing-blow', 'advantageous-assault', 'incredible-aim',
+      'positioning-assault', 'certain-strike', 'fighter-debilitating-shot',
+      'spring-attack', 'brutal-finish', 'overwhelming-blow',
+      'combat-grab', 'swipe', 'whirlwind-strike',
+      'rebounding-toss', 'barreling-charge', 'parting-shot',
+      'revealing-stab', 'triple-shot', 'felling-strike', 'sudden-leap',
+      'incredible-ricochet', 'guiding-finish', 'impossible-volley',
+      'blur-slam', 'opportune-backstab', 'felling-shot',
+      'spring-from-the-shadows', 'youre-next',
+      'leave-an-opening'
+    ]);
+    if (strikeActions.has(action.id)) {
       setWeaponPickerOpen(true);
       setActionMenuOpen(false);
       setSpellsMenuOpen(false);
@@ -1092,6 +2137,18 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
       return;
     }
 
+    if (action.id === 'spellstrike') {
+      // Open spell selector for Spellstrike
+      setSpellstrikeModalOpen(true);
+      setActionMenuOpen(false);
+      setSpellsMenuOpen(false);
+      setSpecialMenuOpen(false);
+      setWeaponManageOpen(false);
+      setWeaponPickerOpen(false);
+      (window as any).pendingSpellstrikeSpellId = undefined;
+      return;
+    }
+
     setWeaponPickerOpen(false);
     setWeaponManageOpen(false);
     onSelectAction(action);
@@ -1104,26 +2161,88 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     if (!slot) return;
     const weapon = slot.weapon;
     
-    // Get the pending action type (strike or vicious swing)
+    // Get the pending action type (strike or feat-based strike)
     const actionType = (window as any).pendingStrikeAction || 'strike';
-    const isVicious = actionType === 'vicious-swing';
-    const actionName = isVicious ? 'Vicious Swing' : 'Strike';
-    const actionCost = isVicious ? 2 : 1;
-    const actionDescription = isVicious
-      ? `Vicious Swing with ${weapon.display}`
-      : `Attack with ${weapon.display}`;
+    const pendingSpellstrikeSpellId = (window as any).pendingSpellstrikeSpellId as string | undefined;
+
+    if (actionType === 'spellstrike' && !pendingSpellstrikeSpellId) {
+      alert('Select a spell before choosing a weapon for Spellstrike.');
+      return;
+    }
+    
+    // Map action IDs to display names and costs
+    const strikeActionInfo: Record<string, { name: string; cost: number; desc: string }> = {
+      'strike': { name: 'Strike', cost: 1, desc: `Attack with ${weapon.display}` },
+      'vicious-swing': { name: 'Vicious Swing', cost: 2, desc: `Vicious Swing with ${weapon.display}` },
+      'sudden-charge': { name: 'Sudden Charge', cost: 2, desc: `Stride twice + Strike with ${weapon.display}` },
+      'double-slice': { name: 'Double Slice', cost: 2, desc: `Two Strikes with ${weapon.display}` },
+      'exacting-strike': { name: 'Exacting Strike', cost: 1, desc: `Strike with ${weapon.display} (miss doesn't count for MAP)` },
+      'snagging-strike': { name: 'Snagging Strike', cost: 1, desc: `Strike with ${weapon.display} (hit = off-guard)` },
+      'intimidating-strike': { name: 'Intimidating Strike', cost: 2, desc: `Strike with ${weapon.display} (hit = frightened)` },
+      'brutish-shove': { name: 'Brutish Shove', cost: 1, desc: `Strike with ${weapon.display} (push + off-guard)` },
+      'knockdown': { name: 'Knockdown', cost: 2, desc: `Strike + Trip with ${weapon.display}` },
+      'lunge': { name: 'Lunge', cost: 1, desc: `Strike with ${weapon.display} (+5ft reach)` },
+      'shatter-defenses': { name: 'Shatter Defenses', cost: 1, desc: `Strike frightened foe (off-guard on hit)` },
+      'quick-draw': { name: 'Quick Draw', cost: 1, desc: `Draw + Strike with ${weapon.display}` },
+      'skirmish-strike': { name: 'Skirmish Strike', cost: 1, desc: `Step + Strike with ${weapon.display}` },
+      'combat-assessment': { name: 'Combat Assessment', cost: 1, desc: `Strike + Recall Knowledge with ${weapon.display}` },
+      'assisting-shot': { name: 'Assisting Shot', cost: 1, desc: `Ranged Strike; hit gives ally +1 vs target` },
+      'sleek-reposition': { name: 'Sleek Reposition', cost: 1, desc: `Strike + move target 5ft with ${weapon.display}` },
+      'dual-handed-assault': { name: 'Dual-Handed Assault', cost: 1, desc: `Two-hand ${weapon.display} for extra damage die` },
+      'quick-reversal': { name: 'Quick Reversal', cost: 1, desc: `Strike flanker with ${weapon.display}` },
+      'double-shot': { name: 'Double Shot', cost: 2, desc: `Two ranged Strikes with ${weapon.display}` },
+      'dazing-blow': { name: 'Dazing Blow', cost: 1, desc: `Strike ${weapon.display}; hit = Fort or stunned` },
+      'advantageous-assault': { name: 'Advantageous Assault', cost: 1, desc: `Strike prone/grabbed foe for extra dmg` },
+      'incredible-aim': { name: 'Incredible Aim', cost: 2, desc: `Ranged Strike +2 with ${weapon.display}, ignore conceal` },
+      'positioning-assault': { name: 'Positioning Assault', cost: 2, desc: `Strike + move target 10ft with ${weapon.display}` },
+      'certain-strike': { name: 'Certain Strike', cost: 1, desc: `Strike with ${weapon.display}; miss deals min damage` },
+      'fighter-debilitating-shot': { name: 'Debilitating Shot', cost: 2, desc: `Ranged Strike with ${weapon.display}; hit = slowed 1` },
+      'spring-attack': { name: 'Spring Attack', cost: 1, desc: `Stride + Strike with ${weapon.display}` },
+      'brutal-finish': { name: 'Brutal Finish', cost: 1, desc: `Finishing Strike with ${weapon.display} + bonus dice` },
+      'overwhelming-blow': { name: 'Overwhelming Blow', cost: 3, desc: `Max damage Strike with ${weapon.display}` },
+      'combat-grab': { name: 'Combat Grab', cost: 1, desc: `Strike + grab with ${weapon.display}` },
+      'swipe': { name: 'Swipe', cost: 2, desc: `Strike 2 adjacent foes with ${weapon.display}` },
+      'whirlwind-strike': { name: 'Whirlwind Strike', cost: 3, desc: `Strike all enemies in reach with ${weapon.display}` },
+      'rebounding-toss': { name: 'Rebounding Toss', cost: 1, desc: `Thrown Strike with ${weapon.display}, bounces to 2nd target` },
+      'barreling-charge': { name: 'Barreling Charge', cost: 2, desc: `Charge through enemies + Strike with ${weapon.display}` },
+      'parting-shot': { name: 'Parting Shot', cost: 2, desc: `Step + ranged Strike with ${weapon.display}` },
+      'revealing-stab': { name: 'Revealing Stab', cost: 2, desc: `Piercing Strike with ${weapon.display}; reveals hidden foe` },
+      'triple-shot': { name: 'Triple Shot', cost: 2, desc: `3 ranged Strikes with ${weapon.display} at -2` },
+      'felling-strike': { name: 'Felling Strike', cost: 2, desc: `Melee Strike with ${weapon.display}; grounds flyer` },
+      'sudden-leap': { name: 'Sudden Leap', cost: 2, desc: `Leap + Strike with ${weapon.display}` },
+      'incredible-ricochet': { name: 'Incredible Ricochet', cost: 1, desc: `Thrown Strike with ${weapon.display}; ricochets on hit` },
+      'guiding-finish': { name: 'Guiding Finish', cost: 1, desc: `Strike with ${weapon.display}; move target 10ft` },
+      'impossible-volley': { name: 'Impossible Volley', cost: 3, desc: `Ranged Strike all enemies in burst with ${weapon.display}` },
+      'blur-slam': { name: 'Blur Slam', cost: 2, desc: `Sprint + Strike with ${weapon.display}` },
+      'opportune-backstab': { name: 'Opportune Backstab', cost: 0, desc: `Reaction Strike with ${weapon.display} on ally crit` },
+      'felling-shot': { name: 'Felling Shot', cost: 2, desc: `Ranged Strike with ${weapon.display}; grounds flyer` },
+      'spring-from-the-shadows': { name: 'Spring from the Shadows', cost: 1, desc: `Hidden Strike with ${weapon.display}; foe off-guard` },
+      'youre-next': { name: "You're Next", cost: 0, desc: `Demoralize after downing foe with ${weapon.display}` },
+      'leave-an-opening': { name: 'Leave an Opening', cost: 0, desc: `Reaction Strike with ${weapon.display} on enemy crit fail` },
+      'spellstrike': { name: 'Spellstrike', cost: 2, desc: `Deliver ${pendingSpellstrikeSpellId ?? 'a spell'} through ${weapon.display}` },
+    };
+    const info = strikeActionInfo[actionType] ?? { name: 'Strike', cost: 1, desc: `Attack with ${weapon.display}` };
     
     const strikeAction: Action = {
       id: actionType,
-      name: `${actionName} (${weapon.display})`,
-      cost: actionCost,
-      description: actionDescription,
+      name: `${info.name} (${weapon.display})`,
+      cost: info.cost,
+      description: info.desc,
       icon: weapon.attackType === 'ranged' ? '🏹' : '⚔️',
       requiresTarget: true,
-      range: weapon.range || 1,
+      range: (() => {
+        if (weapon.attackType !== 'melee') return weapon.range || 1;
+        let meleeReach = weapon.traits?.includes('reach') ? 2 : 1;
+        if (actionType === 'lunge') meleeReach += 1; // Lunge adds +5ft reach
+        return meleeReach;
+      })(),
       weaponId: weapon.id,
+      spellId: actionType === 'spellstrike' ? pendingSpellstrikeSpellId : undefined,
       usesD20: true
     };
+    if (actionType === 'spellstrike') {
+      (window as any).pendingSpellstrikeSpellId = undefined;
+    }
     setWeaponPickerOpen(false);
     onSelectAction(strikeAction);
   };
@@ -1161,7 +2280,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
 
   const handlePickupDroppedWeapon = (weaponId: string) => {
     // Find the corresponding ground object for this dropped weapon
-    const groundObj = gameState?.groundObjects?.find((g: any) => g.weapon?.id === weaponId);
+    const groundObj = gameState?.groundObjects?.find((g: GroundObject) => g.weapon?.id === weaponId);
     if (!groundObj) return;
     
     const pickupAction: Action = {
@@ -1185,7 +2304,22 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     onConfirmAction();
   };
 
-  const isConfirmDisabled = selectedAction && selectedAction.requiresTarget ? !selectedTarget : !selectedAction;
+  const handleSpellstrikeSpellSelect = (spellId: string) => {
+    // Close modal and prepare Spellstrike action with the spell
+    setSpellstrikeModalOpen(false);
+    // Store spell and continue into normal weapon picker flow for strike-like actions
+    (window as any).pendingSpellstrikeSpellId = spellId;
+    (window as any).pendingStrikeAction = 'spellstrike';
+    setWeaponPickerOpen(true);
+    setActionMenuOpen(false);
+    setSpellsMenuOpen(false);
+    setSpecialMenuOpen(false);
+    setWeaponManageOpen(false);
+  };
+
+  const isConfirmDisabled = !selectedAction || 
+    (selectedAction.requiresTarget && !selectedTarget) || 
+    (selectedAction.cost > 0 && actionPoints < selectedAction.cost);
   const evaluateRequirements = (action: ActionDefinition) => {
     const reqs = action.requirements ?? [];
     const blocked: string[] = [];
@@ -1292,6 +2426,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
               setSpecialMenuOpen(false);
               setWeaponPickerOpen(false);
               setWeaponManageOpen(false);
+              setSpellstrikeModalOpen(false);
             }}
           >
             ⚡ Actions
@@ -1305,6 +2440,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
               setSpellsMenuOpen(false);
               setWeaponPickerOpen(false);
               setWeaponManageOpen(false);
+              setSpellstrikeModalOpen(false);
             }}
           >
             ⭐ Special
@@ -1318,6 +2454,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
               setSpecialMenuOpen(false);
               setWeaponPickerOpen(false);
               setWeaponManageOpen(false);
+              setSpellstrikeModalOpen(false);
             }}
           >
             ✨ Spells
@@ -1332,6 +2469,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
                 setSpellsMenuOpen(false);
                 setSpecialMenuOpen(false);
                 setWeaponPickerOpen(false);
+                setSpellstrikeModalOpen(false);
               }}
             >
               🗡️ Weapons
@@ -1353,6 +2491,33 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
               <div style={{ fontSize: '10px', color: '#aaa', marginBottom: '2px' }}>
                 {selectedAction.description}
               </div>
+              {selectedAction.id === 'spellstrike' && selectedAction.spellId && (
+                <div style={{ fontSize: '10px', color: '#cfd8dc', marginBottom: '2px' }}>
+                  Spell: {selectedAction.spellId}
+                </div>
+              )}
+              {selectedAction.id === 'ready' && (
+                <div style={{ fontSize: '10px', color: '#cfd8dc', marginBottom: '4px' }}>
+                  <div style={{ marginBottom: '2px' }}>Readied action:</div>
+                  <select
+                    value={selectedAction.readyActionId || 'strike'}
+                    onChange={(e) => onSelectAction({ ...selectedAction, readyActionId: e.target.value })}
+                    style={{
+                      fontSize: '10px',
+                      background: '#0f1320',
+                      color: '#e0e0e0',
+                      border: '1px solid #3a4a6a',
+                      borderRadius: '3px',
+                      padding: '2px 4px',
+                      width: '100%'
+                    }}
+                  >
+                    {READY_ACTION_OPTIONS.map(option => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {selectedAction.requiresTarget && (
                 <div style={{ fontSize: '10px', color: selectedTarget ? '#4fc3f7' : '#ff8a80', marginBottom: '2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span>{selectedTarget ? '✓ Target selected' : '⚠ Click a target on the grid'}</span>
@@ -1540,169 +2705,40 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
           </div>
         )}
 
-        {/* Weapon Picker - shown when clicking Strike with weapon inventory */}
+        {/* Weapon Picker — extracted to WeaponPicker.tsx (C.2) */}
         {weaponPickerOpen && (
-          <div className="action-menu">
-            <div className="action-tabs">
-              <div className="action-section-title" style={{ padding: '6px 10px' }}>Choose Weapon for Strike</div>
-              <button
-                type="button"
-                onClick={() => setWeaponPickerOpen(false)}
-                style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', padding: '4px 8px' }}
-              >
-                ✕
-              </button>
-            </div>
-            <div className="action-list">
-              <div className="action-section">
-                <div className="action-section-title">Available Attacks</div>
-                {pickableWeapons.map((slot: any) => {
-                  const w = slot.weapon;
-                  const traits = w.traits?.join(', ') || '';
-                  const atkBonus = w.attackBonus ?? creatureAttackBonus;
-                  const formatBonus = (v: number) => v >= 0 ? `+${v}` : `${v}`;
-                  return (
-                    <button
-                      key={w.id}
-                      className="action-row"
-                      onClick={() => handleWeaponSelect(w.id)}
-                      disabled={loading}
-                    >
-                      <div className="action-row-main">
-                        <div className="action-row-title">
-                          {w.attackType === 'ranged' ? '🏹' : '⚔️'} {w.display}
-                          {w.isNatural && <span style={{ fontSize: '10px', color: '#81c784', marginLeft: '6px' }}>(Natural)</span>}
-                        </div>
-                        <div className="action-row-desc">
-                          {atkBonus !== undefined && <><span style={{ color: '#4fc3f7', fontWeight: 600 }}>Strike {formatBonus(atkBonus)}</span>{' | '}</>}
-                          Damage: {w.damageDice}{w.damageBonus ? formatBonus(w.damageBonus) : ''} {w.damageType}
-                          {w.hands > 0 && ` | ${w.hands}H`}
-                          {w.range && w.range > 1 && ` | Range: ${w.range}`}
-                        </div>
-                        {traits && (
-                          <div className="action-row-meta">
-                            <span className="action-tag">{traits}</span>
-                          </div>
-                        )}
-                      </div>
-                      <ActionCostIcon cost={1} />
-                    </button>
-                  );
-                })}
-              </div>
-              {weaponInventory.length > 0 && heldWeapons.length === 0 && (
-                <div className="action-section">
-                  <div className="action-empty">No weapons held. Draw a weapon first!</div>
-                </div>
-              )}
-            </div>
-          </div>
+          <WeaponPicker
+            pickableWeapons={pickableWeapons}
+            weaponInventory={weaponInventory}
+            heldWeapons={heldWeapons}
+            creatureAttackBonus={creatureAttackBonus}
+            loading={loading}
+            onClose={() => setWeaponPickerOpen(false)}
+            onWeaponSelect={handleWeaponSelect}
+          />
         )}
 
-        {/* Weapon Management - Draw/Stow/Drop */}
+        {/* Spellstrike Spell Selector — extracted to SpellstrikeSelector.tsx (C.2) */}
+        {spellstrikeModalOpen && (
+          <SpellstrikeSelector
+            allSpells={allSpells}
+            loading={loading}
+            onClose={() => setSpellstrikeModalOpen(false)}
+            onSpellSelect={handleSpellstrikeSpellSelect}
+          />
+        )}
+
+        {/* Weapon Management — extracted to WeaponManager.tsx (C.2) */}
         {weaponManageOpen && (
-          <div className="action-menu">
-            <div className="action-tabs">
-              <div className="action-section-title" style={{ padding: '6px 10px' }}>Weapon Management</div>
-            </div>
-            <div className="action-list">
-              {/* Held Weapons - can stow or drop */}
-              {heldWeapons.filter((s: any) => !s.weapon?.isNatural).length > 0 && (
-                <div className="action-section">
-                  <div className="action-section-title">Held Weapons</div>
-                  {heldWeapons.filter((s: any) => !s.weapon?.isNatural).map((slot: any) => {
-                    const w = slot.weapon;
-                    return (
-                      <div key={w.id} style={{ display: 'flex', gap: '4px', padding: '4px 8px', alignItems: 'center' }}>
-                        <span style={{ flex: 1, fontSize: '12px', color: '#e0e0e0' }}>⚔️ {w.display} ({w.hands}H)</span>
-                        <button
-                          className="action-row"
-                          style={{ flex: 0, padding: '3px 8px', fontSize: '10px', minWidth: 'auto' }}
-                          onClick={() => handleWeaponAction('stow-weapon', w.id)}
-                          disabled={loading || actionPoints < 1}
-                          title="Stow weapon (1 action)"
-                        >
-                          📦 Stow
-                        </button>
-                        <button
-                          className="action-row"
-                          style={{ flex: 0, padding: '3px 8px', fontSize: '10px', minWidth: 'auto' }}
-                          onClick={() => handleWeaponAction('drop-weapon', w.id)}
-                          disabled={loading}
-                          title="Drop weapon (free action)"
-                        >
-                          ⬇️ Drop
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Natural attacks - always available */}
-              {heldWeapons.filter((s: any) => s.weapon?.isNatural).length > 0 && (
-                <div className="action-section">
-                  <div className="action-section-title">Natural Attacks</div>
-                  {heldWeapons.filter((s: any) => s.weapon?.isNatural).map((slot: any) => {
-                    const w = slot.weapon;
-                    return (
-                      <div key={w.id} style={{ padding: '4px 8px', fontSize: '12px', color: '#81c784' }}>
-                        🦷 {w.display} — Always available
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Stowed Weapons - can draw */}
-              {stowedWeapons.length > 0 && (
-                <div className="action-section">
-                  <div className="action-section-title">Stowed Weapons</div>
-                  {stowedWeapons.map((slot: any) => {
-                    const w = slot.weapon;
-                    return (
-                      <div key={w.id} style={{ display: 'flex', gap: '4px', padding: '4px 8px', alignItems: 'center' }}>
-                        <span style={{ flex: 1, fontSize: '12px', color: '#999' }}>📦 {w.display} ({w.hands}H)</span>
-                        <button
-                          className="action-row"
-                          style={{ flex: 0, padding: '3px 8px', fontSize: '10px', minWidth: 'auto' }}
-                          onClick={() => handleWeaponAction('draw-weapon', w.id)}
-                          disabled={loading || actionPoints < 1}
-                          title="Draw weapon (1 action)"
-                        >
-                          🗡️ Draw
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Dropped Weapons */}
-              {droppedWeapons.length > 0 && (
-                <div className="action-section">
-                  <div className="action-section-title">Dropped Weapons</div>
-                  {droppedWeapons.map((slot: any) => {
-                    const w = slot.weapon;
-                    return (
-                      <div key={w.id} style={{ display: 'flex', gap: '4px', padding: '4px 8px', alignItems: 'center' }}>
-                        <span style={{ flex: 1, fontSize: '12px', color: '#999' }}>⬇️ {w.display} ({w.hands}H)</span>
-                        <button
-                          className="action-row"
-                          style={{ flex: 0, padding: '3px 8px', fontSize: '10px', minWidth: 'auto' }}
-                          onClick={() => handlePickupDroppedWeapon(w.id)}
-                          disabled={loading || actionPoints < 1}
-                          title="Pick up weapon (1 action)"
-                        >
-                          Pick Up
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
+          <WeaponManager
+            heldWeapons={heldWeapons}
+            stowedWeapons={stowedWeapons}
+            droppedWeapons={droppedWeapons}
+            actionPoints={actionPoints}
+            loading={loading}
+            onWeaponAction={handleWeaponAction}
+            onPickupDroppedWeapon={handlePickupDroppedWeapon}
+          />
         )}
 
 

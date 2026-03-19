@@ -94,11 +94,11 @@ const SaveLoadModal: React.FC<SaveLoadModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="save-load-modal-overlay">
+    <div className="save-load-modal-overlay" role="dialog" aria-modal="true" aria-label={mode === 'save' ? 'Save Game' : 'Load Game'}>
       <div className="save-load-modal">
         <div className="modal-header">
           <h2>{mode === 'save' ? '💾 Save Game' : '📂 Load Game'}</h2>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <button className="close-btn" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
         <div className="modal-content">
@@ -156,6 +156,7 @@ const SaveLoadModal: React.FC<SaveLoadModalProps> = ({
                           handleDelete(save.id);
                         }}
                         title="Delete save"
+                        aria-label={`Delete save: ${save.name}`}
                       >
                         🗑️
                       </button>

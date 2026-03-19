@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#2e7d32" stroke="#1b5e20" stroke-width="3"/>
+  <!-- Claw marks -->
+  <path d="M35 25 L40 75" stroke="#a5d6a7" stroke-width="4" stroke-linecap="round"/>
+  <path d="M47 22 L50 78" stroke="#a5d6a7" stroke-width="4" stroke-linecap="round"/>
+  <path d="M59 25 L62 75" stroke="#a5d6a7" stroke-width="4" stroke-linecap="round"/>
+  <!-- Claw tips -->
+  <path d="M35 25 L32 20" stroke="#a5d6a7" stroke-width="3" stroke-linecap="round"/>
+  <path d="M47 22 L45 17" stroke="#a5d6a7" stroke-width="3" stroke-linecap="round"/>
+  <path d="M59 25 L58 20" stroke="#a5d6a7" stroke-width="3" stroke-linecap="round"/>
+</svg>

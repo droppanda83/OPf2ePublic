@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSpell = void 0;
+exports.pickRandom = exports.getCreatureByName = exports.getCreaturesByTag = exports.getCreaturesInRange = exports.getCreaturesByLevel = exports.getSpell = void 0;
 exports.rollDice = rollDice;
 exports.calculateFinalDamage = calculateFinalDamage;
 exports.applyDamageToShield = applyDamageToShield;
@@ -27,10 +27,30 @@ var spells_1 = require("./spells");
 Object.defineProperty(exports, "getSpell", { enumerable: true, get: function () { return spells_1.getSpell; } });
 __exportStar(require("./weapons"), exports);
 __exportStar(require("./shields"), exports);
+__exportStar(require("./armor"), exports);
+__exportStar(require("./runes"), exports);
+__exportStar(require("./consumables"), exports);
+__exportStar(require("./adventuringGear"), exports);
+__exportStar(require("./wornItems"), exports);
 __exportStar(require("./actions"), exports);
 __exportStar(require("./bonuses"), exports);
-__exportStar(require("./bestiary"), exports);
+var bestiary_1 = require("./bestiary");
+Object.defineProperty(exports, "getCreaturesByLevel", { enumerable: true, get: function () { return bestiary_1.getCreaturesByLevel; } });
+Object.defineProperty(exports, "getCreaturesInRange", { enumerable: true, get: function () { return bestiary_1.getCreaturesInRange; } });
+Object.defineProperty(exports, "getCreaturesByTag", { enumerable: true, get: function () { return bestiary_1.getCreaturesByTag; } });
+Object.defineProperty(exports, "getCreatureByName", { enumerable: true, get: function () { return bestiary_1.getCreatureByName; } });
+Object.defineProperty(exports, "pickRandom", { enumerable: true, get: function () { return bestiary_1.pickRandom; } });
 __exportStar(require("./encounterBuilder"), exports);
+__exportStar(require("./encounterMaps"), exports);
+// foundryEncounterMaps removed – FOUNDRY_MAP_CATALOG had zero consumers (274 KB dead code)
+__exportStar(require("./feats"), exports);
+__exportStar(require("./mapGenerator"), exports);
+__exportStar(require("./atlasMapGenerator"), exports);
+__exportStar(require("./creatureTokens"), exports);
+// Companion / Familiar / Eidolon catalogs
+__exportStar(require("./companions"), exports);
+__exportStar(require("./familiarAbilities"), exports);
+__exportStar(require("./eidolons"), exports);
 // Dice rolling utility
 function rollDice(times, sides) {
     const results = [];

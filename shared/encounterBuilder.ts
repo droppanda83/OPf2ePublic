@@ -18,6 +18,7 @@ import {
   getCreaturesInRange,
   pickRandom,
 } from './bestiary';
+import { getCreatureTokenUrl } from './creatureTokens';
 
 // ─── Types ───────────────────────────────────────────
 
@@ -138,7 +139,10 @@ export function buildEncounter(
     if (remaining <= 0) break;
     if (candidate.xp <= remaining) {
       // Clone the creature data so each instance is independent
-      chosen.push({ ...candidate.entry.creature });
+      chosen.push({
+        ...candidate.entry.creature,
+        tokenImageUrl: candidate.entry.creature.tokenImageUrl || getCreatureTokenUrl(candidate.entry.tags),
+      });
       remaining -= candidate.xp;
     }
   }
@@ -150,7 +154,10 @@ export function buildEncounter(
     for (const candidate of weakestShuffled) {
       if (remaining <= 0) break;
       if (candidate.xp <= remaining) {
-        chosen.push({ ...candidate.entry.creature });
+        chosen.push({
+          ...candidate.entry.creature,
+          tokenImageUrl: candidate.entry.creature.tokenImageUrl || getCreatureTokenUrl(candidate.entry.tags),
+        });
         remaining -= candidate.xp;
       }
     }
@@ -159,7 +166,10 @@ export function buildEncounter(
   // If encounter is still empty, add at least one creature
   if (chosen.length === 0 && candidates.length > 0) {
     const fallback = pickRandom(candidates);
-    chosen.push({ ...fallback.creature });
+    chosen.push({
+      ...fallback.creature,
+      tokenImageUrl: fallback.creature.tokenImageUrl || getCreatureTokenUrl(fallback.tags),
+    });
     remaining -= getCreatureXP(fallback.creature.level ?? 0, partyLevel);
   }
 

@@ -59,11 +59,13 @@ export const CORE_ACTIONS: PF2eAction[] = [
   }
 ];
 
+import { Creature } from './types';
+
 /**
  * Get all available actions for a creature
  * Filters based on what the creature has equipped/can do
  */
-export function getAvailableActions(creature: any): PF2eAction[] {
+export function getAvailableActions(creature: Partial<Creature>): PF2eAction[] {
   const actions: PF2eAction[] = [];
 
   // Always include Strike, Stride, and Shove

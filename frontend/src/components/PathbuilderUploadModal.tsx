@@ -96,6 +96,9 @@ export const PathbuilderUploadModal: React.FC<PathbuilderUploadModalProps> = ({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Import Pathbuilder Characters"
       style={{
         position: 'fixed',
         top: 0,
@@ -129,6 +132,7 @@ export const PathbuilderUploadModal: React.FC<PathbuilderUploadModalProps> = ({
           <h2 style={{ margin: 0, color: '#00d4aa' }}>Import Pathbuilder Characters</h2>
           <button
             onClick={onClose}
+            aria-label="Close"
             style={{
               backgroundColor: 'transparent',
               border: '1px solid #666',
@@ -145,6 +149,10 @@ export const PathbuilderUploadModal: React.FC<PathbuilderUploadModalProps> = ({
 
         {/* File Upload Area */}
         <div
+          role="button"
+          tabIndex={0}
+          aria-label="Click or drag files to upload Pathbuilder JSON"
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
           style={{
             border: '2px dashed #00d4aa',
             borderRadius: '6px',

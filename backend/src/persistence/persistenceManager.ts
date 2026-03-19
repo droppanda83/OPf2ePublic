@@ -137,6 +137,6 @@ export class PersistenceManager {
   }
 
   private generateSaveId(): string {
-    return `save_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    return `save_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
   }
 }

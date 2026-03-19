@@ -25,9 +25,49 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    port: 5180,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
+  },
   build: {
     commonjsOptions: {
       include: [/shared/, /node_modules/],
+    },
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split large data modules into separate chunks
+          'data-bestiary': ['../shared/bestiary'],
+          'data-spells': ['../shared/spells'],
+          'data-ancestry-ac': ['../shared/ancestryFeatsAC'],
+          'data-ancestry-dg': ['../shared/ancestryFeatsDG'],
+          'data-ancestry-hn': ['../shared/ancestryFeatsHN'],
+          'data-ancestry-ov': ['../shared/ancestryFeatsOV'],
+          'data-ancestry-vh': ['../shared/ancestryFeatsVH'],
+          'data-feats': [
+            '../shared/skillFeats',
+            '../shared/fighterFeats',
+            '../shared/rogueFeats',
+            '../shared/magusFeats',
+            '../shared/psychicFeats',
+            '../shared/generalFeats',
+            '../shared/archetypeFeats',
+          ],
+          'data-equipment': [
+            '../shared/weapons',
+            '../shared/ac',
+            '../shared/armor',
+            '../shared/shields',
+            '../shared/runes',
+            '../shared/consumables',
+          ],
+        },
+      },
     },
   },
 });

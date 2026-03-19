@@ -4,8 +4,12 @@
   "description": "PF2e tactical game backend with rule engine",
   "main": "dist/index.js",
   "scripts": {
+    "predev": "npm --prefix ../shared run build",
     "dev": "ts-node src/index.ts",
+    "prebuild": "npm --prefix ../shared run build",
+    "typecheck": "tsc --noEmit",
     "build": "tsc",
+    "prestart": "npm --prefix ../shared run build",
     "start": "node dist/index.js",
     "test": "node --test dist/**/*.test.js"
   },

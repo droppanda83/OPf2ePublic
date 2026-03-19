@@ -17,6 +17,7 @@ exports.getCreatureXP = getCreatureXP;
 exports.getXPBudget = getXPBudget;
 exports.buildEncounter = buildEncounter;
 const bestiary_1 = require("./bestiary");
+const creatureTokens_1 = require("./creatureTokens");
 // ─── XP Tables ───────────────────────────────────────
 /** XP awarded per creature based on (creatureLevel - partyLevel) */
 const CREATURE_XP = {
@@ -107,7 +108,10 @@ function buildEncounter(difficulty, partyLevel, partySize = 4, allowedTags) {
             break;
         if (candidate.xp <= remaining) {
             // Clone the creature data so each instance is independent
-            chosen.push({ ...candidate.entry.creature });
+            chosen.push({
+                ...candidate.entry.creature,
+                tokenImageUrl: candidate.entry.creature.tokenImageUrl || (0, creatureTokens_1.getCreatureTokenUrl)(candidate.entry.tags),
+            });
             remaining -= candidate.xp;
         }
     }
@@ -119,7 +123,10 @@ function buildEncounter(difficulty, partyLevel, partySize = 4, allowedTags) {
             if (remaining <= 0)
                 break;
             if (candidate.xp <= remaining) {
-                chosen.push({ ...candidate.entry.creature });
+                chosen.push({
+                    ...candidate.entry.creature,
+                    tokenImageUrl: candidate.entry.creature.tokenImageUrl || (0, creatureTokens_1.getCreatureTokenUrl)(candidate.entry.tags),
+                });
                 remaining -= candidate.xp;
             }
         }
@@ -127,7 +134,10 @@ function buildEncounter(difficulty, partyLevel, partySize = 4, allowedTags) {
     // If encounter is still empty, add at least one creature
     if (chosen.length === 0 && candidates.length > 0) {
         const fallback = (0, bestiary_1.pickRandom)(candidates);
-        chosen.push({ ...fallback.creature });
+        chosen.push({
+            ...fallback.creature,
+            tokenImageUrl: fallback.creature.tokenImageUrl || (0, creatureTokens_1.getCreatureTokenUrl)(fallback.tags),
+        });
         remaining -= getCreatureXP(fallback.creature.level ?? 0, partyLevel);
     }
     const totalXP = budget - remaining;

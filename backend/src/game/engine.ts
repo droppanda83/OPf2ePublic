@@ -1,5 +1,8 @@
 import { Creature, GameState, EncounterMap, TerrainTile, CombatRound, Position, getShield, getWeapon, computeDerivedStats, createDefaultAbilities, createDefaultProficiencies } from 'pf2e-shared';
 import { RulesEngine } from './rules';
+import { getActionCost } from './ruleValidator';
+import { debugLog } from './logger';
+import { applySize, getSpaceForSize, getEffectiveSize } from './subsystems';
 
 export class GameEngine {
   private games: Map<string, GameState> = new Map();
@@ -18,8 +21,8 @@ export class GameEngine {
 
     // Initialize creatures with proper structure
     const allCreatures: Creature[] = [
-      ...players.map((p, i) => this.initializeCreature(p, 'player', i)),
-      ...creatures.map((c, i) => this.initializeCreature(c, 'creature', i)),
+      ...players.map((p, i) => this.initializeCreature(p, 'player', i, mapSize)),
+      ...creatures.map((c, i) => this.initializeCreature(c, 'creature', i, mapSize)),
     ];
 
     // Roll initiative
@@ -40,7 +43,42 @@ export class GameEngine {
       groundObjects: [],
     };
     // attach map reference to each creature for rules that need terrain info
-    allCreatures.forEach((c) => ((c as any)._map = gameState.map));
+    allCreatures.forEach((c) => (c._map = gameState.map));
+
+    // Fix overlapping positions — nudge creatures that share squares (multi-tile aware)
+    const occupied = new Set<string>();
+    for (const c of allCreatures) {
+      const effectiveSize = getEffectiveSize(c);
+      const space = getSpaceForSize(effectiveSize);
+      const gridSpace = Math.max(1, Math.ceil(space));
+
+      // Check if ALL squares this creature needs are free and in bounds
+      const getKeys = (x: number, y: number): string[] => {
+        const keys: string[] = [];
+        for (let dy = 0; dy < gridSpace; dy++) {
+          for (let dx = 0; dx < gridSpace; dx++) {
+            keys.push(`${x + dx},${y + dy}`);
+          }
+        }
+        return keys;
+      };
+
+      const fitsAndFree = (x: number, y: number): boolean => {
+        if (x < 0 || y < 0 || x + gridSpace > mapSize || y + gridSpace > mapSize) return false;
+        return getKeys(x, y).every(k => !occupied.has(k));
+      };
+
+      let attempts = 0;
+      while (!fitsAndFree(c.positions.x, c.positions.y) && attempts < mapSize * mapSize) {
+        c.positions.x = Math.floor(Math.random() * (mapSize - gridSpace + 1));
+        c.positions.y = Math.floor(Math.random() * (mapSize - gridSpace + 1));
+        attempts++;
+      }
+      // Mark all occupied squares
+      for (const key of getKeys(c.positions.x, c.positions.y)) {
+        occupied.add(key);
+      }
+    }
 
     this.games.set(id, gameState);
     return gameState;
@@ -54,12 +92,16 @@ export class GameEngine {
     targetPosition?: Position,
     weaponId?: string,
     pickupDestination?: string,
-    heroPointsSpent?: number
+    heroPointsSpent?: number,
+    readyActionId?: string,
+    itemId?: string,
+    spellId?: string
   ): any {
     const gameState = this.games.get(gameId);
     if (!gameState) throw new Error('Game not found');
 
-    const actor = gameState.creatures.find((c) => c.id === creatureId);
+    const actor = gameState.creatures.find((c) => c.id === creatureId)
+      || (gameState.companions || []).find((c) => c.id === creatureId);
     if (!actor) throw new Error('Creature not found');
 
     const prePosition = { ...actor.positions };
@@ -73,8 +115,21 @@ export class GameEngine {
       targetPosition,
       weaponId,
       pickupDestination,
-      heroPointsSpent
+      heroPointsSpent,
+      readyActionId,
+      itemId,
+      spellId
     );
+
+    const actionCost = getActionCost(actionId);
+    if (!result?.errorCode) {
+      if (typeof actionCost === 'number') {
+        const remaining = actor.actionsRemaining ?? 3;
+        actor.actionsRemaining = Math.max(0, remaining - actionCost);
+      } else if (actionCost === 'reaction') {
+        actor.reactionUsed = true;
+      }
+    }
 
     // Log the action
     gameState.log.push({
@@ -88,11 +143,12 @@ export class GameEngine {
     const reactionOpportunities = skipReactionCheck
       ? []
       : this.findReactiveStrikeOpportunities(gameState, actor, actionId, prePosition);
+    const readyOpportunities = this.findReadyActionOpportunities(gameState, actor, actionId);
 
     // Do NOT auto-advance turn - let player manually end their turn
     // Refresh derived stats for all creatures
     this.refreshDerivedStats(gameState);
-    return { gameState, result, reactionOpportunities };
+    return { gameState, result, reactionOpportunities: [...reactionOpportunities, ...readyOpportunities] };
   }
 
   private findReactiveStrikeOpportunities(
@@ -101,10 +157,28 @@ export class GameEngine {
     actionId: string,
     prePosition: Position
   ): any[] {
-    console.log('🔍 [FIND_OPPS] Called for actionId:', actionId);
+    debugLog('🔍 [FIND_OPPS] Called for actionId:', actionId);
     const trigger = this.getReactiveStrikeTrigger(actionId, actor);
-    console.log('🔍 [GET_TRIGGER] Result:', trigger);
+    debugLog('🔍 [GET_TRIGGER] Result:', trigger);
     if (!trigger) return [];
+
+    if (trigger.type === 'move' && actionId === 'stride') {
+      const hasShieldedStride = this.hasFeat(actor, 'Shielded Stride');
+      if (hasShieldedStride && actor.shieldRaised) {
+        const distanceMoved = Math.sqrt(
+          Math.pow(actor.positions.x - prePosition.x, 2) + Math.pow(actor.positions.y - prePosition.y, 2)
+        );
+        const maxShieldedStrideSquares = ((actor.speed ?? 25) / 2) / 5;
+        if (distanceMoved <= maxShieldedStrideSquares + 0.01) {
+          debugLog('[ReactiveStrike] Shielded Stride suppresses move trigger', {
+            actor: actor.name,
+            distanceMoved,
+            maxShieldedStrideSquares,
+          });
+          return [];
+        }
+      }
+    }
     const actionName = this.getActionDisplayName(actionId, actor);
 
     const opportunities: any[] = [];
@@ -117,15 +191,15 @@ export class GameEngine {
       prePosition,
       postPosition: actor.positions,
     };
-    console.log('[ReactiveStrike] Trigger candidate', triggerContext);
+    debugLog('[ReactiveStrike] Trigger candidate', triggerContext);
     for (const creature of gameState.creatures) {
-      console.log(`🔎 [LOOP] Checking creature: ${creature.name} (${creature.id})`);
-      if (creature.id === actor.id) { console.log(`  ⏭️  Skip: same as actor`); continue; }
-      if (creature.currentHealth <= 0 || creature.dying) { console.log(`  ⏭️  Skip: dead/dying`); continue; }
-      if (creature.reactionUsed) { console.log(`  ⏭️  Skip: reaction already used`); continue; }
+      debugLog(`🔎 [LOOP] Checking creature: ${creature.name} (${creature.id})`);
+      if (creature.id === actor.id) { debugLog(`  ⏭️  Skip: same as actor`); continue; }
+      if (creature.currentHealth <= 0 || creature.dying) { debugLog(`  ⏭️  Skip: dead/dying`); continue; }
+      if (creature.reactionUsed) { debugLog(`  ⏭️  Skip: reaction already used`); continue; }
       const hasFeat = this.hasReactiveStrikeFeat(creature);
-      console.log(`  🎯 Has Reactive Strike feat: ${hasFeat}`);
-      if (!hasFeat) { console.log(`  ⏭️  Skip: no feat`); continue; }
+      debugLog(`  🎯 Has Reactive Strike feat: ${hasFeat}`);
+      if (!hasFeat) { debugLog(`  ⏭️  Skip: no feat`); continue; }
 
       const reactorContext = {
         reactorId: creature.id,
@@ -135,7 +209,7 @@ export class GameEngine {
       if (trigger.type === 'move') {
         const wasInReach = this.isWithinReach(creature.positions, prePosition);
         const moved = prePosition.x !== actor.positions.x || prePosition.y !== actor.positions.y;
-        console.log('[ReactiveStrike] Move check', {
+        debugLog('[ReactiveStrike] Move check', {
           ...reactorContext,
           ...triggerContext,
           wasInReach,
@@ -156,7 +230,7 @@ export class GameEngine {
         }
       } else {
         const isInReach = this.isWithinReach(creature.positions, actor.positions);
-        console.log('[ReactiveStrike] Non-move check', {
+        debugLog('[ReactiveStrike] Non-move check', {
           ...reactorContext,
           ...triggerContext,
           isInReach,
@@ -175,6 +249,46 @@ export class GameEngine {
           });
         }
       }
+    }
+
+    return opportunities;
+  }
+
+  private findReadyActionOpportunities(
+    gameState: GameState,
+    actor: Creature,
+    actionId: string
+  ): any[] {
+    if (['ready', 'execute-ready', 'resume-delay', 'delay'].includes(actionId)) {
+      return [];
+    }
+
+    const opportunities: any[] = [];
+    for (const creature of gameState.creatures) {
+      if (creature.id === actor.id) continue;
+      if (creature.currentHealth <= 0 || creature.dying) continue;
+      if (!creature.readyAction) continue;
+      if (creature.reactionUsed) continue;
+
+      const triggerType = creature.readyAction.triggerType ?? 'custom';
+      if (triggerType !== 'custom') continue;
+
+      const targetId = creature.readyAction.targetId ?? actor.id;
+      const target = gameState.creatures.find(c => c.id === targetId);
+      const actionName = this.getActionDisplayName(actionId, actor);
+
+      opportunities.push({
+        type: 'ready-action',
+        reactorId: creature.id,
+        reactorName: creature.name,
+        targetId,
+        targetName: target?.name ?? actor.name,
+        trigger: triggerType,
+        readiedActionId: creature.readyAction.actionId,
+        triggeringActionId: actionId,
+        triggeringActionName: actionName,
+        triggeringCreatureName: actor.name,
+      });
     }
 
     return opportunities;
@@ -217,12 +331,7 @@ export class GameEngine {
       'lower-shield',
       'take-cover',
       'aid',
-      'recall-knowledge',
       'interact',
-      'escape',
-      'seek',
-      'hide',
-      'sneak',
     ];
     if (manipulateActions.includes(actionId)) {
       return { type: 'manipulate' };
@@ -240,9 +349,9 @@ export class GameEngine {
   }
 
   private hasReactiveStrikeFeat(creature: Creature): boolean {
-    console.log(`🔎 [HAS_FEAT] Checking ${creature.name}:`);
-    console.log(`  📋 feats:`, creature.feats);
-    console.log(`  💫 specials:`, (creature as any).specials);
+    debugLog(`🔎 [HAS_FEAT] Checking ${creature.name}:`);
+    debugLog(`  📋 feats:`, creature.feats);
+    debugLog(`  💫 specials:`, creature.specials);
     
     const featMatch = creature.feats?.some((feat) => {
       if (typeof feat?.name !== 'string') return false;
@@ -250,19 +359,31 @@ export class GameEngine {
       return name.includes('reactive strike') || name.includes('attack of opportunity');
     }) ?? false;
 
-    const specials = (creature as any).specials;
+    const specials = creature.specials;
     const specialsMatch = Array.isArray(specials)
       ? specials.some((entry: any) => typeof entry === 'string' && entry.toLowerCase().includes('reactive strike'))
       : false;
 
-    console.log(`  ✅ featMatch: ${featMatch}, specialsMatch: ${specialsMatch}`);
+    debugLog(`  ✅ featMatch: ${featMatch}, specialsMatch: ${specialsMatch}`);
+    return featMatch || specialsMatch;
+  }
+
+  private hasFeat(creature: Creature, featName: string): boolean {
+    const lowerFeatName = featName.toLowerCase().trim();
+    const featMatch = creature.feats?.some((feat: any) => {
+      const name = typeof feat === 'string' ? feat : feat?.name;
+      return typeof name === 'string' && name.toLowerCase().trim() === lowerFeatName;
+    }) ?? false;
+    const specialsMatch = creature.specials?.some((entry: any) =>
+      typeof entry === 'string' && entry.toLowerCase().trim() === lowerFeatName
+    ) ?? false;
     return featMatch || specialsMatch;
   }
 
   private isWithinReach(pos1: Position, pos2: Position): boolean {
-    const dx = pos1.x - pos2.x;
-    const dy = pos1.y - pos2.y;
-    return Math.sqrt(dx * dx + dy * dy) <= 1.5;
+    const dx = Math.abs(pos1.x - pos2.x);
+    const dy = Math.abs(pos1.y - pos2.y);
+    return Math.max(dx, dy) <= 1; // Chebyshev distance: adjacent including diagonals
   }
 
   startTurn(gameId: string, creatureId: string): any {
@@ -282,11 +403,12 @@ export class GameEngine {
     // STUNNED: Lose actions equal to stunned value, then reduce stunned by that amount
     const stunnedCondition = creature.conditions?.find((c) => c.name === 'stunned');
     if (stunnedCondition && stunnedCondition.value) {
-      actionsLost += stunnedCondition.value;
-      conditionMessages.push(`💫 ${creature.name} is stunned! Loses ${stunnedCondition.value} action(s)`);
+      const stunnedLoss = Math.min(3, stunnedCondition.value);
+      actionsLost += stunnedLoss;
+      conditionMessages.push(`💫 ${creature.name} is stunned! Loses ${stunnedLoss} action(s)`);
       
       // Reduce stunned value by amount lost
-      stunnedCondition.value -= stunnedCondition.value;
+      stunnedCondition.value -= stunnedLoss;
       if (stunnedCondition.value <= 0) {
         creature.conditions = creature.conditions?.filter((c) => c.name !== 'stunned');
         conditionMessages.push(`  ↳ Stunned condition removed`);
@@ -322,11 +444,13 @@ export class GameEngine {
     // Auto-lower shield at start of turn
     if (creature.shieldRaised) {
       creature.shieldRaised = false;
-      console.log(`🛡️ ${creature.name}'s shield auto-lowered at turn start`);
+      debugLog(`🛡️ ${creature.name}'s shield auto-lowered at turn start`);
     }
 
     // Reset reaction availability at the start of the turn
     creature.reactionUsed = false;
+    // Reset Combat Reflexes extra reaction
+    (creature as any).combatReflexesUsed = false;
 
     // Clear any pending shield block state
     if (creature.conditions?.length) {
@@ -335,7 +459,43 @@ export class GameEngine {
 
     // Reset Multiple Attack Penalty counter
     creature.attacksMadeThisTurn = 0;
+    creature.attackTargetsThisTurn = [];
     creature.flourishUsedThisTurn = false;
+
+    // PASSIVE FIGHTER FEAT: Improved Dueling Parry — auto-apply +2 AC if wielding 1-handed weapon with free hand
+    const hasFeat = (c: any, name: string) => {
+      const lower = name.toLowerCase();
+      return c.feats?.some((f: any) => {
+        const n = typeof f === 'string' ? f : f?.name;
+        return typeof n === 'string' && n.toLowerCase().trim() === lower;
+      }) || c.specials?.some((s: string) => typeof s === 'string' && s.toLowerCase().trim() === lower);
+    };
+
+    // Remove previous auto-parry bonuses
+    creature.bonuses = (creature.bonuses || []).filter(b => b.source !== 'improved-dueling-parry' && b.source !== 'twinned-defense');
+
+    if (hasFeat(creature, 'improved dueling parry')) {
+      const heldWeapons = creature.weaponInventory?.filter((s: any) => s.state === 'held') || [];
+      if (heldWeapons.length === 1) {
+        if (!creature.bonuses) creature.bonuses = [];
+        creature.bonuses.push({ source: 'improved-dueling-parry', value: 2, type: 'circumstance', applyTo: 'ac' });
+        conditionMessages.push(`🤺 ${creature.name}: Improved Dueling Parry — auto +2 AC`);
+      }
+    }
+
+    // PASSIVE FIGHTER FEAT: Twinned Defense — auto-apply Twin Parry AC bonus if dual-wielding
+    if (hasFeat(creature, 'twinned defense')) {
+      const heldWeapons = creature.weaponInventory?.filter((s: any) => s.state === 'held') || [];
+      if (heldWeapons.length >= 2) {
+        const hasParryTrait = heldWeapons.some((s: any) =>
+          s.weapon?.traits?.some((t: string) => typeof t === 'string' && t.toLowerCase() === 'parry')
+        );
+        const acBonus = hasParryTrait ? 2 : 1;
+        if (!creature.bonuses) creature.bonuses = [];
+        creature.bonuses.push({ source: 'twinned-defense', value: acBonus, type: 'circumstance', applyTo: 'ac' });
+        conditionMessages.push(`🤺 ${creature.name}: Twinned Defense — auto +${acBonus} AC`);
+      }
+    }
 
     // Process persistent damage at the start of the turn
     const persistentDamageEntries = this.rulesEngine.processPersistentDamage(creature);
@@ -350,6 +510,7 @@ export class GameEngine {
       });
     });
 
+    creature.actionsRemaining = actionPoints;
     return { gameState, persistentDamageEntries, actionPoints, conditionMessages };
   }
 
@@ -372,6 +533,24 @@ export class GameEngine {
     this.games.set(gameState.id, gameState);
   }
 
+  rerollInitiative(gameId: string): GameState {
+    const gameState = this.games.get(gameId);
+    if (!gameState) throw new Error('Game not found');
+
+    // Filter out NPC tokens — they are non-combatants and don't participate in initiative
+    const combatants = gameState.creatures.filter(c => c.type !== 'npc');
+    const turnOrder = this.rulesEngine.rollInitiative(combatants);
+    gameState.currentRound = {
+      ...gameState.currentRound,
+      number: 1,
+      turnOrder,
+      currentTurnIndex: 0,
+      actions: [],
+    };
+
+    return gameState;
+  }
+
   endTurn(gameId: string): GameState {
     const gameState = this.games.get(gameId);
     if (!gameState) throw new Error('Game not found');
@@ -385,7 +564,7 @@ export class GameEngine {
 
   private expireEndOfTurnConditions(gameState: GameState, endingCreatureId: string): void {
     const endingCreature = gameState.creatures.find(c => c.id === endingCreatureId);
-    console.log(`\n⏰ [EXPIRE] Turn ending for: ${endingCreature?.name ?? endingCreatureId}`);
+    debugLog(`\n⏰ [EXPIRE] Turn ending for: ${endingCreature?.name ?? endingCreatureId}`);
 
     gameState.creatures.forEach((creature) => {
       if (!creature.conditions || creature.conditions.length === 0) return;
@@ -397,7 +576,7 @@ export class GameEngine {
         creature.conditions.forEach((cond) => {
           if (cond.name === 'frightened' && typeof cond.value === 'number' && cond.value > 0) {
             cond.value -= 1;
-            console.log(`  📉 ${creature.name}: Frightened ${cond.value + 1} → ${cond.value}`);
+            debugLog(`  📉 ${creature.name}: Frightened ${cond.value + 1} → ${cond.value}`);
           }
         });
       }
@@ -406,7 +585,7 @@ export class GameEngine {
       creature.conditions = creature.conditions.filter((cond) => {
         // Remove frightened if value reaches 0
         if (cond.name === 'frightened' && typeof cond.value === 'number' && cond.value <= 0) {
-          console.log(`  ✅ ${creature.name}: Frightened removed (value reached 0)`);
+          debugLog(`  ✅ ${creature.name}: Frightened removed (value reached 0)`);
           return false;
         }
 
@@ -416,16 +595,33 @@ export class GameEngine {
         if (typeof cond.turnEndsRemaining === 'number') {
           cond.turnEndsRemaining -= 1;
           const keep = cond.turnEndsRemaining > 0;
-          console.log(`  📋 ${creature.name}: "${cond.name}" (source: ${cond.source}) turnEndsRemaining: ${cond.turnEndsRemaining + 1} → ${cond.turnEndsRemaining} → ${keep ? 'KEEP' : 'REMOVE'}`);
+          debugLog(`  📋 ${creature.name}: "${cond.name}" (source: ${cond.source}) turnEndsRemaining: ${cond.turnEndsRemaining + 1} → ${cond.turnEndsRemaining} → ${keep ? 'KEEP' : 'REMOVE'}`);
           return keep;
         }
 
-        console.log(`  📋 ${creature.name}: "${cond.name}" (source: ${cond.source}) no turnEndsRemaining → REMOVE`);
+        debugLog(`  📋 ${creature.name}: "${cond.name}" (source: ${cond.source}) no turnEndsRemaining → REMOVE`);
         return false;
       });
       const after = creature.conditions.length;
       if (before !== after) {
-        console.log(`  ✅ ${creature.name}: conditions ${before} → ${after}`);
+        debugLog(`  ✅ ${creature.name}: conditions ${before} → ${after}`);
+      }
+
+      // Handle Unleash Psyche duration tracking
+      if (creature.id === endingCreatureId && creature.unleashPsycheActive) {
+        if (typeof creature.unleashPsycheRoundsLeft === 'number') {
+          creature.unleashPsycheRoundsLeft -= 1;
+          if (creature.unleashPsycheRoundsLeft <= 0) {
+            // Psyche collapse — remove bonuses, apply stupefied 1 for 2 rounds
+            creature.unleashPsycheActive = false;
+            creature.bonuses = (creature.bonuses ?? []).filter(b => b.source !== 'Unleash Psyche');
+            creature.conditions = creature.conditions ?? [];
+            creature.conditions.push({ name: 'stupefied', value: 1, duration: 2 });
+            debugLog(`  🧠 ${creature.name}: Unleash Psyche ends — stupefied 1 for 2 rounds!`);
+          } else {
+            debugLog(`  🧠 ${creature.name}: Unleash Psyche — ${creature.unleashPsycheRoundsLeft} round(s) left`);
+          }
+        }
       }
     });
   }
@@ -486,10 +682,28 @@ export class GameEngine {
     return inventory;
   }
 
-  private initializeCreature(partial: Partial<Creature>, type: Creature['type'], index: number): Creature {
+  private initializeCreature(partial: Partial<Creature>, type: Creature['type'], index: number, mapSize: number = 20): Creature {
     const level = partial.level || 1;
     const abilities = partial.abilities || createDefaultAbilities();
     const proficiencies = partial.proficiencies || createDefaultProficiencies();
+
+    // Auto-fix class proficiencies for Character Builder characters that were saved
+    // before their class data was corrected (e.g., Fighters should have expert weapons)
+    const className = partial.characterClass?.toLowerCase();
+    if (className === 'fighter') {
+      const p = proficiencies as any;
+      // Fighter: expert in unarmed, simple, martial weapons; trained in advanced
+      if (p.unarmed !== 'expert' && p.unarmed !== 'master' && p.unarmed !== 'legendary') p.unarmed = 'expert';
+      if (p.simpleWeapons !== 'expert' && p.simpleWeapons !== 'master' && p.simpleWeapons !== 'legendary') p.simpleWeapons = 'expert';
+      if (p.martialWeapons !== 'expert' && p.martialWeapons !== 'master' && p.martialWeapons !== 'legendary') p.martialWeapons = 'expert';
+      if (!p.advancedWeapons || p.advancedWeapons === 'untrained') p.advancedWeapons = 'trained';
+      // Fighter: expert in fortitude, reflex, perception; trained in will
+      if (p.fortitude !== 'expert' && p.fortitude !== 'master' && p.fortitude !== 'legendary') p.fortitude = 'expert';
+      if (p.reflex !== 'expert' && p.reflex !== 'master' && p.reflex !== 'legendary') p.reflex = 'expert';
+      if (p.perception !== 'expert' && p.perception !== 'master' && p.perception !== 'legendary') p.perception = 'expert';
+      debugLog(`🛠️ [PROFICIENCY FIX] Fighter "${partial.name}" proficiencies auto-corrected`);
+    }
+
     const armorBonus = partial.armorBonus ?? 2; // Default +2 from armor
 
     // Initialize shield HP if equipped
@@ -518,11 +732,13 @@ export class GameEngine {
       currentShieldHp: currentShieldHp || partial.currentShieldHp,
       bonuses: partial.bonuses || [],
       penalties: partial.penalties || [],
-      positions: partial.positions || { x: Math.floor(Math.random() * 20), y: Math.floor(Math.random() * 20) },
+      positions: partial.positions || { x: Math.floor(Math.random() * mapSize), y: Math.floor(Math.random() * mapSize) },
       speed: partial.speed || 25, // Speed in feet (default 25 for medium creatures)
       conditions: [],
       initiative: 0,
       attacksMadeThisTurn: 0,
+      attackTargetsThisTurn: [],
+      actionsRemaining: 3,
       flourishUsedThisTurn: false,
       reactionUsed: false,
       dying: false,
@@ -554,12 +770,19 @@ export class GameEngine {
       ...(partial.heroPoints !== undefined && { heroPoints: partial.heroPoints }),
       ...(partial.focusSpells && { focusSpells: partial.focusSpells }),
       ...(partial.spellcasters && { spellcasters: partial.spellcasters }),
+      // Token & portrait images (player uploads or bestiary type tokens)
+      ...(partial.tokenImageUrl && { tokenImageUrl: partial.tokenImageUrl }),
+      ...(partial.portraitImageUrl && { portraitImageUrl: partial.portraitImageUrl }),
       // Weapon inventory — initialize from weaponInventory or equippedWeapon
       weaponInventory: this.initializeWeaponInventory(partial),
     };
 
     // Compute derived stats (AC)
     computeDerivedStats(creature);
+
+    // Initialize size-derived fields (space, naturalReach) from creature size
+    const creatureSize = partial.size ?? 'medium';
+    applySize(creature, creatureSize as any);
 
     // For NPC/bestiary creatures with an explicitly provided AC, override the computed value
     if (partial.armorClass !== undefined && partial.armorClass > 0) {
@@ -577,7 +800,7 @@ export class GameEngine {
         terrain[y][x] = {
           x,
           y,
-          type: Math.random() > 0.9 ? 'difficult' : 'empty',
+          type: 'empty', // Map generator disabled for testing — was: Math.random() > 0.9 ? 'difficult' : 'empty'
         };
       }
     }
@@ -589,18 +812,38 @@ export class GameEngine {
     round.currentTurnIndex = (round.currentTurnIndex + 1) % round.turnOrder.length;
 
     // Reset death save flag for the new current creature
-    const currentCreatureId = round.turnOrder[round.currentTurnIndex];
-    const currentCreature = gameState.creatures.find((c) => c.id === currentCreatureId);
+    let currentCreatureId = round.turnOrder[round.currentTurnIndex];
+    let currentCreature = gameState.creatures.find((c) => c.id === currentCreatureId);
+    const visited = new Set<string>();
+
+    while (currentCreature?.isDelaying && !visited.has(currentCreature.id)) {
+      visited.add(currentCreature.id);
+      round.currentTurnIndex = (round.currentTurnIndex + 1) % round.turnOrder.length;
+      currentCreatureId = round.turnOrder[round.currentTurnIndex];
+      currentCreature = gameState.creatures.find((c) => c.id === currentCreatureId);
+    }
     if (currentCreature) {
       currentCreature.deathSaveMadeThisTurn = false;
-      currentCreature.flourishUsedThisTurn = false;
-      currentCreature.attacksMadeThisTurn = 0;
-      currentCreature.reactionUsed = false;
-      // Auto-lower shield at start of turn
-      if (currentCreature.shieldRaised) {
-        currentCreature.shieldRaised = false;
-        console.log(`🛡️ ${currentCreature.name}'s shield auto-lowered at turn start`);
-      }
+      // NOTE: The remaining turn-start resets (attacksMadeThisTurn, flourishUsedThisTurn,
+      // reactionUsed, actionsRemaining, shield lowering, condition processing, etc.)
+      // are handled comprehensively in startTurn(). We only reset deathSaveMadeThisTurn
+      // here because it gates death-save availability before startTurn is called.
+
+      // PASSIVE FIGHTER FEAT: Boundless Reprisals — all creatures with this feat
+      // gain a reaction at the start of each OTHER creature's turn
+      gameState.creatures.forEach((c) => {
+        if (c.id !== currentCreature!.id && c.reactionUsed) {
+          const hasBoundless = c.feats?.some((f: any) => {
+            const name = typeof f === 'string' ? f : f?.name;
+            return typeof name === 'string' && name.toLowerCase().trim() === 'boundless reprisals';
+          }) || c.specials?.some((s: string) => s.toLowerCase().trim() === 'boundless reprisals');
+          if (hasBoundless) {
+            c.reactionUsed = false;
+            (c as any).combatReflexesUsed = false;
+            debugLog(`⚔️ ${c.name}: Boundless Reprisals — reaction refreshed for ${currentCreature!.name}'s turn`);
+          }
+        }
+      });
     }
 
     if (round.currentTurnIndex === 0) {
@@ -611,13 +854,22 @@ export class GameEngine {
           if (cond.expiresOnTurnEndOf) return true;
           if (cond.duration === 'permanent') return true;
           cond.duration--;
-          return cond.duration > 0;
+          if (cond.duration > 0) return true;
+          // Condition is expiring — clean up side effects
+          if (cond.name === 'iron-body') {
+            // Remove the physical resistances that were added by Iron Body
+            c.damageResistances = (c.damageResistances || []).filter(
+              r => r.source !== 'Iron Body'
+            );
+            debugLog(`  🪨 ${c.name}: Iron Body expired, removed physical resistances`);
+          }
+          return false;
         });
       });
     }
   }
 
   private generateId(): string {
-    return Math.random().toString(36).substring(7);
+    return crypto.randomUUID().slice(0, 8);
   }
 }

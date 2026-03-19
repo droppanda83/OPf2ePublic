@@ -1,6 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { DiceRollerProvider } from './components/DiceRollerContext';
+import BattleAnimationProvider from './components/BattleAnimationOverlay';
 import './index.css';
 
 console.log('🚀 Main.tsx loading...');
@@ -11,7 +13,11 @@ if (rootElement) {
   console.log('✅ Root element found, mounting React app...');
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
-      <App />
+      <DiceRollerProvider>
+        <BattleAnimationProvider>
+          <App />
+        </BattleAnimationProvider>
+      </DiceRollerProvider>
     </React.StrictMode>
   );
   console.log('✅ React app mounted');

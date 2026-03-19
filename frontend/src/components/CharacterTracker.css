@@ -1,0 +1,334 @@
+/**
+ * Character Tracker Styles
+ * HUD display for party members during combat
+ */
+
+.character-tracker {
+  background: linear-gradient(135deg, #1a1210 0%, #140e0b 100%);
+  color: #ddd;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  border: 2px solid #d4af37;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 600px;
+}
+
+.character-tracker.empty {
+  padding: 20px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+}
+
+.character-tracker.empty p {
+  color: #999;
+  margin: 0;
+}
+
+/* ─── HEADER ─── */
+.tracker-header {
+  padding: 12px 15px;
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid #d4af37;
+}
+
+.tracker-header h3 {
+  margin: 0;
+  color: #d4af37;
+  font-size: 16px;
+}
+
+/* ─── CHARACTER LIST ─── */
+.character-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.character-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.character-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.character-list::-webkit-scrollbar-thumb {
+  background: #d4af37;
+  border-radius: 4px;
+}
+
+.character-list::-webkit-scrollbar-thumb:hover {
+  background: #e6c547;
+}
+
+/* ─── CHARACTER CARD ─── */
+.character-card {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.character-card:hover {
+  background: rgba(0, 0, 0, 0.3);
+  border-color: #d4af37;
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.2);
+}
+
+.character-card.active {
+  background: rgba(212, 175, 55, 0.15);
+  border-color: #d4af37;
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.3);
+}
+
+/* ─── CHARACTER HEADER ─── */
+.character-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.character-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.character-name h4 {
+  margin: 0;
+  color: #d4af37;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.character-level {
+  color: #999;
+  font-size: 11px;
+  background: rgba(212, 175, 55, 0.2);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.character-class {
+  color: #aaa;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+
+/* ─── HEALTH SECTION ─── */
+.health-section {
+  margin-bottom: 8px;
+}
+
+.health-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.health-bar-background {
+  flex: 1;
+  height: 20px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #333;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.health-bar-fill {
+  height: 100%;
+  transition: width 0.3s ease, background-color 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 3px;
+}
+
+.health-text {
+  color: #aaa;
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 70px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ─── ABILITIES ROW ─── */
+.abilities-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.ability-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 6px 4px;
+  border-radius: 3px;
+  border: 1px solid #333;
+}
+
+.ability-score {
+  color: #d4af37;
+  font-weight: bold;
+  font-size: 13px;
+}
+
+.ability-mod {
+  color: #6f9;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.ability-label {
+  color: #666;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ─── DEFENSE STATS ─── */
+.defense-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.stat-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 5px 3px;
+  border-radius: 3px;
+  border: 1px solid #333;
+}
+
+.stat-label {
+  color: #666;
+  font-size: 9px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.stat-value {
+  color: #d4af37;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+/* ─── CONDITIONS ─── */
+.conditions-list {
+  margin-bottom: 8px;
+}
+
+.conditions-header {
+  color: #d4af37;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.condition-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.condition-tag {
+  background: rgba(255, 100, 100, 0.2);
+  border: 1px solid #ff6b6b;
+  color: #ff9999;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* ─── QUICK STATS ─── */
+.quick-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-top: 1px solid #444;
+  padding-top: 6px;
+}
+
+.stat-item {
+  color: #999;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.stat-item strong {
+  color: #d4af37;
+}
+
+/* ─── RESPONSIVE ─── */
+@media (max-width: 768px) {
+  .character-tracker {
+    max-height: 400px;
+  }
+
+  .character-card {
+    padding: 10px;
+  }
+
+  .character-name h4 {
+    font-size: 12px;
+  }
+
+  .ability-mini {
+    padding: 4px 2px;
+  }
+
+  .ability-score {
+    font-size: 11px;
+  }
+
+  .defense-stats {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .character-tracker {
+    max-height: 300px;
+  }
+
+  .abilities-row {
+    gap: 4px;
+  }
+
+  .ability-mini {
+    padding: 3px 2px;
+  }
+
+  .ability-score {
+    font-size: 10px;
+  }
+
+  .quick-stats {
+    display: none;
+  }
+}

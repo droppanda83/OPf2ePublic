@@ -6,10 +6,28 @@ export * from './spells';
 export { getSpell } from './spells';
 export * from './weapons';
 export * from './shields';
+export * from './armor';
+export * from './runes';
+export * from './consumables';
+export * from './adventuringGear';
+export * from './wornItems';
 export * from './actions';
 export * from './bonuses';
-export * from './bestiary';
+// Bestiary: re-export types + helpers only; import BESTIARY directly from 'pf2e-shared/bestiary' to avoid loading 549 KB through the barrel
+export type { BestiaryEntry } from './bestiary';
+export { getCreaturesByLevel, getCreaturesInRange, getCreaturesByTag, getCreatureByName, pickRandom } from './bestiary';
 export * from './encounterBuilder';
+export * from './encounterMaps';
+// foundryEncounterMaps removed – FOUNDRY_MAP_CATALOG had zero consumers (274 KB dead code)
+export * from './feats';
+export * from './mapGenerator';
+export * from './atlasMapGenerator';
+export * from './creatureTokens';
+
+// Companion / Familiar / Eidolon catalogs
+export * from './companions';
+export * from './familiarAbilities';
+export * from './eidolons';
 
 // Dice rolling utility
 export function rollDice(times: number, sides: number): number[] {

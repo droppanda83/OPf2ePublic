@@ -1,0 +1,18 @@
+﻿{
+  "scenes": [
+    {
+      "_id": "abc123",
+      "name": "Dungeon Test Hall",
+      "width": 4000,
+      "height": 3000,
+      "grid": { "size": 100 },
+      "walls": [
+        { "c": [0, 0, 1000, 0] },
+        { "c": [1000, 0, 1000, 500] }
+      ],
+      "drawings": [
+        { "shape": { "x": 500, "y": 500, "width": 300, "height": 300 } }
+      ]
+    }
+  ]
+}

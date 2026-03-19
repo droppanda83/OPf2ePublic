@@ -42,9 +42,9 @@
 }
 
 .action-menu-toggle.active {
-  background: rgba(0, 221, 221, 0.15);
-  border-color: #0dd;
-  color: #0dd;
+  background: rgba(212, 175, 55, 0.15);
+  border-color: #d4af37;
+  color: #d4af37;
 }
 
 .remaining-actions {
@@ -99,8 +99,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 200px;
+  min-height: 36px;
+  padding: 8px 16px;
   color: #999;
+  font-size: 13px;
 }
 
 .creature-action-info {
@@ -128,8 +130,8 @@
 }
 
 .pf2e-action-diamonds {
-  color: #0dd;
-  filter: drop-shadow(0 0 5px rgba(0, 221, 221, 0.5));
+  color: #d4af37;
+  filter: drop-shadow(0 0 5px rgba(212, 175, 55, 0.5));
 }
 
 .pf2e-reaction-diamond {
@@ -179,8 +181,8 @@
 
 .menu-toggle:hover {
   background: rgba(80, 80, 80, 0.9);
-  border-color: #0dd;
-  color: #0dd;
+  border-color: #d4af37;
+  color: #d4af37;
 }
 
 .toggle-icon {
@@ -224,7 +226,7 @@
 }
 
 .action-item:hover:not(:disabled) {
-  background: rgba(0, 221, 221, 0.1);
+  background: rgba(212, 175, 55, 0.1);
   color: #fff;
 }
 
@@ -243,9 +245,9 @@
 }
 
 .action-item.selected {
-  background: rgba(0, 221, 221, 0.15);
-  color: #0dd;
-  border-left: 2px solid #0dd;
+  background: rgba(212, 175, 55, 0.15);
+  color: #d4af37;
+  border-left: 2px solid #d4af37;
 }
 
 /* Tabbed Actions */
@@ -279,9 +281,9 @@
 }
 
 .action-tab-btn.active {
-  background: rgba(0, 221, 221, 0.2);
-  color: #0dd;
-  border-color: #0dd;
+  background: rgba(212, 175, 55, 0.2);
+  color: #d4af37;
+  border-color: #d4af37;
 }
 
 .action-list {
@@ -341,14 +343,14 @@
 }
 
 .action-row:hover:not(:disabled) {
-  background: rgba(0, 221, 221, 0.08);
-  border-color: #0dd;
+  background: rgba(212, 175, 55, 0.08);
+  border-color: #d4af37;
 }
 
 .action-row.selected {
-  background: rgba(0, 221, 221, 0.15);
-  color: #0dd;
-  border-left: 2px solid #0dd;
+  background: rgba(212, 175, 55, 0.15);
+  color: #d4af37;
+  border-left: 2px solid #d4af37;
 }
 
 .action-row.disabled {
@@ -482,12 +484,12 @@
 
 .loading-indicator {
   padding: 8px;
-  background: rgba(0, 221, 221, 0.1);
-  border: 1px solid #0dd;
+  background: rgba(212, 175, 55, 0.1);
+  border: 1px solid #d4af37;
   border-radius: 4px;
   text-align: center;
   font-size: 12px;
-  color: #0dd;
+  color: #d4af37;
   animation: pulse 1.5s infinite;
 }
 
@@ -539,7 +541,7 @@
 }
 
 .modal-content {
-  background: linear-gradient(135deg, #2a2a3a 0%, #1a1a2a 100%);
+  background: linear-gradient(135deg, #2a2018 0%, #1a1410 100%);
   border: 2px solid #666;
   border-radius: 12px;
   padding: 24px;

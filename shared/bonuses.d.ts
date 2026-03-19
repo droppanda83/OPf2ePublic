@@ -16,6 +16,8 @@ export interface Bonus {
     value: number;
     source: string;
     applyTo?: string;
+    /** Optional condition for when this bonus applies (e.g. 'action:demoralize', 'vs:visual') */
+    condition?: string;
 }
 export interface Penalty {
     type: BonusType;

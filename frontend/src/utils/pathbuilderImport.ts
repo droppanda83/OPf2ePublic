@@ -3,7 +3,7 @@
  * Converts Pathbuilder 2e character sheets to our Creature type
  */
 
-import { Creature, Position } from '../../../shared/types';
+import { Creature, Position, DamageType } from '../../../shared/types';
 import type { ProficiencyRank } from '../../../shared/bonuses';
 import { resolveSpellId } from '../../../shared/spells';
 
@@ -127,7 +127,7 @@ export function parsePathbuilderCharacter(data: any): Creature {
   let weaponSpecificProfBonus = 0;
   let weaponDamageBonus = 0;
   let weaponDamageDice = ''; // e.g., "2d8"
-  let weaponDamageType = '';
+  let weaponDamageType: DamageType | '' = '';
   let weaponStrikingRunes = 0;
   let weaponPotencyRunes = 0;
   
@@ -183,7 +183,7 @@ export function parsePathbuilderCharacter(data: any): Creature {
       'M': 'mental',
       'Fo': 'force'
     };
-    weaponDamageType = pbWeapon.damageType ? (damageTypeMap[pbWeapon.damageType] || pbWeapon.damageType) : '';
+    weaponDamageType = pbWeapon.damageType ? ((damageTypeMap[pbWeapon.damageType] || pbWeapon.damageType) as DamageType) : '';
     
     // Look up weapon-specific proficiency from specificProficiencies
     if (equippedWeapon && character.specificProficiencies) {
@@ -240,13 +240,21 @@ export function parsePathbuilderCharacter(data: any): Creature {
   const specials: string[] = Array.isArray(character.specials) ? character.specials : [];
   console.log('[pathbuilderImport] Extracted specials:', specials);
 
+  // Extract senses from specials array and/or dedicated senses field.
+  // Pathbuilder puts vision senses (darkvision, low-light vision, etc.) in the specials array.
+  const SENSE_PATTERNS = /darkvision|low[- ]?light vision|greater darkvision|scent|tremorsense|echolocation|spiritsense|wavesense|lifesense|thoughtsense/i;
+  const sensesFromSpecials = specials.filter(s => SENSE_PATTERNS.test(s));
+  const sensesFromField: string[] = Array.isArray(character.senses) ? character.senses : [];
+  const senses = [...new Set([...sensesFromSpecials, ...sensesFromField])];
+  console.log('[pathbuilderImport] Extracted senses:', senses);
+
   // Extract ALL skills with proficiency ranks (including untrained)
   const skillKeys = [
     'acrobatics', 'arcana', 'athletics', 'crafting', 'deception',
     'diplomacy', 'intimidation', 'medicine', 'nature', 'occultism',
     'performance', 'religion', 'society', 'stealth', 'survival', 'thievery'
   ];
-  const skills: { name: string; proficiency: string; bonus: number; abilityMod: number; profBonus: number }[] = [];
+  const skills: { name: string; proficiency: ProficiencyRank; bonus: number; abilityMod: number; profBonus: number }[] = [];
   
   // Log available keys to debug
   console.log('[pathbuilderImport] character structure keys:', Object.keys(character || {}).slice(0, 20));
@@ -648,6 +656,7 @@ export function parsePathbuilderCharacter(data: any): Creature {
     // Pathbuilder extras
     feats,
     specials: specials.length > 0 ? specials : undefined,
+    senses: senses.length > 0 ? senses : undefined,
     skills,
     lores,
     weaponDisplay: weaponDisplayName,

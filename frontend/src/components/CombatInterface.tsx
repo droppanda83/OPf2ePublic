@@ -1,16 +1,19 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import './CombatInterface.css';
 import BattleGrid from './BattleGrid';
 import CreaturePanel from './CreaturePanel';
 import ActionPanel from './ActionPanel';
 import GameLog from './GameLog';
+import GMChatPanel from './GMChatPanel';
 import SaveLoadModal from './SaveLoadModal';
 import { CreatureStatsModal } from './CreatureStatsModal';
 import { PathbuilderUploadModal } from './PathbuilderUploadModal';
 import { CharacterSheetModal } from './CharacterSheetModal';
-import { computeMovementCostMap } from '../utils/movement';
-import type { Creature } from '../../../shared/types';
+import { LevelUpWizard } from './LevelUpWizard';
+import { computeMovementCostMap, getEffectiveSpeed } from '../utils/movement';
+import { useBattleAnimation, type BattleAnimationRequest } from './BattleAnimationOverlay';
+import type { Creature, GameState, GroundObject, GMSession, CampaignPreferences } from '../../../shared/types';
 import type { Difficulty } from '../../../shared/encounterBuilder';
 
 // Error Boundary
@@ -66,7 +69,7 @@ export interface MovementInfo {
 
 export interface GameUIState {
   gameId: string | null;
-  gameState: any;
+  gameState: GameState | null;
   currentCreatureId: string | null;
   selectedTarget: string | null;
   loading: boolean;
@@ -74,7 +77,7 @@ export interface GameUIState {
   actionPoints: number;
 }
 
-type ReactionPromptType = 'reactive-strike' | 'shield-block';
+type ReactionPromptType = 'reactive-strike' | 'shield-block' | 'ready-action';
 
 interface ReactionPrompt {
   id: string;
@@ -86,18 +89,21 @@ interface ReactionPrompt {
   triggerType?: string;
   triggeringActionName?: string;
   triggeringCreatureName?: string;
+  readiedActionId?: string;
   amount?: number;
 }
 
 interface CombatInterfaceProps {
   initialCreatures?: Creature[];
   difficulty?: Difficulty;
+  campaignPreferences?: CampaignPreferences;
   onReturnToLanding?: () => void;
 }
 
 const CombatInterface: React.FC<CombatInterfaceProps> = ({
   initialCreatures,
   difficulty = 'moderate',
+  campaignPreferences,
   onReturnToLanding
 }) => {
   console.log('🎮 CombatInterface component rendering', { hasInitialCreatures: !!initialCreatures, difficulty });
@@ -122,6 +128,9 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
   const [modalLoading, setModalLoading] = useState(false);
   const [pathbuilderModalOpen, setPathbuilderModalOpen] = useState(false);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [updatingModel, setUpdatingModel] = useState(false);
   const [returnConfirmOpen, setReturnConfirmOpen] = useState(false);
   const [importWarningOpen, setImportWarningOpen] = useState(false);
   const [reactionQueue, setReactionQueue] = useState<ReactionPrompt[]>([]);
@@ -129,6 +138,56 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
   const [pickupDestinationModalOpen, setPickupDestinationModalOpen] = useState(false);
   const [pendingPickupAction, setPendingPickupAction] = useState<any>(null);
   const [heroPointSpend, setHeroPointSpend] = useState(0);
+  const [combatResult, setCombatResult] = useState<'victory' | 'defeat' | null>(null);
+  const [gmSession, setGMSession] = useState<GMSession | null>(null);
+  const [levelUpCreature, setLevelUpCreature] = useState<Creature | null>(null);
+  const [levelUpNewLevel, setLevelUpNewLevel] = useState<number>(0);
+  const [pendingLevelUps, setPendingLevelUps] = useState<{ id: string; name: string; newLevel: number }[]>([]);
+
+  // Token usage tracking (displayed in header)
+  const [tokenUsage, setTokenUsage] = useState<{ promptTokens: number; completionTokens: number; totalTokens: number; requestCount: number } | null>(null);
+
+  const fetchTokenUsage = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/ai/token-usage`);
+      setTokenUsage(res.data);
+    } catch { /* non-critical */ }
+  }, []);
+
+  // Poll token usage every 10s
+  useEffect(() => {
+    fetchTokenUsage();
+    const interval = setInterval(fetchTokenUsage, 10000);
+    return () => clearInterval(interval);
+  }, [fetchTokenUsage]);
+
+  // Refresh token usage when gmSession chat history changes
+  useEffect(() => {
+    fetchTokenUsage();
+  }, [gmSession?.chatHistory?.length, fetchTokenUsage]);
+
+  // GM session initialization loading state
+  const [gmInitializing, setGmInitializing] = useState(false);
+  const [gmInitStatus, setGmInitStatus] = useState<string>('');
+
+  // Exploration movement animation state
+  const [explorationAnimating, setExplorationAnimating] = useState(false);
+  const [positionOverrides, setPositionOverrides] = useState<Map<string, { x: number; y: number }>>(new Map());
+  const animationRef = useRef<number | null>(null);
+
+  // NPC turn step-by-step replay ref
+  const npcReplayRef = useRef<number | null>(null);
+
+  // Battle animation system (action text → dice roll → hit/miss → damage)
+  const { playBattleAnimation } = useBattleAnimation();
+
+  // Cleanup animation timers on unmount
+  useEffect(() => {
+    return () => {
+      if (npcReplayRef.current) clearTimeout(npcReplayRef.current);
+      if (animationRef.current) clearTimeout(animationRef.current);
+    };
+  }, []);
 
   const movementInfo = useMemo<MovementInfo | null>(() => {
     if (!uiState.gameState || !selectedAction || !selectedAction.movementType) {
@@ -154,11 +213,11 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
     }
 
     // Calculate movement range based on action's range property
-    // If range is 0 or not set, use creature's speed
+    // If range is 0 or not set, use creature's speed (with armor penalty)
     // Otherwise use the action's specified range (e.g., Step has range: 1)
     const maxDistance = (selectedAction.range && selectedAction.range > 0) 
       ? selectedAction.range 
-      : currentCreature.speed / 5;
+      : getEffectiveSpeed(currentCreature) / 5;
     const isProne = currentCreature.conditions?.some((c: any) => c.name === 'prone') ?? false;
     const terrainCostMultiplier = isProne ? { difficult: 4 } : undefined;
     const occupiedPositions: Set<string> = new Set(
@@ -198,6 +257,300 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
     }
   }, [uiState.gameState, uiState.currentCreatureId, heroPointSpend]);
 
+  useEffect(() => {
+    if (!settingsMenuOpen || !uiState.gameId || !gmSession) return;
+
+    const loadModels = async () => {
+      try {
+        const response = await axios.get(`${API_BASE}/ai/models`);
+        const models: string[] = response.data?.models || [];
+        const currentModel: string = response.data?.currentModel || '';
+        setAvailableModels(models);
+        setSelectedModel(gmSession.campaignPreferences.aiModel || currentModel || models[0] || 'gpt-5');
+      } catch (error) {
+        console.warn('⚠️ Could not load AI model list:', error);
+        const fallback = ['gpt-5', 'gpt-5-mini', 'gpt-4.1', 'gpt-4o', 'claude-sonnet-4-20250514', 'gemini-2.5-flash', 'deepseek-chat', 'deepseek-reasoner'];
+        setAvailableModels(fallback);
+        setSelectedModel(gmSession.campaignPreferences.aiModel || 'gpt-5');
+      }
+    };
+
+    loadModels();
+  }, [settingsMenuOpen, uiState.gameId, gmSession]);
+
+  // Detect combat end: all players dead or all enemies dead
+  useEffect(() => {
+    if (!uiState.gameState?.creatures || combatResult) return;
+    const creatures = uiState.gameState.creatures;
+    const players = creatures.filter((c: Creature) => c.type === 'player');
+    const enemies = creatures.filter((c: Creature) => c.type === 'creature');
+    if (players.length === 0 || enemies.length === 0) return;
+    const allPlayersDead = players.every((c: Creature) => c.currentHealth <= 0 || c.dead);
+    const allEnemiesDead = enemies.every((c: Creature) => c.currentHealth <= 0 || c.dead);
+    if (allEnemiesDead) {
+      setCombatResult('victory');
+    } else if (allPlayersDead) {
+      setCombatResult('defeat');
+    }
+  }, [uiState.gameState?.creatures, combatResult]);
+
+  // Track which creature ID we've already fired an AI turn for, to prevent double-fires
+  const aiTurnFiredRef = React.useRef<string | null>(null);
+  const aiTurnInFlightRef = React.useRef(false);
+
+  // Automatically execute AI turn when it's an NPC's turn
+  useEffect(() => {
+    if (!uiState.gameId || !uiState.gameState || !uiState.currentCreatureId) return;
+    
+    // Don't fire AI turns while a previous one is still in-flight (ref avoids dep-array re-trigger)
+    if (aiTurnInFlightRef.current) return;
+    
+    // Don't auto-execute AI turns during exploration phase — only during combat
+    const phase = gmSession?.currentPhase;
+    if (phase && phase !== 'combat') return;
+    
+    const currentCreature = uiState.gameState.creatures.find(
+      (c: Creature) => c.id === uiState.currentCreatureId
+    );
+    
+    // Only auto-execute for NPC/creature types (not player)
+    if (!currentCreature || currentCreature.type === 'player') {
+      aiTurnFiredRef.current = null; // Reset guard when it's a player's turn
+      return;
+    }
+
+    // Skip dead creatures — advance turn instead
+    if (currentCreature.currentHealth <= 0 || currentCreature.dead) {
+      console.log('🤖 Skipping dead creature:', currentCreature.name);
+      axios.post(`${API_BASE}/game/${uiState.gameId}/end-turn`, {}, { timeout: 5000 })
+        .then(recovery => {
+          const recoveredState = recovery.data.gameState || recovery.data;
+          const nextId = recoveredState.currentRound.turnOrder[recoveredState.currentRound.currentTurnIndex];
+          const ap = typeof recovery.data.actionPoints === 'number' ? recovery.data.actionPoints : 3;
+          setUiState(prev => ({
+            ...prev,
+            gameState: recoveredState,
+            currentCreatureId: nextId,
+            loading: false,
+            actionPoints: ap,
+          }));
+        })
+        .catch(err => console.error('Failed to skip dead creature turn:', err));
+      return;
+    }
+
+    // Prevent duplicate AI turn requests for the same creature+round+turnIndex
+    const turnKey = `${currentCreature.id}-${uiState.gameState.currentRound?.number ?? 0}-${uiState.gameState.currentRound?.currentTurnIndex ?? 0}`;
+    if (aiTurnFiredRef.current === turnKey) return;
+    aiTurnFiredRef.current = turnKey;
+    
+    console.log('🤖 AI turn detected for:', currentCreature.name);
+    
+    let cancelled = false;
+    const executeAITurn = async () => {
+      aiTurnInFlightRef.current = true;
+      setUiState(prev => ({ ...prev, loading: true }));
+      try {
+        const response = await axios.post(
+          `${API_BASE}/game/${uiState.gameId}/ai-turn`,
+          {},
+          { timeout: 35000 } // 35s frontend timeout — generous to cover AI provider latency
+        );
+        if (cancelled) { aiTurnInFlightRef.current = false; return; }
+        aiTurnInFlightRef.current = false;
+        const newGameState = response.data.gameState || response.data;
+        const executionResults: any[] = response.data.executionResults || [];
+        const nextCreatureId = newGameState.currentRound.turnOrder[
+          newGameState.currentRound.currentTurnIndex
+        ];
+        const nextAP = typeof response.data.actionPoints === 'number'
+          ? response.data.actionPoints
+          : 3;
+        
+        console.log('🤖 AI turn completed. Actions:', executionResults.map((r: any) => `${r.planned?.action?.actionId}: ${r.result?.success ? '✅' : '❌'} ${r.result?.message || ''}`));
+
+        // Step-by-step replay of NPC actions
+        const successfulSteps = executionResults.filter((r: any) => r.result?.success && r.stateSnapshot);
+        
+        if (successfulSteps.length > 0) {
+          // Replay each action step-by-step with delays and battle animations
+          const STEP_DELAY = 800; // ms between each action step
+          const MOVE_ANIM_DELAY = 400; // extra time for movement animation
+
+          const replayAllSteps = async () => {
+            for (let stepIdx = 0; stepIdx < successfulSteps.length; stepIdx++) {
+              if (cancelled) break;
+
+              const step = successfulSteps[stepIdx];
+              const actionId = step.planned?.action?.actionId || 'action';
+              const actionMsg = step.result?.message || actionId;
+              const isMovement = ['stride', 'move', 'step'].includes(actionId);
+              const details = step.result?.details;
+
+              // ─── Battle animation for NPC attacks ──────────────
+              if (details && typeof details.d20 === 'number' && !isMovement) {
+                const targetId = step.planned?.action?.targetId;
+                const targetCreature = targetId
+                  ? (uiState.gameState?.creatures?.find((c: Creature) => c.id === targetId))
+                  : null;
+
+                const animRequest: BattleAnimationRequest = {
+                  actorName: currentCreature.name,
+                  actionDescription: step.planned?.action?.actionId
+                    ? step.planned.action.actionId.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+                    : 'Attack',
+                  targetName: targetCreature?.name || details.targetName,
+                  attackRoll: {
+                    d20: details.d20,
+                    bonus: details.bonus ?? 0,
+                    total: details.total ?? (details.d20 + (details.bonus ?? 0)),
+                    result: details.result as any,
+                  },
+                };
+
+                if (details.damage && (details.result === 'success' || details.result === 'critical-success')) {
+                  animRequest.damageRoll = {
+                    dice: details.damage.dice ?? { sides: 6, results: [] },
+                    weaponName: details.damage.weaponName || 'Attack',
+                    appliedDamage: details.damage.appliedDamage ?? details.damage.total ?? 0,
+                    damageType: details.damage.damageType,
+                    isCriticalHit: details.result === 'critical-success',
+                  };
+                }
+
+                try {
+                  await playBattleAnimation(animRequest);
+                } catch (e) {
+                  console.warn('⚔️ NPC battle animation error (non-blocking):', e);
+                }
+              }
+
+              // Apply creature position/HP changes from snapshot
+            if (step.stateSnapshot?.creatures) {
+              const overrides = new Map<string, { x: number; y: number }>();
+              const snapshot = step.stateSnapshot.creatures;
+
+              // Update positions via overrides for smooth animation
+              for (const sc of snapshot) {
+                overrides.set(sc.id, { x: sc.positions.x, y: sc.positions.y });
+              }
+              setPositionOverrides(overrides);
+
+              // Also update HP/conditions in gameState immediately
+              setUiState(prev => {
+                if (!prev.gameState) return prev;
+                const updatedCreatures = prev.gameState.creatures.map((c: Creature) => {
+                  const snap = snapshot.find((s: any) => s.id === c.id);
+                  if (snap) {
+                    return {
+                      ...c,
+                      currentHealth: snap.currentHealth,
+                      conditions: snap.conditions,
+                      dead: snap.dead,
+                    };
+                  }
+                  return c;
+                });
+                return {
+                  ...prev,
+                  gameState: {
+                    ...prev.gameState,
+                    creatures: updatedCreatures,
+                    log: [...(prev.gameState.log || []), ...(step.stateSnapshot?.log || [])],
+                  },
+                };
+              });
+            }
+
+              // Wait for the step delay
+              const stepDelay = isMovement ? STEP_DELAY + MOVE_ANIM_DELAY : STEP_DELAY;
+              await new Promise<void>(r => {
+                npcReplayRef.current = window.setTimeout(r, stepDelay);
+              });
+            }
+          };
+
+          const replayWithTimeout = async () => {
+            const REPLAY_TIMEOUT = 45000; // 45s max for entire NPC replay
+            const timeout = new Promise<void>((resolve) => {
+              setTimeout(() => {
+                console.warn('🤖 NPC replay safety timeout — applying final state');
+                resolve();
+              }, REPLAY_TIMEOUT);
+            });
+            await Promise.race([replayAllSteps(), timeout]);
+
+            // Ensure final state is always applied
+            setPositionOverrides(new Map());
+            setUiState(prev => ({
+              ...prev,
+              gameState: newGameState,
+              currentCreatureId: nextCreatureId,
+              loading: false,
+              actionPoints: nextAP,
+              selectedTarget: null
+            }));
+            if (newGameState?.gmSession) {
+              setGMSession(newGameState.gmSession);
+            }
+            setSelectedAction(null);
+          };
+
+          replayWithTimeout();
+        } else {
+          // No steps to replay — apply immediately (fallback)
+          setUiState(prev => ({
+            ...prev,
+            gameState: newGameState,
+            currentCreatureId: nextCreatureId,
+            loading: false,
+            actionPoints: nextAP,
+            selectedTarget: null
+          }));
+          if (newGameState?.gmSession) {
+            setGMSession(newGameState.gmSession);
+          }
+          setSelectedAction(null);
+        }
+      } catch (error: any) {
+        if (cancelled) { aiTurnInFlightRef.current = false; return; }
+        console.error('❌ AI turn error:', error);
+        aiTurnInFlightRef.current = false;
+        // On error/timeout, try to force-end the turn so the game doesn't hang
+        try {
+          const recovery = await axios.post(`${API_BASE}/game/${uiState.gameId}/end-turn`, {}, { timeout: 5000 });
+          const recoveredState = recovery.data.gameState || recovery.data;
+          const nextId = recoveredState.currentRound.turnOrder[recoveredState.currentRound.currentTurnIndex];
+          setUiState(prev => ({
+            ...prev,
+            gameState: recoveredState,
+            currentCreatureId: nextId,
+            loading: false,
+            actionPoints: 3,
+            error: `AI turn failed for ${currentCreature.name} — skipped. (${error.message || 'timeout'})`
+          }));
+        } catch {
+          setUiState(prev => ({
+            ...prev,
+            loading: false,
+            error: `AI turn failed: ${error.message || 'Unknown error'}`
+          }));
+        }
+      }
+    };
+    
+    // Small delay to let state settle and show the turn banner
+    const timer = setTimeout(() => {
+      if (!cancelled) executeAITurn();
+    }, 600);
+    
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uiState.gameId, uiState.currentCreatureId, gmSession?.currentPhase]);
+
   // Monitor state changes
   useEffect(() => {
     console.log('📊 UI State changed:', {
@@ -218,7 +571,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
 
   // Initialize game
   const startNewGame = async () => {
-    console.log('🎮 Start new game clicked', { hasInitialCreatures: !!initialCreatures, difficulty });
+    console.log('🎮 Start new game clicked', { hasInitialCreatures: !!initialCreatures, difficulty, isCampaign: !!campaignPreferences });
     setUiState(prev => ({ ...prev, loading: true, error: null }));
     try {
       // Determine party level from imported characters (average, default 1)
@@ -227,17 +580,27 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
         : 1;
       const partySize = initialCreatures?.length || 1;
 
-      console.log(`📡 Fetching ${difficulty} encounter for party level ${partyLevel}, size ${partySize}`);
-      
-      // Fetch encounter from bestiary API
-      const encounterResponse = await axios.get(`${API_BASE}/bestiary/encounter`, {
-        params: { difficulty, partyLevel, partySize }
-      });
-      const encounter = encounterResponse.data;
-      console.log('🐉 Encounter generated:', encounter.description);
+      let encounterCreatures: any[] = [];
+
+      // In campaign mode, don't auto-generate enemies — start with players only
+      // In encounter mode, generate enemies from the bestiary
+      const isEncounterMode = !campaignPreferences || campaignPreferences.mode === 'encounter';
+      if (isEncounterMode) {
+        console.log(`📡 Fetching ${difficulty} encounter for party level ${partyLevel}, size ${partySize}`);
+        
+        // Fetch encounter from bestiary API
+        const encounterResponse = await axios.get(`${API_BASE}/bestiary/encounter`, {
+          params: { difficulty, partyLevel, partySize }
+        });
+        const encounter = encounterResponse.data;
+        console.log('🐉 Encounter generated:', encounter.description);
+        encounterCreatures = encounter.creatures;
+      } else {
+        console.log('📜 Campaign mode — starting without enemies (exploration phase)');
+      }
 
       console.log('📡 Sending game create request to', `${API_BASE}/game/create`);
-      console.log('🎭 Team assignment: players =', initialCreatures?.length || 0, ', creatures =', encounter.creatures.length);
+      console.log('🎭 Team assignment: players =', initialCreatures?.length || 0, ', creatures =', encounterCreatures.length);
       
       // Log what we're about to send
       console.log(`[startNewGame] ===== SENDING TO BACKEND =====`);
@@ -262,11 +625,25 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
       
       const response = await axios.post(`${API_BASE}/game/create`, {
         players: initialCreatures || [],  // Imported characters go on player team
-        creatures: encounter.creatures,   // Bestiary-generated enemies
-        mapSize: 20
+        creatures: encounterCreatures,    // Bestiary-generated enemies (empty in campaign mode)
+        mapSize: 20,
+        mapTheme: campaignPreferences?.mapTheme || undefined,
+        mapSubTheme: campaignPreferences?.mapSubTheme || undefined,
+        aiModel: campaignPreferences?.aiModel || undefined,
       });
 
       console.log('✅ Game created successfully:', response.data);
+      console.log('🗺️ [MAP DEBUG] Response map data:', {
+        hasMap: !!response.data.map,
+        width: response.data.map?.width,
+        height: response.data.map?.height,
+        hasTiles: !!response.data.map?.tiles,
+        tileRows: response.data.map?.tiles?.length || 0,
+        overlayCount: response.data.map?.overlays?.length || 0,
+        procedural: response.data.map?.procedural,
+        mapTheme: response.data.map?.mapTheme,
+        mapSubTheme: response.data.map?.mapSubTheme,
+      });
       if (!response.data.id) {
         throw new Error('No game ID returned from server');
       }
@@ -305,6 +682,58 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
         loading: false,
         actionPoints: 3
       }));
+      // Sync GM session if present in game state
+      if (response.data.gmSession) {
+        setGMSession(response.data.gmSession);
+      }
+
+      // Auto-initialize GM session for campaigns (not encounter-only mode)
+      const isCampaignMode = campaignPreferences && campaignPreferences.mode !== 'encounter';
+      if (isCampaignMode && response.data.id) {
+        setGmInitializing(true);
+        setGmInitStatus('Generating world...');
+        try {
+          // Cycle through atmospheric status messages
+          const statusMessages = [
+            'Generating world...',
+            'Placing landmarks...',
+            'Populating the scene...',
+            'Summoning NPCs...',
+            'Writing the opening narration...',
+            'The adventure awaits...',
+          ];
+          let statusIdx = 0;
+          const statusInterval = setInterval(() => {
+            statusIdx = (statusIdx + 1) % statusMessages.length;
+            setGmInitStatus(statusMessages[statusIdx]);
+          }, 2500);
+
+          const gmRes = await axios.post(`${API_BASE}/game/${response.data.id}/gm/init`, {
+            preferences: campaignPreferences,
+          });
+          clearInterval(statusInterval);
+
+          if (gmRes.data.gmSession) {
+            setGMSession(gmRes.data.gmSession);
+          }
+          if (gmRes.data.gameState) {
+            setUiState(prev => ({
+              ...prev,
+              gameState: gmRes.data.gameState,
+            }));
+          }
+        } catch (gmError: any) {
+          console.warn('⚠️ GM session auto-init failed:', gmError);
+          const detail = gmError?.response?.data?.error || gmError?.message || 'Unknown error';
+          setUiState(prev => ({
+            ...prev,
+            error: `GM failed to initialize: ${detail}. You can retry via the GM Chat panel.`,
+          }));
+        } finally {
+          setGmInitializing(false);
+          setGmInitStatus('');
+        }
+      }
     } catch (error: any) {
       console.error('❌ Game creation error:', error);
       const errorMessage = error.response?.data?.error || error.message || 'Failed to create game';
@@ -404,9 +833,22 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
         payload.weaponId = action.weaponId;
       }
 
+      // Include spellId if present on the action (for Spellstrike)
+      if (action.spellId) {
+        payload.spellId = action.spellId;
+      }
+
       // Include pickupDestination for pick-up-weapon actions
       if (action.pickupDestination) {
         payload.pickupDestination = action.pickupDestination;
+      }
+
+      if (action.readyActionId) {
+        payload.readyActionId = action.readyActionId;
+      }
+
+      if (action.itemId) {
+        payload.itemId = action.itemId;
       }
 
       if (typeof heroPointsSpent === 'number') {
@@ -438,14 +880,105 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
       const newActionPoints = shouldConsumeAction
         ? uiState.actionPoints - action.cost
         : uiState.actionPoints;
-      
+
+      const newGameState = response.data.gameState || response.data;
+
+      // Animate player movement step-by-step along the path
+      const isMovement = action.movementType || ['stride', 'move', 'step'].includes(action.id);
+      if (isMovement && result?.success && newGameState?.creatures) {
+        const oldCreature = uiState.gameState?.creatures?.find((c: Creature) => c.id === actingCreatureId);
+        const newCreature = newGameState.creatures.find((c: Creature) => c.id === actingCreatureId);
+        if (oldCreature && newCreature &&
+            (oldCreature.positions.x !== newCreature.positions.x || oldCreature.positions.y !== newCreature.positions.y)) {
+          // Use backend path if available, otherwise fallback to direct glide
+          const path: { x: number; y: number }[] = result.path && result.path.length >= 2
+            ? result.path
+            : [{ x: oldCreature.positions.x, y: oldCreature.positions.y }, { x: newCreature.positions.x, y: newCreature.positions.y }];
+
+          const STEP_DELAY_MS = 120; // Per-tile step speed for combat movement
+
+          // Set override to starting position first
+          setPositionOverrides(new Map([[actingCreatureId, { x: path[0].x, y: path[0].y }]]));
+
+          await new Promise<void>(resolve => {
+            let stepIndex = 1;
+            const animateStep = () => {
+              if (stepIndex >= path.length) {
+                setPositionOverrides(new Map());
+                resolve();
+                return;
+              }
+              const pos = path[stepIndex];
+              setPositionOverrides(new Map([[actingCreatureId, { x: pos.x, y: pos.y }]]));
+              stepIndex++;
+              animationRef.current = window.setTimeout(animateStep, STEP_DELAY_MS);
+            };
+            // Small initial delay to let CSS transition kick in
+            animationRef.current = window.setTimeout(animateStep, 30);
+          });
+        }
+      }
+
+      // ─── Battle Animation (action text → d20 → hit/miss → damage) ────
+      // Animate for the current player's actions
+      console.log('⚔️ Battle animation check:', {
+        isCurrentActor,
+        hasDetails: !!result?.details,
+        detailsKeys: result?.details ? Object.keys(result.details) : 'N/A',
+        d20: result?.details?.d20,
+        resultObj: result?.details,
+      });
+      if (isCurrentActor && result?.details) {
+        const details = result.details;
+        if (typeof details.d20 === 'number') {
+          // Look up actor and target names
+          const actorCreature = uiState.gameState?.creatures?.find((c: Creature) => c.id === actingCreatureId);
+          const targetCreature = payload.targetId
+            ? uiState.gameState?.creatures?.find((c: Creature) => c.id === payload.targetId)
+            : null;
+
+          const animRequest: BattleAnimationRequest = {
+            actorName: actorCreature?.name || 'Unknown',
+            actionDescription: action.name || 'Attack',
+            targetName: targetCreature?.name,
+            attackRoll: {
+              d20: details.d20,
+              bonus: details.bonus ?? 0,
+              total: details.total ?? (details.d20 + (details.bonus ?? 0)),
+              result: details.result as any,
+            },
+          };
+
+          // Add damage info if hit
+          if (details.damage && (details.result === 'success' || details.result === 'critical-success')) {
+            animRequest.damageRoll = {
+              dice: details.damage.dice ?? { sides: 6, results: [] },
+              weaponName: details.damage.weaponName || action.name || 'Attack',
+              appliedDamage: details.damage.appliedDamage ?? details.damage.total ?? 0,
+              damageType: details.damage.damageType,
+              isCriticalHit: details.result === 'critical-success',
+            };
+          }
+
+          try {
+            await playBattleAnimation(animRequest);
+          } catch (e) {
+            console.warn('⚔️ Battle animation error (non-blocking):', e);
+          }
+        }
+      }
+
       setUiState(prev => ({
         ...prev,
-        gameState: response.data.gameState || response.data,
+        gameState: newGameState,
         loading: false,
         selectedTarget: result?.success === true ? null : prev.selectedTarget,
         actionPoints: newActionPoints
       }));
+      // Sync gmSession if returned in gameState (e.g. combat narration messages)
+      if (newGameState?.gmSession) {
+        setGMSession(newGameState.gmSession);
+      }
       if (isCurrentActor && result?.success === true) {
         setSelectedAction(null);
       }
@@ -453,17 +986,32 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
       const nextPrompts: ReactionPrompt[] = [];
       if (Array.isArray(reactionOpportunities) && reactionOpportunities.length > 0) {
         for (const opportunity of reactionOpportunities) {
-          nextPrompts.push({
-            id: `${Date.now()}-${Math.random()}`,
-            type: 'reactive-strike',
-            reactorId: opportunity.reactorId,
-            reactorName: opportunity.reactorName,
-            targetId: opportunity.targetId,
-            targetName: opportunity.targetName,
-            triggerType: opportunity.trigger,
-            triggeringActionName: opportunity.triggeringActionName,
-            triggeringCreatureName: opportunity.triggeringCreatureName
-          });
+          if (opportunity.type === 'ready-action') {
+            nextPrompts.push({
+              id: `${Date.now()}-${Math.random()}`,
+              type: 'ready-action',
+              reactorId: opportunity.reactorId,
+              reactorName: opportunity.reactorName,
+              targetId: opportunity.targetId,
+              targetName: opportunity.targetName,
+              triggerType: opportunity.trigger,
+              triggeringActionName: opportunity.triggeringActionName,
+              triggeringCreatureName: opportunity.triggeringCreatureName,
+              readiedActionId: opportunity.readiedActionId
+            });
+          } else {
+            nextPrompts.push({
+              id: `${Date.now()}-${Math.random()}`,
+              type: 'reactive-strike',
+              reactorId: opportunity.reactorId,
+              reactorName: opportunity.reactorName,
+              targetId: opportunity.targetId,
+              targetName: opportunity.targetName,
+              triggerType: opportunity.trigger,
+              triggeringActionName: opportunity.triggeringActionName,
+              triggeringCreatureName: opportunity.triggeringCreatureName
+            });
+          }
         }
       }
 
@@ -574,6 +1122,18 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
       return;
     }
 
+    if (reaction.type === 'ready-action') {
+      if (accept && reaction.reactorId) {
+        await executeAction({
+          id: 'execute-ready',
+          name: 'Execute Ready',
+          cost: 0,
+          requiresTarget: false
+        }, null, reaction.reactorId);
+      }
+      return;
+    }
+
     if (reaction.type === 'shield-block') {
       if (accept) {
         await executeAction({
@@ -639,6 +1199,10 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
         selectedTarget: null,
         error: null
       }));
+      // Sync GM session from loaded game state
+      if (loadedGameState.gmSession) {
+        setGMSession(loadedGameState.gmSession);
+      }
       setSelectedAction(null);
       setSaveLoadModal({ isOpen: false, mode: 'load' });
     } catch (error: any) {
@@ -667,12 +1231,17 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
         newGameState.currentRound.currentTurnIndex
       ];
       
+      // Use actual action points from backend (accounts for stunned, slowed, quickened)
+      const nextAP = typeof response.data.actionPoints === 'number'
+        ? response.data.actionPoints
+        : 3;
+      
       setUiState(prev => ({
         ...prev,
         gameState: newGameState,
         currentCreatureId: nextCreatureId,
         loading: false,
-        actionPoints: 3,
+        actionPoints: nextAP,
         selectedTarget: null
       }));
       setSelectedAction(null);
@@ -686,10 +1255,143 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
     }
   };
 
+  const handleResumeDelay = async (creatureId: string) => {
+    if (!uiState.gameId || !uiState.gameState) return;
+
+    setUiState(prev => ({ ...prev, loading: true }));
+    try {
+      const response = await axios.post(
+        `${API_BASE}/game/${uiState.gameId}/action`,
+        { creatureId, actionId: 'resume-delay' }
+      );
+
+      const newGameState = response.data.gameState || response.data;
+
+      setUiState(prev => ({
+        ...prev,
+        gameState: newGameState,
+        currentCreatureId: creatureId,
+        loading: false,
+        actionPoints: 3,
+        selectedTarget: null
+      }));
+      setSelectedAction(null);
+    } catch (error: any) {
+      console.error('❌ Resume delay error:', error);
+      setUiState(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Failed to resume delay'
+      }));
+    }
+  };
+
+  // ─── Exploration Movement ─────────────────────────────────
+  // Free movement for players during exploration phase (click-to-move, no action points)
+  const isExplorationPhase = !!gmSession && gmSession.currentPhase !== 'combat';
+  const explorationCreatureId = isExplorationPhase
+    ? uiState.gameState?.creatures?.find((c: Creature) => c.type === 'player')?.id || null
+    : null;
+
+  const handleExplorationMove = async (x: number, y: number) => {
+    if (!uiState.gameId || !explorationCreatureId || explorationAnimating) return;
+
+    try {
+      const response = await axios.post(
+        `${API_BASE}/game/${uiState.gameId}/exploration/move`,
+        { creatureId: explorationCreatureId, targetPosition: { x, y } }
+      );
+
+      if (response.data.success && response.data.path && response.data.path.length > 1) {
+        const path: { x: number; y: number }[] = response.data.path;
+        const finalGameState = response.data.gameState;
+
+        // Animate step-by-step along path
+        setExplorationAnimating(true);
+        const STEP_DELAY_MS = 200; // Slower walking speed
+
+        // Don't update gameState yet – let the visual animation play first
+        // Start from step 1 (step 0 is current position)
+        let stepIndex = 1;
+
+        const animateStep = () => {
+          if (stepIndex >= path.length) {
+            // Animation complete – set final game state and clear overrides
+            setPositionOverrides(new Map());
+            setExplorationAnimating(false);
+            setUiState(prev => ({
+              ...prev,
+              gameState: finalGameState,
+            }));
+            return;
+          }
+
+          const pos = path[stepIndex];
+          setPositionOverrides(new Map([[explorationCreatureId!, { x: pos.x, y: pos.y }]]));
+          stepIndex++;
+
+          animationRef.current = window.setTimeout(animateStep, STEP_DELAY_MS);
+        };
+
+        // Set first override position (current pos) to enable CSS transition
+        setPositionOverrides(new Map([[explorationCreatureId, { x: path[0].x, y: path[0].y }]]));
+        animationRef.current = window.setTimeout(animateStep, 50); // Small initial delay to apply transition
+      } else if (response.data.success) {
+        // No path or single step – just update immediately
+        setUiState(prev => ({
+          ...prev,
+          gameState: response.data.gameState,
+        }));
+      }
+    } catch (error: any) {
+      console.error('🚶 Exploration move failed:', error);
+      const errorMsg = error.response?.data?.error || error.message || 'Move failed';
+      setUiState(prev => ({
+        ...prev,
+        error: errorMsg,
+      }));
+    }
+  };
+
+  const handleUpdateAiModel = async () => {
+    if (!uiState.gameId || !gmSession || !selectedModel) return;
+
+    setUpdatingModel(true);
+    try {
+      const response = await axios.put(`${API_BASE}/game/${uiState.gameId}/gm/preferences`, {
+        aiModel: selectedModel,
+      });
+
+      // Also persist model preference locally for next session
+      localStorage.setItem('pf2e-preferred-ai-model', selectedModel);
+
+      setGMSession(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          campaignPreferences: {
+            ...prev.campaignPreferences,
+            ...(response.data?.preferences || {}),
+          },
+        };
+      });
+
+      setUiState(prev => ({ ...prev, error: null }));
+    } catch (error: any) {
+      console.error('❌ Failed to update AI model:', error);
+      setUiState(prev => ({
+        ...prev,
+        error: error.response?.data?.error || error.message || 'Failed to update AI model',
+      }));
+    } finally {
+      setUpdatingModel(false);
+    }
+  };
+
   const getCurrentCreature = () => {
     if (!uiState.gameState) return null;
     return uiState.gameState.creatures.find(
-      (c: any) => c.id === uiState.currentCreatureId
+      (c: Creature) => c.id === uiState.currentCreatureId
     );
   };
 
@@ -697,11 +1399,20 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
     <ErrorBoundary>
       <div className="combat-interface">
         <div className="combat-header">
-          <h1>⚔️ PF2e Tactical Combat</h1>
+          <div className="header-title-row">
+            <h1>{'⚔️ Algorithms Of Fate'}{campaignPreferences
+              ? (campaignPreferences.mode === 'encounter' ? ' — Encounter' : ` — ${campaignPreferences.campaignName || 'Campaign'}`)
+              : ''}</h1>
+            {tokenUsage && tokenUsage.totalTokens > 0 && (
+              <span className="header-token-badge" title={`Prompt: ${tokenUsage.promptTokens.toLocaleString()} | Completion: ${tokenUsage.completionTokens.toLocaleString()} | Requests: ${tokenUsage.requestCount}`}>
+                🪙 {tokenUsage.totalTokens.toLocaleString()}
+              </span>
+            )}
+          </div>
           <div className="header-buttons">
             {!uiState.gameId && (
               <button onClick={startNewGame} disabled={uiState.loading} className="btn-primary">
-                {uiState.loading ? 'Starting...' : 'Start New Combat'}
+                {uiState.loading ? 'Starting...' : campaignPreferences ? 'Start Campaign Session' : 'Start New Combat'}
               </button>
             )}
 
@@ -717,6 +1428,29 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                 </button>
                 {settingsMenuOpen && (
                   <div className="settings-dropdown-menu">
+                    {gmSession && (
+                      <div className="settings-menu-item" style={{ display: 'block', cursor: 'default' }}>
+                        <label style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>AI Model</label>
+                        <select
+                          value={selectedModel}
+                          onChange={(e) => setSelectedModel(e.target.value)}
+                          disabled={updatingModel || availableModels.length === 0}
+                          style={{ width: '100%', marginBottom: 6 }}
+                        >
+                          {availableModels.map((model) => (
+                            <option key={model} value={model}>{model}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={handleUpdateAiModel}
+                          disabled={updatingModel || !selectedModel}
+                          className="settings-menu-item"
+                          style={{ width: '100%', marginTop: 0 }}
+                        >
+                          {updatingModel ? 'Saving...' : 'Save AI Model'}
+                        </button>
+                      </div>
+                    )}
                     <button
                       onClick={() => {
                         setSaveLoadModal({ isOpen: true, mode: 'save' });
@@ -764,8 +1498,68 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
           </div>
         )}
 
+        {/* Loading Overlay for GM Session Initialization */}
+        {gmInitializing && (
+          <div style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            background: 'radial-gradient(ellipse at center, rgba(15, 10, 30, 0.95), rgba(5, 2, 15, 0.98))',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            gap: '24px',
+          }}>
+            <div style={{
+              fontSize: '64px',
+              animation: 'pulse 2s ease-in-out infinite',
+            }}>🎭</div>
+            <h2 style={{
+              color: '#e8d5b0',
+              fontSize: '28px',
+              fontFamily: 'Georgia, serif',
+              margin: 0,
+              textShadow: '0 2px 8px rgba(0,0,0,0.5)',
+            }}>{campaignPreferences?.campaignName || 'Your Adventure'}</h2>
+            <div style={{
+              color: '#a8956e',
+              fontSize: '16px',
+              fontStyle: 'italic',
+              transition: 'opacity 0.5s ease',
+              minHeight: '24px',
+            }}>{gmInitStatus}</div>
+            <div style={{
+              width: '200px',
+              height: '3px',
+              background: 'rgba(168,149,110,0.2)',
+              borderRadius: '2px',
+              overflow: 'hidden',
+              marginTop: '8px',
+            }}>
+              <div style={{
+                width: '40%',
+                height: '100%',
+                background: 'linear-gradient(90deg, transparent, #e8d5b0, transparent)',
+                borderRadius: '2px',
+                animation: 'loadingSlide 1.5s ease-in-out infinite',
+              }} />
+            </div>
+            <style>{`
+              @keyframes pulse {
+                0%, 100% { transform: scale(1); opacity: 0.8; }
+                50% { transform: scale(1.1); opacity: 1; }
+              }
+              @keyframes loadingSlide {
+                0% { transform: translateX(-200%); }
+                100% { transform: translateX(500%); }
+              }
+            `}</style>
+          </div>
+        )}
+
         {/* Debug Panel */}
-        {uiState.loading && (
+        {uiState.loading && !gmInitializing && (
           <div style={{ padding: '10px', background: '#333', color: '#0f0', fontSize: '12px', borderBottom: '1px solid #666' }}>
             ⏳ Loading... Waiting for server response...
           </div>
@@ -773,7 +1567,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
 
         {!uiState.gameState && !uiState.loading && !uiState.gameId && (
           <div style={{ padding: '20px', textAlign: 'center', color: '#ccc' }}>
-            <p>Click "Start New Combat" to begin an encounter</p>
+            <p>{campaignPreferences ? 'Click "Start Campaign Session" to begin' : 'Click "Start New Combat" to begin an encounter'}</p>
             <p style={{ fontSize: '12px', color: '#888' }}>
               State: gameId={uiState.gameId ? 'set' : 'null'} | gameState={uiState.gameState ? 'loaded' : 'null'}
             </p>
@@ -787,7 +1581,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                 creatures={uiState.gameState.creatures}
                 currentRound={uiState.gameState.currentRound}
                 onCreatureClick={(creatureId) => {
-                  const creature = uiState.gameState.creatures.find((c: any) => c.id === creatureId);
+                  const creature = uiState.gameState?.creatures.find((c: Creature) => c.id === creatureId);
                   if (creature) setSelectedCreatureForStats(creature);
                 }}
               />
@@ -802,7 +1596,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                   marginTop: '4px'
                 }}>
                   {uiState.gameState.creatures
-                    .filter((c: any) => c.type === 'player')
+                    .filter((c: Creature) => c.type === 'player')
                     .map((character: any) => (
                       <button
                         key={character.id}
@@ -865,19 +1659,120 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                 movementInfo={movementInfo}
                 onSelectTarget={(id) => setUiState(prev => ({ ...prev, selectedTarget: id }))}
                 onCreatureClick={(creatureId) => {
-                  const creature = uiState.gameState.creatures.find((c: any) => c.id === creatureId);
+                  const creature = uiState.gameState?.creatures.find((c: Creature) => c.id === creatureId);
                   if (creature) setSelectedCreatureForStats(creature);
                 }}
+                explorationMode={isExplorationPhase}
+                explorationCreatureId={explorationCreatureId}
+                onExplorationMove={handleExplorationMove}
+                positionOverrides={positionOverrides}
               />
             </div>
 
             <div className="right-panel">
-              <GameLog log={uiState.gameState?.log || []} />
+              <GMChatPanel
+                gameId={uiState.gameId}
+                log={uiState.gameState?.log || []}
+                gmSession={gmSession}
+                campaignPreferences={campaignPreferences}
+                onSessionUpdate={(session) => {
+                  setGMSession(session);
+                  // If GM session phase changed to combat, reset combat result and sync turn order
+                  if (session.currentPhase === 'combat' && combatResult) {
+                    setCombatResult(null);
+                  }
+                }}
+                onGameStateUpdate={(gameState) => {
+                  // Sync currentCreatureId from the new turn order (important after encounter start)
+                  const nextCreatureId = gameState.currentRound?.turnOrder?.[
+                    gameState.currentRound?.currentTurnIndex ?? 0
+                  ] ?? null;
+                  setUiState(prev => ({
+                    ...prev,
+                    gameState,
+                    currentCreatureId: nextCreatureId,
+                    actionPoints: 3,
+                  }));
+                  // Reset combat result when new encounter starts (new enemies appear)
+                  setCombatResult(null);
+                }}
+                onEncounterLevelUps={(levelUps, xpAward) => {
+                  console.log(`[CombatInterface] XP awarded: ${xpAward}, Level-ups:`, levelUps);
+                  if (levelUps.length > 0) {
+                    setPendingLevelUps(levelUps.map(lu => ({ id: lu.id, name: lu.name, newLevel: lu.newLevel })));
+                    // Start first level-up
+                    const first = levelUps[0];
+                    const creature = uiState.gameState?.creatures?.find((c: Creature) => c.id === first.id);
+                    if (creature) {
+                      setLevelUpCreature(creature);
+                      setLevelUpNewLevel(first.newLevel);
+                    }
+                  }
+                }}
+              />
             </div>
 
             <div className="bottom-panel">
+              {(() => {
+                const delayedCreatures = uiState.gameState?.creatures?.filter((c: Creature) => c.isDelaying) || [];
+                if (delayedCreatures.length === 0) return null;
+                return (
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'rgba(90, 70, 10, 0.25)',
+                    border: '1px solid rgba(200, 170, 40, 0.35)',
+                    borderRadius: '6px',
+                    marginBottom: '10px',
+                    color: '#f3e3a0'
+                  }}>
+                    <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>Delayed Creatures</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {delayedCreatures.map((creature: any) => (
+                        <button
+                          key={creature.id}
+                          onClick={() => handleResumeDelay(creature.id)}
+                          disabled={uiState.loading}
+                          style={{
+                            padding: '6px 10px',
+                            background: '#caa93a',
+                            color: '#0b1020',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '12px'
+                          }}
+                        >
+                          Act Now: {creature.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+              {isExplorationPhase && (
+                <div style={{
+                  padding: '10px 14px',
+                  background: 'rgba(30, 90, 50, 0.3)',
+                  border: '1px solid rgba(80, 200, 100, 0.35)',
+                  borderRadius: '6px',
+                  marginBottom: '10px',
+                  color: '#a8e6a0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                }}>
+                  <span style={{ fontSize: '20px' }}>🧭</span>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 700 }}>Exploration Mode</div>
+                    <div style={{ fontSize: '11px', opacity: 0.8 }}>
+                      Click any open tile to move your character. Talk to the GM to interact with NPCs.
+                    </div>
+                  </div>
+                </div>
+              )}
               <ActionPanel
-                currentCreature={getCurrentCreature()}
+                currentCreature={getCurrentCreature() as Creature}
                 selectedAction={selectedAction}
                 selectedTarget={uiState.selectedTarget}
                 movementInfo={movementInfo}
@@ -914,6 +1809,36 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
           creature={selectedCharacterForSheet}
           isOpen={!!selectedCharacterForSheet}
           onClose={() => setSelectedCharacterForSheet(null)}
+          onCreatureUpdate={(updatedCreature) => {
+            // Update creature in game state
+            if (uiState.gameState) {
+              const updatedCreatures = uiState.gameState.creatures.map((c: Creature) =>
+                c.id === updatedCreature.id ? updatedCreature : c
+              );
+              setUiState(prev => ({
+                ...prev,
+                gameState: prev.gameState ? { ...prev.gameState, creatures: updatedCreatures } : prev.gameState
+              }));
+              // Also update the selected character reference
+              setSelectedCharacterForSheet(updatedCreature);
+
+              // Sync image changes to backend so they survive round-trips
+              if (uiState.gameId) {
+                axios.patch(
+                  `/api/game/${uiState.gameId}/creature/${updatedCreature.id}/images`,
+                  {
+                    tokenImageUrl: updatedCreature.tokenImageUrl || null,
+                    portraitImageUrl: updatedCreature.portraitImageUrl || null,
+                  }
+                ).catch(err => console.warn('Failed to sync creature images to backend:', err));
+              }
+            }
+          }}
+          onLevelUp={(creature) => {
+            setSelectedCharacterForSheet(null);
+            setLevelUpCreature(creature);
+            setLevelUpNewLevel(creature.level + 1);
+          }}
         />
 
         <PathbuilderUploadModal
@@ -922,6 +1847,244 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
           onCharacterImported={handlePathbuilderImport}
           multiple={true}
         />
+
+        {/* ─── Level-Up Wizard Modal ─── */}
+        {levelUpCreature && levelUpNewLevel > 0 && uiState.gameId && (
+          <LevelUpWizard
+            creature={levelUpCreature}
+            newLevel={levelUpNewLevel}
+            gameId={uiState.gameId}
+            onComplete={(updatedCreature) => {
+              // Update creature in game state
+              if (uiState.gameState) {
+                const updatedCreatures = uiState.gameState.creatures.map((c: Creature) =>
+                  c.id === updatedCreature.id ? updatedCreature : c
+                );
+                setUiState(prev => ({
+                  ...prev,
+                  gameState: prev.gameState ? { ...prev.gameState, creatures: updatedCreatures } : prev.gameState
+                }));
+              }
+              // Close wizard
+              setLevelUpCreature(null);
+              setLevelUpNewLevel(0);
+              // Check for more pending level-ups
+              const remaining = pendingLevelUps.filter(lu => lu.id !== updatedCreature.id);
+              setPendingLevelUps(remaining);
+              if (remaining.length > 0) {
+                const next = remaining[0];
+                const nextCreature = uiState.gameState?.creatures?.find((c: Creature) => c.id === next.id);
+                if (nextCreature) {
+                  setLevelUpCreature(nextCreature);
+                  setLevelUpNewLevel(next.newLevel);
+                }
+              }
+            }}
+            onCancel={() => {
+              setLevelUpCreature(null);
+              setLevelUpNewLevel(0);
+              setPendingLevelUps([]);
+            }}
+          />
+        )}
+
+        {/* ─── Encounter Result Overlay ─── */}
+        {combatResult && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: combatResult === 'victory'
+              ? 'radial-gradient(ellipse at center, rgba(34, 87, 34, 0.92) 0%, rgba(0, 0, 0, 0.95) 100%)'
+              : 'radial-gradient(ellipse at center, rgba(100, 20, 20, 0.92) 0%, rgba(0, 0, 0, 0.95) 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10001,
+            animation: 'fadeIn 0.6s ease-out'
+          }}>
+            <div style={{
+              textAlign: 'center',
+              color: '#fff',
+              fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
+              maxWidth: '480px',
+              padding: '40px'
+            }}>
+              <div style={{ fontSize: '4em', marginBottom: '16px' }}>
+                {combatResult === 'victory' ? '🏆' : '💀'}
+              </div>
+              <h1 style={{
+                fontSize: '2.4em',
+                margin: '0 0 12px 0',
+                color: combatResult === 'victory' ? '#ffcc00' : '#ff6b6b',
+                textShadow: `0 0 24px ${combatResult === 'victory' ? 'rgba(255, 204, 0, 0.5)' : 'rgba(255, 107, 107, 0.5)'}`,
+                fontWeight: 800,
+                letterSpacing: '2px',
+                textTransform: 'uppercase'
+              }}>
+                {combatResult === 'victory' ? 'Victory!' : 'Defeat'}
+              </h1>
+              <p style={{
+                fontSize: '1.1em',
+                color: '#ccc',
+                margin: '0 0 36px 0',
+                lineHeight: 1.5
+              }}>
+                {combatResult === 'victory'
+                  ? 'All enemies have been vanquished. Your party stands triumphant!'
+                  : 'Your party has fallen in battle. The enemies prevail...'}
+              </p>
+              <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                {/* Continue Campaign — only in campaign mode */}
+                {campaignPreferences?.mode === 'campaign' && (
+                  <button
+                    onClick={async () => {
+                      if (!uiState.gameId) return;
+                      try {
+                        const res = await axios.post(
+                          `${API_BASE}/game/${uiState.gameId}/gm/encounter/conclusion`,
+                          { victory: combatResult === 'victory' }
+                        );
+                        // Update GM session
+                        if (res.data.gmSession) {
+                          setGMSession(res.data.gmSession);
+                        }
+                        // Update full game state (with restored NPCs, map, etc.)
+                        if (res.data.gameState) {
+                          const gs = res.data.gameState;
+                          const nextCreatureId = gs.currentRound?.turnOrder?.[
+                            gs.currentRound?.currentTurnIndex ?? 0
+                          ] ?? null;
+                          setUiState(prev => ({
+                            ...prev,
+                            gameState: gs,
+                            currentCreatureId: nextCreatureId,
+                            actionPoints: 3,
+                            selectedTarget: null,
+                            loading: false,
+                          }));
+                        }
+                        // Handle level-ups
+                        if (res.data.levelUps?.length > 0) {
+                          setPendingLevelUps(res.data.levelUps.map((lu: any) => ({ id: lu.id, name: lu.name, newLevel: lu.newLevel })));
+                          const first = res.data.levelUps[0];
+                          const creature = (res.data.gameState || uiState.gameState)?.creatures?.find((c: Creature) => c.id === first.id);
+                          if (creature) {
+                            setLevelUpCreature(creature);
+                            setLevelUpNewLevel(first.newLevel);
+                          }
+                        }
+                        // Dismiss overlay
+                        setCombatResult(null);
+                        if (res.data.restoredNPCs?.length > 0) {
+                          console.log(`🔄 Restored NPCs: ${res.data.restoredNPCs.map((n: any) => n.name).join(', ')}`);
+                        }
+                      } catch (error) {
+                        console.error('Failed to conclude encounter:', error);
+                      }
+                    }}
+                    style={{
+                      padding: '14px 32px',
+                      background: 'linear-gradient(135deg, #4fc3f7 0%, #29b6f6 100%)',
+                      color: '#000',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      fontSize: '1em',
+                      transition: 'all 0.3s ease',
+                      letterSpacing: '0.5px',
+                      boxShadow: '0 4px 16px rgba(79, 195, 247, 0.3)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 6px 20px rgba(79, 195, 247, 0.5)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 4px 16px rgba(79, 195, 247, 0.3)';
+                    }}
+                  >
+                    🗺️ Continue Exploring
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setCombatResult(null);
+                    setUiState({
+                      gameId: null,
+                      gameState: null,
+                      currentCreatureId: null,
+                      selectedTarget: null,
+                      loading: false,
+                      error: null,
+                      actionPoints: 3
+                    });
+                    // Re-trigger game creation with same creatures
+                    setTimeout(() => startNewGame(), 100);
+                  }}
+                  style={{
+                    padding: '14px 32px',
+                    background: 'rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    border: '2px solid rgba(255, 255, 255, 0.3)',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    fontSize: '1em',
+                    transition: 'all 0.3s ease',
+                    letterSpacing: '0.5px'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.25)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  🔄 Retry Encounter
+                </button>
+                <button
+                  onClick={() => {
+                    setCombatResult(null);
+                    if (onReturnToLanding) onReturnToLanding();
+                  }}
+                  style={{
+                    padding: '14px 32px',
+                    background: combatResult === 'victory'
+                      ? 'linear-gradient(135deg, #ffcc00 0%, #ffb500 100%)'
+                      : 'linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%)',
+                    color: '#000',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    fontSize: '1em',
+                    transition: 'all 0.3s ease',
+                    letterSpacing: '0.5px',
+                    boxShadow: `0 4px 16px ${combatResult === 'victory' ? 'rgba(255, 204, 0, 0.3)' : 'rgba(255, 107, 107, 0.3)'}`
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = `0 6px 20px ${combatResult === 'victory' ? 'rgba(255, 204, 0, 0.5)' : 'rgba(255, 107, 107, 0.5)'}`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = `0 4px 16px ${combatResult === 'victory' ? 'rgba(255, 204, 0, 0.3)' : 'rgba(255, 107, 107, 0.3)'}`;
+                  }}
+                >
+                  🏠 Return to Menu
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Return to Menu Confirmation Modal */}
         {returnConfirmOpen && (
@@ -1095,6 +2258,9 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                 <div><strong>Triggering creature:</strong> {activeReaction.triggeringCreatureName ?? 'Unknown'}</div>
                 <div><strong>Triggering action:</strong> {activeReaction.triggeringActionName ?? 'Unknown'}</div>
                 <div><strong>Trigger type:</strong> {activeReaction.triggerType ?? (activeReaction.type === 'shield-block' ? 'hit' : 'unknown')}</div>
+                {activeReaction.type === 'ready-action' && (
+                  <div><strong>Readied action:</strong> {activeReaction.readiedActionId ?? 'Unknown'}</div>
+                )}
                 {activeReaction.type === 'shield-block' && (
                   <div><strong>Incoming damage:</strong> {activeReaction.amount ?? 0}</div>
                 )}
@@ -1172,14 +2338,14 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                   }}
                   disabled={
                     (() => {
-                      const currentCreature = uiState.gameState?.creatures.find((c: any) => c.id === uiState.currentCreatureId);
+                      const currentCreature = uiState.gameState?.creatures.find((c: Creature) => c.id === uiState.currentCreatureId);
                       if (!currentCreature) return true;
                       const handsInUse = (currentCreature.weaponInventory || [])
                         .filter((s: any) => s.state === 'held' && !s.weapon?.isNatural)
                         .reduce((sum: number, s: any) => sum + (s.weapon?.hands || 1), 0);
                       // Find the ground object to get weapon hand requirement
                       const targetId = (pendingPickupAction as any).targetId || uiState.selectedTarget;
-                      const groundObj = uiState.gameState?.groundObjects?.find((g: any) => g.id === targetId);
+                      const groundObj = uiState.gameState?.groundObjects?.find((g: GroundObject) => g.id === targetId);
                       const handsNeeded = groundObj?.weapon?.hands || 1;
                       return handsInUse + handsNeeded > 2;
                     })()
@@ -1187,23 +2353,23 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                   style={{
                     padding: '12px 20px',
                     background: (() => {
-                      const currentCreature = uiState.gameState?.creatures.find((c: any) => c.id === uiState.currentCreatureId);
+                      const currentCreature = uiState.gameState?.creatures.find((c: Creature) => c.id === uiState.currentCreatureId);
                       if (!currentCreature) return '#555';
                       const handsInUse = (currentCreature.weaponInventory || [])
                         .filter((s: any) => s.state === 'held' && !s.weapon?.isNatural)
                         .reduce((sum: number, s: any) => sum + (s.weapon?.hands || 1), 0);
-                      const groundObj = uiState.gameState?.groundObjects?.find((g: any) => g.id === uiState.selectedTarget);
+                      const groundObj = uiState.gameState?.groundObjects?.find((g: GroundObject) => g.id === uiState.selectedTarget);
                       const handsNeeded = groundObj?.weapon?.hands || 1;
                       if (handsInUse + handsNeeded > 2) return '#555';
                       return '#4fc3f7';
                     })(),
                     color: (() => {
-                      const currentCreature = uiState.gameState?.creatures.find((c: any) => c.id === uiState.currentCreatureId);
+                      const currentCreature = uiState.gameState?.creatures.find((c: Creature) => c.id === uiState.currentCreatureId);
                       if (!currentCreature) return '#999';
                       const handsInUse = (currentCreature.weaponInventory || [])
                         .filter((s: any) => s.state === 'held' && !s.weapon?.isNatural)
                         .reduce((sum: number, s: any) => sum + (s.weapon?.hands || 1), 0);
-                      const groundObj = uiState.gameState?.groundObjects?.find((g: any) => g.id === uiState.selectedTarget);
+                      const groundObj = uiState.gameState?.groundObjects?.find((g: GroundObject) => g.id === uiState.selectedTarget);
                       const handsNeeded = groundObj?.weapon?.hands || 1;
                       if (handsInUse + handsNeeded > 2) return '#666';
                       return '#0b1020';
@@ -1218,13 +2384,13 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                 >
                   ⚔️ Wield
                   {(() => {
-                    const currentCreature = uiState.gameState?.creatures.find((c: any) => c.id === uiState.currentCreatureId);
+                    const currentCreature = uiState.gameState?.creatures.find((c: Creature) => c.id === uiState.currentCreatureId);
                     if (!currentCreature) return '';
                     const handsInUse = (currentCreature.weaponInventory || [])
                       .filter((s: any) => s.state === 'held' && !s.weapon?.isNatural)
                       .reduce((sum: number, s: any) => sum + (s.weapon?.hands || 1), 0);
                     const targetId = (pendingPickupAction as any).targetId || uiState.selectedTarget;
-                    const groundObj = uiState.gameState?.groundObjects?.find((g: any) => g.id === targetId);
+                    const groundObj = uiState.gameState?.groundObjects?.find((g: GroundObject) => g.id === targetId);
                     const handsNeeded = groundObj?.weapon?.hands || 1;
                     if (handsInUse + handsNeeded > 2) return ' (hands full)';
                     return '';

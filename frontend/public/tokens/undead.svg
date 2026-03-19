@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#212121" stroke="#0a0a0a" stroke-width="3"/>
+  <!-- Skull -->
+  <path d="M30 45 Q30 22 50 20 Q70 22 70 45 L70 55 Q70 62 60 65 L55 65 L55 72 L52 72 L52 65 L48 65 L48 72 L45 72 L45 65 L40 65 Q30 62 30 55 Z" fill="#e0e0e0" stroke="#9e9e9e" stroke-width="1.5"/>
+  <!-- Eye sockets -->
+  <ellipse cx="40" cy="42" rx="7" ry="8" fill="#212121"/>
+  <ellipse cx="60" cy="42" rx="7" ry="8" fill="#212121"/>
+  <!-- Eye glow -->
+  <circle cx="40" cy="42" r="3" fill="#f44336" opacity="0.8"/>
+  <circle cx="60" cy="42" r="3" fill="#f44336" opacity="0.8"/>
+  <!-- Nose -->
+  <path d="M48 52 L50 48 L52 52" fill="#212121"/>
+  <!-- Teeth -->
+  <path d="M40 60 L42 65 L44 60 L46 65 L48 60" stroke="#e0e0e0" stroke-width="1" fill="none"/>
+  <path d="M52 60 L54 65 L56 60 L58 65 L60 60" stroke="#e0e0e0" stroke-width="1" fill="none"/>
+</svg>

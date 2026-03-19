@@ -1,11 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import type { Creature } from '../../../shared/types';
+import { XP_PER_LEVEL } from '../../../shared/types';
+import { SPELL_CATALOG } from '../../../shared/spells';
+import { ARMOR_CATALOG } from '../../../shared/armor';
 import './CharacterSheetModal.css';
 
 interface CharacterSheetModalProps {
   creature: Creature | null;
   isOpen: boolean;
   onClose: () => void;
+  /** Optional callback to persist creature mutations (spell slot usage, preparation changes) */
+  onCreatureUpdate?: (updatedCreature: Creature) => void;
+  /** Optional callback to trigger level-up wizard for this creature */
+  onLevelUp?: (creature: Creature) => void;
 }
 
 type TabType = 'main' | 'skills' | 'spells' | 'combat' | 'feats';
@@ -13,11 +20,51 @@ type TabType = 'main' | 'skills' | 'spells' | 'combat' | 'feats';
 export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
   creature,
   isOpen,
-  onClose
+  onClose,
+  onCreatureUpdate,
+  onLevelUp,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('main');
+  const [editMode, setEditMode] = useState(false);
+  const tokenInputRef = useRef<HTMLInputElement>(null);
+  const portraitInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen || !creature) return null;
+
+  // ─── Edit helpers ────────────────────────────────
+  const canEdit = isPlayerCharacter && !!onCreatureUpdate;
+  const update = (patch: Partial<Creature>) => {
+    if (onCreatureUpdate) onCreatureUpdate({ ...creature, ...patch });
+  };
+
+  // ─── Image Upload Handlers ───────────────────────
+  const isPlayerCharacter = creature.type === 'player';
+  const canEditImages = isPlayerCharacter && !!onCreatureUpdate;
+
+  const handleImageUpload = (file: File, field: 'tokenImageUrl' | 'portraitImageUrl', maxSizeMB: number) => {
+    if (file.size > maxSizeMB * 1024 * 1024) {
+      alert(`Image must be under ${maxSizeMB}MB`);
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      if (dataUrl && onCreatureUpdate) {
+        onCreatureUpdate({ ...creature, [field]: dataUrl });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = (field: 'tokenImageUrl' | 'portraitImageUrl') => {
+    if (onCreatureUpdate) {
+      onCreatureUpdate({ ...creature, [field]: undefined });
+    }
+  };
 
   // Debug logging - ALWAYS log when modal is open
   console.log('[CharacterSheetModal] Modal opened with creature:', {
@@ -125,20 +172,128 @@ export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Character Sheet" onClick={onClose}>
       <div className="character-sheet-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="sheet-header">
-          <div>
-            <h2 className="sheet-name">{creature.name}</h2>
-            {creature.ancestry && (
-              <p className="sheet-subtitle">
-                {creature.ancestry} {creature.heritage && `(${creature.heritage})`}
-                {creature.characterClass && ` • ${creature.characterClass}`} • Level {creature.level}
-              </p>
-            )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* Clickable avatar area for player characters */}
+            <div
+              className={`sheet-avatar ${canEditImages ? 'editable' : ''}`}
+              role={canEditImages ? 'button' : undefined}
+              tabIndex={canEditImages ? 0 : undefined}
+              onClick={canEditImages ? () => portraitInputRef.current?.click() : undefined}
+              onKeyDown={canEditImages ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); portraitInputRef.current?.click(); } } : undefined}
+              title={canEditImages ? 'Click to upload portrait' : undefined}
+              aria-label={canEditImages ? 'Upload portrait' : undefined}
+              style={{
+                width: '56px',
+                height: creature.portraitImageUrl ? '75px' : '56px',
+                flexShrink: 0,
+                position: 'relative',
+                cursor: canEditImages ? 'pointer' : 'default',
+              }}
+            >
+              {creature.portraitImageUrl ? (
+                <img 
+                  src={creature.portraitImageUrl} 
+                  alt={creature.name}
+                  style={{
+                    width: '56px',
+                    height: '75px',
+                    borderRadius: '8px',
+                    objectFit: 'cover',
+                    border: '2px solid rgba(212, 175, 55, 0.5)',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
+                  }}
+                />
+              ) : creature.tokenImageUrl ? (
+                <img 
+                  src={creature.tokenImageUrl} 
+                  alt={creature.name}
+                  style={{
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    border: '2px solid rgba(212, 175, 55, 0.5)',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
+                  }}
+                />
+              ) : canEditImages ? (
+                <div style={{
+                  width: '56px',
+                  height: '75px',
+                  borderRadius: '8px',
+                  border: '2px dashed rgba(212, 175, 55, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '24px',
+                  color: 'rgba(212, 175, 55, 0.5)',
+                  background: 'rgba(0,0,0,0.2)',
+                }}>
+                  📷
+                </div>
+              ) : null}
+              {canEditImages && (creature.portraitImageUrl || creature.tokenImageUrl) && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: '-2px',
+                  right: '-2px',
+                  background: 'rgba(0,0,0,0.7)',
+                  borderRadius: '50%',
+                  width: '18px',
+                  height: '18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '10px',
+                  border: '1px solid rgba(212,175,55,0.5)',
+                }}>
+                  ✏️
+                </div>
+              )}
+            </div>
+            {/* Hidden file inputs */}
+            <input
+              ref={portraitInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleImageUpload(file, 'portraitImageUrl', 4);
+                e.target.value = '';
+              }}
+            />
+            <input
+              ref={tokenInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleImageUpload(file, 'tokenImageUrl', 2);
+                e.target.value = '';
+              }}
+            />
+            <div>
+              <h2 className="sheet-name">{creature.name}</h2>
+              {creature.ancestry && (
+                <p className="sheet-subtitle">
+                  {creature.ancestry} {creature.heritage && `(${creature.heritage})`}
+                  {creature.characterClass && ` • ${creature.characterClass}`} • Level {creature.level}
+                </p>
+              )}
+              {(creature.pronouns || creature.age || creature.height || creature.weight) && (
+                <p className="sheet-subtitle" style={{ fontSize: '12px', color: '#999', marginTop: '2px' }}>
+                  {[creature.pronouns, creature.age ? `Age ${creature.age}` : '', creature.height, creature.weight].filter(Boolean).join(' · ')}
+                </p>
+              )}
+            </div>
           </div>
-          <button className="close-button" onClick={onClose}>✕</button>
+          <button className="close-button" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
         {/* Tab Navigation */}
@@ -199,6 +354,114 @@ export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
                   <div className="stat-value">{formatBonus(creature.initiativeBonus || 0)}</div>
                 </div>
               </div>
+
+              {/* XP Progress Bar */}
+              {creature.type === 'player' && (
+                <div className="section xp-section">
+                  <h3 className="section-title">Experience Points</h3>
+                  <div className="xp-progress-container">
+                    <div className="xp-progress-label">
+                      <span>{creature.currentXP || 0} / {XP_PER_LEVEL} XP</span>
+                      <span>{Math.floor(((creature.currentXP || 0) / XP_PER_LEVEL) * 100)}%</span>
+                    </div>
+                    <div className="xp-progress-bar">
+                      <div
+                        className={`xp-progress-fill ${(creature.currentXP || 0) >= XP_PER_LEVEL ? 'xp-level-up' : ''}`}
+                        style={{ width: `${Math.min(100, ((creature.currentXP || 0) / XP_PER_LEVEL) * 100)}%` }}
+                      />
+                    </div>
+                    {(creature.currentXP || 0) >= XP_PER_LEVEL && onLevelUp && (
+                      <button
+                        className="level-up-badge"
+                        onClick={() => onLevelUp(creature)}
+                        style={{ marginTop: '8px', fontSize: '13px', padding: '6px 16px' }}
+                      >
+                        ⬆️ Level Up to {creature.level + 1}!
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Token & Portrait Image Management (player characters only) */}
+              {canEditImages && (
+                <div className="section image-manage-section">
+                  <h3 className="section-title">Character Art</h3>
+                  <div className="image-manage-row">
+                    {/* Battle Token */}
+                    <div className="image-manage-card">
+                      <label>Battle Token</label>
+                      <div
+                        className={`image-manage-preview token-shape ${creature.tokenImageUrl ? 'has-image' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => tokenInputRef.current?.click()}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tokenInputRef.current?.click(); } }}
+                        title="Click to upload battle token"
+                        aria-label="Upload battle token"
+                      >
+                        {creature.tokenImageUrl ? (
+                          <img src={creature.tokenImageUrl} alt="Token" />
+                        ) : (
+                          <div className="image-manage-placeholder">
+                            <span className="upload-icon">🎯</span>
+                            <span className="upload-text">Upload</span>
+                          </div>
+                        )}
+                      </div>
+                      {creature.tokenImageUrl && (
+                        <button
+                          className="image-remove-btn"
+                          onClick={(e) => { e.stopPropagation(); handleRemoveImage('tokenImageUrl'); }}
+                        >
+                          Remove
+                        </button>
+                      )}
+                      <span className="image-hint">Shown on grid (2MB max)</span>
+                    </div>
+
+                    {/* Portrait */}
+                    <div className="image-manage-card">
+                      <label>Portrait</label>
+                      <div
+                        className={`image-manage-preview portrait-shape ${creature.portraitImageUrl ? 'has-image' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => portraitInputRef.current?.click()}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); portraitInputRef.current?.click(); } }}
+                        title="Click to upload portrait"
+                        aria-label="Upload portrait"
+                      >
+                        {creature.portraitImageUrl ? (
+                          <img src={creature.portraitImageUrl} alt="Portrait" />
+                        ) : (
+                          <div className="image-manage-placeholder">
+                            <span className="upload-icon">🖼️</span>
+                            <span className="upload-text">Upload</span>
+                          </div>
+                        )}
+                      </div>
+                      {creature.portraitImageUrl && (
+                        <button
+                          className="image-remove-btn"
+                          onClick={(e) => { e.stopPropagation(); handleRemoveImage('portraitImageUrl'); }}
+                        >
+                          Remove
+                        </button>
+                      )}
+                      <span className="image-hint">Shown in sheets (4MB max)</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Description (GM Reference) */}
+              {creature.description && (
+                <div className="section">
+                  <h3 className="section-title">Description</h3>
+                  <p style={{ color: '#ccc', fontSize: '13px', whiteSpace: 'pre-wrap', lineHeight: '1.5', margin: 0 }}>{creature.description}</p>
+                </div>
+              )}
 
               {/* Abilities Grid */}
               <div className="section">
@@ -307,6 +570,7 @@ export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
           {/* Spells Tab */}
           {activeTab === 'spells' && (
             <div className="tab-pane">
+              {/* Focus Spells Section */}
               {creature.focusSpells && creature.focusSpells.length > 0 && (
                 <div style={{
                   background: 'rgba(100, 150, 200, 0.1)',
@@ -330,7 +594,7 @@ export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
                     paddingBottom: '6px',
                     borderBottom: '1px solid #444'
                   }}>
-                    Psi Cantrips & Focus Spells
+                    Focus Spells
                     {(creature.maxFocusPoints || 0) > 0 && (
                       <span style={{
                         fontSize: '12px',
@@ -423,59 +687,199 @@ export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
                   </div>
                 </div>
               )}
-              
+
+              {/* Spellcasters Section with Slot Tracking */}
               {creature.spellcasters && creature.spellcasters.length > 0 ? (
                 <div className="spellcasting-container">
-                  {creature.spellcasters.map((caster, casterIdx) => (
-                    <div key={casterIdx} className="spellcaster-section">
-                      <h4 className="spellcaster-header">
-                        {caster.tradition.charAt(0).toUpperCase() + caster.tradition.slice(1)} — {caster.castingType}
-                      </h4>
-                      {caster.spellDC && <div className="spell-dc">Spell DC: {caster.spellDC}</div>}
-                      
-                      {/* Organize spells by level */}
-                      {caster.castingType === 'innate' ? (
-                        // Innate spells: organized by usage
-                        <div className="innate-spells">
-                          {caster.spells.map((spell, spellIdx) => (
-                            <div key={spellIdx} className="spell-item innate">
-                              <span className="spell-name">{spell.name}</span>
-                              {spell.usage && <span className="spell-usage">({spell.usage})</span>}
-                            </div>
-                          ))}
+                  {creature.spellcasters.map((caster, casterIdx) => {
+                    const slotsUsed = creature.spellSlotsUsed || {};
+
+                    return (
+                      <div key={casterIdx} className="spellcaster-section">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                          <h4 className="spellcaster-header" style={{ margin: 0 }}>
+                            {caster.tradition.charAt(0).toUpperCase() + caster.tradition.slice(1)} — {caster.castingType}
+                          </h4>
+                          <button
+                            onClick={() => {
+                              if (!creature || !onCreatureUpdate) return;
+                              const updated = { ...creature, spellSlotsUsed: {} };
+                              // Reset all slot availability to max
+                              if (updated.spellcasters) {
+                                updated.spellcasters = updated.spellcasters.map(c => ({
+                                  ...c,
+                                  slots: c.slots.map(s => ({ ...s, available: s.max })),
+                                }));
+                              }
+                              onCreatureUpdate(updated);
+                            }}
+                            style={{
+                              padding: '4px 12px',
+                              borderRadius: '4px',
+                              border: '1px solid rgba(80,180,80,0.4)',
+                              background: 'rgba(80,180,80,0.15)',
+                              color: '#70c870',
+                              cursor: onCreatureUpdate ? 'pointer' : 'not-allowed',
+                              fontSize: '11px',
+                              fontWeight: 'bold',
+                            }}
+                            disabled={!onCreatureUpdate}
+                            title="Reset all spell slots (long rest)"
+                          >
+                            🌙 Rest — Restore All Slots
+                          </button>
                         </div>
-                      ) : (
-                        // Regular spells: organized by level
-                        <div className="spells-by-level">
-                          {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(level => {
-                            const spellsAtLevel = caster.spells.filter(s => s.level === level);
-                            const slot = caster.slots?.find(s => s.level === level);
-                            return spellsAtLevel.length > 0 ? (
-                              <div key={level} className="spell-level-group">
-                                <div className="spell-level-header">
-                                  {level === 0 ? 'Cantrips' : `Level ${level}`}
-                                  {slot && ` — ${slot.available}/${slot.max} slots`}
-                                </div>
-                                <div className="spells-at-level">
-                                  {spellsAtLevel.map((spell, spellIdx) => (
-                                    <div key={spellIdx} className="spell-item">
-                                      • {spell.name}
-                                      {spell.traits && spell.traits.length > 0 && (
-                                        <span className="spell-traits">{spell.traits.join(', ')}</span>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
+                        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                          {caster.spellDC != null && <div className="spell-dc" style={{ margin: 0 }}>Spell DC: {caster.spellDC}</div>}
+                          {caster.spellAttackBonus != null && <div className="spell-dc" style={{ margin: 0 }}>Spell Attack: +{caster.spellAttackBonus}</div>}
+                        </div>
+
+                        {caster.castingType === 'innate' ? (
+                          <div className="innate-spells">
+                            {caster.spells.map((spell, spellIdx) => (
+                              <div key={spellIdx} className="spell-item innate">
+                                <span className="spell-name">{spell.name}</span>
+                                {spell.usage && <span className="spell-usage">({spell.usage})</span>}
                               </div>
-                            ) : null;
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="spells-by-level">
+                            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(level => {
+                              const spellsAtLevel = caster.spells.filter(s => s.level === level);
+                              const slot = caster.slots?.find(s => s.level === level);
+                              if (spellsAtLevel.length === 0 && (!slot || slot.max === 0)) return null;
+
+                              const used = slotsUsed[level] || 0;
+                              const remaining = slot ? slot.available : 0;
+                              const isCantrip = level === 0;
+
+                              return (
+                                <div key={level} className="spell-level-group" style={{ marginBottom: '12px' }}>
+                                  <div className="spell-level-header" style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    paddingBottom: '4px',
+                                    borderBottom: '1px solid #444',
+                                    marginBottom: '6px'
+                                  }}>
+                                    <span style={{ fontWeight: 'bold', color: '#ccc' }}>
+                                      {isCantrip ? 'Cantrips' : `Rank ${level}`}
+                                    </span>
+                                    {/* Slot tracker */}
+                                    {!isCantrip && slot && slot.max > 0 && (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <span style={{ fontSize: '11px', color: '#888', marginRight: '4px' }}>Slots:</span>
+                                        {Array.from({ length: slot.max }, (_, i) => {
+                                          const isUsed = i < (slot.max - remaining);
+                                          return (
+                                            <button
+                                              key={i}
+                                              onClick={() => {
+                                                if (!creature || !onCreatureUpdate) return;
+                                                const updated = { ...creature };
+                                                const newUsed = { ...updated.spellSlotsUsed || {} };
+                                                // Toggle this slot
+                                                if (isUsed) {
+                                                  // Restore this slot
+                                                  newUsed[level] = Math.max(0, (newUsed[level] || 0) - 1);
+                                                  // Also update the spellcaster slots
+                                                  if (updated.spellcasters) {
+                                                    updated.spellcasters = updated.spellcasters.map((c, ci) => ci === casterIdx ? {
+                                                      ...c,
+                                                      slots: c.slots.map(s => s.level === level ? { ...s, available: Math.min(s.max, s.available + 1) } : s)
+                                                    } : c);
+                                                  }
+                                                } else {
+                                                  // Use this slot
+                                                  newUsed[level] = (newUsed[level] || 0) + 1;
+                                                  if (updated.spellcasters) {
+                                                    updated.spellcasters = updated.spellcasters.map((c, ci) => ci === casterIdx ? {
+                                                      ...c,
+                                                      slots: c.slots.map(s => s.level === level ? { ...s, available: Math.max(0, s.available - 1) } : s)
+                                                    } : c);
+                                                  }
+                                                }
+                                                updated.spellSlotsUsed = newUsed;
+                                                onCreatureUpdate(updated);
+                                              }}
+                                              title={isUsed ? 'Click to restore slot' : 'Click to mark as used'}
+                                              style={{
+                                                width: '20px',
+                                                height: '20px',
+                                                borderRadius: '50%',
+                                                border: `2px solid ${isUsed ? '#666' : '#6496c8'}`,
+                                                background: isUsed ? 'rgba(60,60,60,0.3)' : 'rgba(60,120,200,0.3)',
+                                                cursor: onCreatureUpdate ? 'pointer' : 'default',
+                                                padding: 0,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                fontSize: '10px',
+                                                color: isUsed ? '#666' : '#6496c8',
+                                              }}
+                                              disabled={!onCreatureUpdate}
+                                            >
+                                              {isUsed ? '✕' : '●'}
+                                            </button>
+                                          );
+                                        })}
+                                        <span style={{ fontSize: '11px', color: remaining > 0 ? '#8eb8e0' : '#e06060', marginLeft: '4px' }}>
+                                          {remaining}/{slot.max}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {isCantrip && (
+                                      <span style={{ fontSize: '11px', color: '#70c870' }}>At Will</span>
+                                    )}
+                                  </div>
+                                  <div className="spells-at-level">
+                                    {spellsAtLevel.map((spell, spellIdx) => {
+                                      const catalogSpell = Object.values(SPELL_CATALOG).find(s => s.name === spell.name);
+                                      return (
+                                        <div key={spellIdx} className="spell-item" style={{
+                                          padding: '6px 10px',
+                                          borderLeft: `3px solid ${isCantrip ? '#a070d0' : '#6496c8'}`,
+                                          borderRadius: '4px',
+                                          background: 'rgba(50,50,60,0.3)',
+                                          marginBottom: '4px',
+                                        }}>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span>
+                                              {catalogSpell?.icon || '◆'} {spell.name}
+                                              {spell.traits && spell.traits.length > 0 && (
+                                                <span className="spell-traits" style={{ fontSize: '10px', color: '#888', marginLeft: '6px' }}>
+                                                  [{spell.traits.join(', ')}]
+                                                </span>
+                                              )}
+                                            </span>
+                                            {catalogSpell && (
+                                              <span style={{ fontSize: '11px', color: '#888' }}>
+                                                {catalogSpell.cost}◆ {catalogSpell.damageFormula && `| ${catalogSpell.damageFormula} ${catalogSpell.damageType || ''}`}
+                                                {catalogSpell.range > 0 && ` | ${catalogSpell.range * 5}ft`}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                    {spellsAtLevel.length === 0 && slot && slot.max > 0 && (
+                                      <div style={{ color: '#666', fontSize: '12px', fontStyle: 'italic', padding: '4px 10px' }}>
+                                        No spells {caster.castingType === 'prepared' ? 'prepared' : 'known'} at this rank
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : creature.spells && creature.spells.length > 0 ? (
-                // Fallback for simple string spells
                 <div className="spells-list">
                   {creature.spells.map((spell, index) => (
                     <div key={index} className="spell-item">
@@ -633,6 +1037,42 @@ export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
               )}
 
               {/* Proficiency Info */}
+              {/* Equipped Armor Details */}
+              {creature.equippedArmor && ARMOR_CATALOG[creature.equippedArmor] && (() => {
+                const armor = ARMOR_CATALOG[creature.equippedArmor!];
+                return (
+                  <div className="combat-section" style={{ marginBottom: '12px' }}>
+                    <h3 className="section-title">Equipped Armor</h3>
+                    <div style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px' }}>
+                      <div style={{ fontWeight: 'bold', color: '#e0e0e0', marginBottom: '4px' }}>
+                        🛡️ {armor.name}
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '12px', color: '#bbb' }}>
+                        <span>AC +{armor.acBonus}</span>
+                        <span>DEX Cap {armor.dexCap ?? '∞'}</span>
+                        <span>Category: {armor.category}</span>
+                        {armor.checkPenalty ? <span>Check –{armor.checkPenalty}</span> : null}
+                        {armor.speedPenalty ? <span>Speed –{armor.speedPenalty} ft</span> : null}
+                      </div>
+                      {armor.traits && armor.traits.length > 0 && (
+                        <div style={{ marginTop: '6px' }}>
+                          {armor.traits.map((t: string) => (
+                            <span key={t} style={{
+                              fontSize: '10px',
+                              background: 'rgba(79, 195, 247, 0.15)',
+                              color: '#4fc3f7',
+                              border: '1px solid rgba(79, 195, 247, 0.3)',
+                              borderRadius: '3px',
+                              padding: '1px 5px',
+                              marginRight: '4px'
+                            }}>{t}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="proficiency-section">
                 <h3 className="section-title">Combat Proficiencies</h3>
                 <div className="prof-grid">
