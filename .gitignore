@@ -9,3 +9,8 @@ dist/
 shared/*.js
 shared/*.js.map
 shared/*.d.ts
+
+# Foundry upstream repo
+temp/
+
+pf2e-data/
