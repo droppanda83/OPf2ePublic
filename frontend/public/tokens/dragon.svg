@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#b71c1c" stroke="#7f0000" stroke-width="3"/>
+  <!-- Dragon head silhouette -->
+  <path d="M50 20 L40 30 L35 28 L38 35 L30 40 L38 42 L35 55 L42 50 L45 65 L50 55 L55 65 L58 50 L65 55 L62 42 L70 40 L62 35 L65 28 L60 30 Z" fill="#ffcdd2" stroke="#d32f2f" stroke-width="1.5"/>
+  <!-- Eye -->
+  <circle cx="45" cy="38" r="3" fill="#ffeb3b"/>
+  <circle cx="45" cy="38" r="1.5" fill="#1a0a0a"/>
+  <!-- Nostril flame -->
+  <path d="M42 50 Q40 58 38 62 Q42 56 44 58 Q43 54 42 50" fill="#ff6f00"/>
+  <path d="M58 50 Q60 58 62 62 Q58 56 56 58 Q57 54 58 50" fill="#ff6f00"/>
+</svg>

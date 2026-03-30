@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#00897b" stroke="#004d40" stroke-width="3"/>
+  <!-- Butterfly/fairy wings -->
+  <path d="M50 50 Q30 30 25 40 Q20 50 35 55 Z" fill="#a5d6a7" opacity="0.8" stroke="#4caf50" stroke-width="1"/>
+  <path d="M50 50 Q70 30 75 40 Q80 50 65 55 Z" fill="#a5d6a7" opacity="0.8" stroke="#4caf50" stroke-width="1"/>
+  <path d="M50 50 Q35 65 30 70 Q35 80 45 65 Z" fill="#81c784" opacity="0.7" stroke="#4caf50" stroke-width="1"/>
+  <path d="M50 50 Q65 65 70 70 Q65 80 55 65 Z" fill="#81c784" opacity="0.7" stroke="#4caf50" stroke-width="1"/>
+  <!-- Body -->
+  <ellipse cx="50" cy="50" rx="4" ry="12" fill="#e0f2f1"/>
+  <!-- Sparkles -->
+  <circle cx="30" cy="35" r="2" fill="#fff" opacity="0.8"/>
+  <circle cx="70" cy="35" r="2" fill="#fff" opacity="0.8"/>
+  <circle cx="40" cy="25" r="1.5" fill="#fff" opacity="0.6"/>
+  <circle cx="60" cy="25" r="1.5" fill="#fff" opacity="0.6"/>
+</svg>

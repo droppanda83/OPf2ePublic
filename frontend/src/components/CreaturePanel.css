@@ -1,0 +1,174 @@
+.creature-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid #555;
+  border-radius: 8px;
+  padding: 6px;
+  flex-shrink: 0;
+}
+
+.creature-panel h3 {
+  margin: 0;
+  font-size: 12px;
+  color: #0dd;
+  border-bottom: 1px solid #0dd;
+  padding-bottom: 4px;
+}
+
+.creatures-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.creature-item {
+  background: rgba(0, 0, 0, 0.4);
+  border-left: 3px solid #555;
+  border-radius: 3px;
+  padding: 4px;
+  font-size: 10px;
+}
+
+.creature-item.player {
+  border-left-color: #0dd;
+}
+
+.creature-item.creature {
+  border-left-color: #ff6666;
+}
+
+.creature-item.npc {
+  border-left-color: #ffcc66;
+}
+
+.creature-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  font-weight: bold;
+}
+
+.creature-icon {
+  font-size: 14px;
+}
+
+.creature-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.creature-type {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.creature-type.player {
+  background: rgba(0, 221, 221, 0.2);
+  color: #0dd;
+}
+
+.creature-type.creature {
+  background: rgba(255, 102, 102, 0.2);
+  color: #ff6666;
+}
+
+.creature-type.npc {
+  background: rgba(255, 204, 102, 0.2);
+  color: #ffcc66;
+}
+
+.creature-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.health-row,
+.status-row,
+.armor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-label {
+  min-width: 40px;
+  color: #bbb;
+  font-size: 11px;
+}
+
+.health-bar {
+  flex: 1;
+  height: 6px;
+  background: #333;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.health-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.stat-value {
+  min-width: 45px;
+  text-align: right;
+  color: #fff;
+}
+
+.conditions-list {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.conditions-list > strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #FFC107;
+  font-size: 11px;
+}
+
+.condition-tag {
+  display: inline-block;
+  background: rgba(255, 193, 7, 0.2);
+  border: 1px solid #FFC107;
+  color: #FFC107;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-right: 4px;
+  margin-bottom: 4px;
+  font-size: 10px;
+}
+
+.condition-duration {
+  opacity: 0.7;
+  margin-left: 2px;
+}
+
+.creatures-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.creatures-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.creatures-list::-webkit-scrollbar-thumb {
+  background: rgba(76, 175, 80, 0.5);
+  border-radius: 3px;
+}
+
+.creatures-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(76, 175, 80, 0.7);
+}

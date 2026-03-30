@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#455a64" stroke="#263238" stroke-width="3"/>
+  <!-- Balance scales -->
+  <line x1="50" y1="25" x2="50" y2="65" stroke="#b0bec5" stroke-width="3"/>
+  <line x1="30" y1="40" x2="70" y2="40" stroke="#b0bec5" stroke-width="3"/>
+  <!-- Left pan -->
+  <path d="M22 45 Q26 55 30 55 Q34 55 38 45" stroke="#b0bec5" stroke-width="2" fill="none"/>
+  <line x1="30" y1="40" x2="22" y2="45" stroke="#b0bec5" stroke-width="1.5"/>
+  <line x1="30" y1="40" x2="38" y2="45" stroke="#b0bec5" stroke-width="1.5"/>
+  <!-- Right pan -->
+  <path d="M62 45 Q66 55 70 55 Q74 55 78 45" stroke="#b0bec5" stroke-width="2" fill="none"/>
+  <line x1="70" y1="40" x2="62" y2="45" stroke="#b0bec5" stroke-width="1.5"/>
+  <line x1="70" y1="40" x2="78" y2="45" stroke="#b0bec5" stroke-width="1.5"/>
+  <!-- Base -->
+  <polygon points="42,65 58,65 55,70 45,70" fill="#b0bec5"/>
+  <!-- Eye at top -->
+  <circle cx="50" cy="25" r="5" fill="#b0bec5"/>
+  <circle cx="50" cy="25" r="2.5" fill="#263238"/>
+</svg>

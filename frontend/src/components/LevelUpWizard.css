@@ -1,0 +1,515 @@
+/* ─── LevelUpWizard.css ─── */
+/* Modal overlay and styling for the PF2e Level-Up Wizard */
+
+.lu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: lu-fadeIn 0.3s ease-out;
+}
+
+@keyframes lu-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes lu-slideUp {
+  from { transform: translateY(30px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.lu-modal {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);
+  border: 2px solid #d4af37;
+  border-radius: 12px;
+  width: 700px;
+  max-width: 95vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 40px rgba(212, 175, 55, 0.3), 0 8px 32px rgba(0, 0, 0, 0.6);
+  animation: lu-slideUp 0.4s ease-out;
+}
+
+/* ── Header ── */
+.lu-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  background: linear-gradient(90deg, rgba(212, 175, 55, 0.2) 0%, transparent 100%);
+  border-bottom: 1px solid rgba(212, 175, 55, 0.3);
+  border-radius: 10px 10px 0 0;
+}
+
+.lu-header-icon {
+  font-size: 36px;
+  animation: lu-bounce 1s ease-in-out infinite;
+}
+
+@keyframes lu-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.lu-header-text h2 {
+  margin: 0;
+  color: #ffd700;
+  font-size: 22px;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+}
+
+.lu-header-text p {
+  margin: 4px 0 0;
+  color: #aaa;
+  font-size: 14px;
+}
+
+.lu-close-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid #555;
+  color: #999;
+  font-size: 18px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.lu-close-btn:hover {
+  color: #fff;
+  border-color: #d4af37;
+  background: rgba(212, 175, 55, 0.1);
+}
+
+/* ── Body ── */
+.lu-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lu-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.lu-body::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.lu-body::-webkit-scrollbar-thumb {
+  background: rgba(212, 175, 55, 0.3);
+  border-radius: 3px;
+}
+
+/* ── Sections ── */
+.lu-section {
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 100, 140, 0.3);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.lu-section h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.lu-hint {
+  font-size: 13px;
+  color: #888;
+  margin: 0 0 12px;
+}
+
+/* Section-specific colors */
+.lu-section-boosts {
+  border-color: rgba(200, 170, 60, 0.3);
+  background: rgba(120, 100, 40, 0.1);
+}
+
+.lu-section-boosts h3 { color: #d4af37; }
+
+.lu-section-skills {
+  border-color: rgba(80, 200, 200, 0.3);
+  background: rgba(40, 120, 120, 0.1);
+}
+
+.lu-section-skills h3 { color: #7dd8d8; }
+
+.lu-section-hp {
+  border-color: rgba(220, 80, 80, 0.3);
+  background: rgba(120, 40, 40, 0.1);
+}
+
+.lu-section-hp h3 { color: #ff6b6b; }
+
+.lu-section-features {
+  border-color: rgba(200, 170, 40, 0.3);
+  background: rgba(100, 85, 20, 0.1);
+}
+
+.lu-section-features h3 { color: #ffd700; }
+
+.lu-section-prof-upgrades {
+  border-color: rgba(100, 200, 100, 0.3);
+  background: rgba(40, 100, 40, 0.1);
+}
+
+.lu-section-prof-upgrades h3 { color: #90ee90; }
+
+/* ── Ability Boosts ── */
+.lu-boost-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.lu-select {
+  padding: 8px 10px;
+  font-size: 14px;
+  background: rgba(20, 20, 35, 0.9);
+  color: #e0e0e0;
+  border: 1px solid #4a4a6a;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+
+.lu-select:hover {
+  border-color: #6a6a9a;
+}
+
+.lu-select:focus {
+  border-color: #d4af37;
+  outline: none;
+}
+
+.lu-select-wide {
+  min-width: 250px;
+}
+
+/* ── Ability Scores Preview ── */
+.lu-scores-preview {
+  margin-top: 12px;
+  padding: 10px;
+  background: rgba(40, 40, 60, 0.4);
+  border-radius: 6px;
+  border: 1px solid #d4af37;
+}
+
+.lu-scores-label {
+  font-size: 13px;
+  font-weight: bold;
+  color: #d4af37;
+  margin-bottom: 8px;
+}
+
+.lu-scores-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.lu-score-box {
+  padding: 8px;
+  text-align: center;
+  background: rgba(20, 20, 40, 0.6);
+  border-radius: 4px;
+  border: 1px solid #555;
+  width: 65px;
+  transition: all 0.3s;
+}
+
+.lu-score-boosted {
+  border-color: #d4af37;
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.3);
+}
+
+.lu-score-label {
+  font-size: 11px;
+  color: #aaa;
+  font-weight: 600;
+}
+
+.lu-score-value {
+  font-size: 20px;
+  font-weight: bold;
+  color: #d4af37;
+}
+
+.lu-score-mod {
+  font-size: 12px;
+  color: #999;
+}
+
+/* ── Skill Increase ── */
+.lu-skill-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lu-skill-change {
+  font-size: 13px;
+}
+
+/* ── Feat Details ── */
+.lu-feat-detail {
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  border-left: 3px solid #666;
+}
+
+.lu-feat-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lu-feat-header strong {
+  color: #e0e0e0;
+}
+
+.lu-feat-desc {
+  font-size: 12px;
+  color: #999;
+  margin: 6px 0 0;
+  line-height: 1.4;
+}
+
+.lu-feat-traits {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.lu-trait-tag {
+  padding: 2px 6px;
+  font-size: 10px;
+  color: #ccc;
+  background: rgba(80, 80, 120, 0.4);
+  border: 1px solid rgba(120, 120, 170, 0.3);
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ── Class Features List ── */
+.lu-features-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lu-feature-item {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  border-left: 3px solid #ffd700;
+}
+
+.lu-feature-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lu-feature-header strong {
+  color: #e0e0e0;
+}
+
+/* ── Proficiency Upgrades ── */
+.lu-prof-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lu-prof-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.lu-prof-name {
+  color: #ccc;
+  font-weight: 500;
+  min-width: 140px;
+}
+
+/* ── HP Calculation ── */
+.lu-hp-calc {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  color: #ccc;
+}
+
+.lu-hp-total {
+  font-weight: bold;
+  color: #ff6b6b;
+  font-size: 16px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 107, 107, 0.3);
+}
+
+.lu-hp-result {
+  font-size: 18px;
+  color: #ff6b6b;
+  font-weight: bold;
+}
+
+/* ── Footer ── */
+.lu-footer {
+  padding: 16px 24px;
+  border-top: 1px solid rgba(100, 100, 140, 0.3);
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 0 0 10px 10px;
+}
+
+.lu-validation {
+  margin-bottom: 12px;
+}
+
+.lu-validation-item {
+  font-size: 12px;
+  color: #eaa;
+  padding: 2px 0;
+}
+
+.lu-error {
+  padding: 8px 12px;
+  background: rgba(200, 50, 50, 0.2);
+  border: 1px solid rgba(200, 50, 50, 0.4);
+  border-radius: 4px;
+  color: #f88;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.lu-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.lu-btn {
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid;
+}
+
+.lu-btn-cancel {
+  background: rgba(80, 80, 100, 0.3);
+  border-color: #555;
+  color: #aaa;
+}
+
+.lu-btn-cancel:hover {
+  background: rgba(80, 80, 100, 0.5);
+  color: #ccc;
+}
+
+.lu-btn-apply {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.3) 0%, rgba(180, 140, 30, 0.3) 100%);
+  border-color: #d4af37;
+  color: #ffd700;
+  text-shadow: 0 0 6px rgba(255, 215, 0, 0.3);
+}
+
+.lu-btn-apply:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.5) 0%, rgba(180, 140, 30, 0.5) 100%);
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.3);
+}
+
+.lu-btn-apply:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── XP Progress Bar (used in CharacterSheetModal / CreaturePanel) ── */
+.xp-progress-container {
+  margin-top: 8px;
+}
+
+.xp-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #aaa;
+  margin-bottom: 3px;
+}
+
+.xp-progress-bar {
+  height: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(100, 100, 140, 0.3);
+}
+
+.xp-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4a90d9, #63b3ed);
+  border-radius: 4px;
+  transition: width 0.5s ease-out;
+}
+
+.xp-progress-fill.xp-level-up {
+  background: linear-gradient(90deg, #d4af37, #ffd700);
+  animation: xp-glow 1.5s ease-in-out infinite;
+}
+
+@keyframes xp-glow {
+  0%, 100% { box-shadow: 0 0 4px rgba(212, 175, 55, 0.3); }
+  50% { box-shadow: 0 0 12px rgba(212, 175, 55, 0.6); }
+}
+
+/* ── Level Up Notification Badge ── */
+.level-up-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: bold;
+  color: #ffd700;
+  background: rgba(212, 175, 55, 0.2);
+  border: 1px solid rgba(212, 175, 55, 0.4);
+  border-radius: 10px;
+  animation: lu-bounce 1s ease-in-out infinite;
+  cursor: pointer;
+}

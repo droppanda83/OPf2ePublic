@@ -1,0 +1,441 @@
+/* ─── Bug Report Floating Button ──────────────────────── */
+.bug-report-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9998;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid #e24a4a;
+  background: linear-gradient(135deg, #1a1f2e 0%, #2d1a1a 100%);
+  color: #e24a4a;
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(226, 74, 74, 0.3);
+  transition: all 0.25s ease;
+}
+
+.bug-report-fab:hover {
+  background: #e24a4a;
+  color: #fff;
+  transform: scale(1.1);
+  box-shadow: 0 6px 24px rgba(226, 74, 74, 0.5);
+}
+
+.bug-report-fab .fab-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #e24a4a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* ─── Modal Overlay ───────────────────────────────────── */
+.bug-report-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: bugFadeIn 0.2s ease;
+}
+
+@keyframes bugFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ─── Modal ───────────────────────────────────────────── */
+.bug-report-modal {
+  background: #1a1f2e;
+  border: 2px solid #e24a4a;
+  border-radius: 8px;
+  width: 94%;
+  max-width: 640px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  animation: bugSlideUp 0.25s ease;
+}
+
+@keyframes bugSlideUp {
+  from { transform: translateY(30px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* Header */
+.bug-report-modal .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #444;
+  background: linear-gradient(135deg, #1a1f2e 0%, #2d2535 100%);
+  border-radius: 6px 6px 0 0;
+}
+
+.bug-report-modal .modal-header h2 {
+  margin: 0;
+  color: #e24a4a;
+  font-size: 1.3em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bug-report-modal .close-btn {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 1.5em;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.bug-report-modal .close-btn:hover {
+  background: #333;
+  color: #fff;
+}
+
+/* Tabs */
+.bug-report-tabs {
+  display: flex;
+  border-bottom: 1px solid #333;
+  background: #15192580;
+}
+
+.bug-report-tabs button {
+  flex: 1;
+  padding: 10px 0;
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 0.9em;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.bug-report-tabs button:hover {
+  color: #ccc;
+  background: #ffffff08;
+}
+
+.bug-report-tabs button.active {
+  color: #e24a4a;
+  border-bottom-color: #e24a4a;
+}
+
+/* Body */
+.bug-report-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Form Fields */
+.bug-field {
+  margin-bottom: 14px;
+}
+
+.bug-field label {
+  display: block;
+  color: #aaa;
+  font-size: 0.85em;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.bug-field label .required {
+  color: #e24a4a;
+  margin-left: 2px;
+}
+
+.bug-field input[type="text"],
+.bug-field textarea,
+.bug-field select {
+  width: 100%;
+  padding: 8px 10px;
+  background: #0d1117;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #e0e0e0;
+  font-size: 0.95em;
+  font-family: inherit;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.bug-field input[type="text"]:focus,
+.bug-field textarea:focus,
+.bug-field select:focus {
+  outline: none;
+  border-color: #e24a4a;
+}
+
+.bug-field textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.bug-field-row {
+  display: flex;
+  gap: 12px;
+}
+
+.bug-field-row .bug-field {
+  flex: 1;
+}
+
+/* Severity indicator colours */
+.severity-indicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.severity-low       { background: #4caf50; }
+.severity-medium    { background: #ff9800; }
+.severity-high      { background: #f44336; }
+.severity-critical  { background: #b71c1c; box-shadow: 0 0 6px #f44336; }
+
+/* Footer / Submit */
+.bug-report-footer {
+  padding: 12px 20px;
+  border-top: 1px solid #333;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.bug-report-footer button {
+  padding: 8px 20px;
+  border-radius: 4px;
+  font-size: 0.95em;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.bug-submit-btn {
+  background: #e24a4a;
+  color: #fff;
+  border: none;
+  font-weight: 600;
+}
+
+.bug-submit-btn:hover:not(:disabled) {
+  background: #c43c3c;
+}
+
+.bug-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bug-cancel-btn {
+  background: #333;
+  color: #ccc;
+  border-color: #555;
+}
+
+.bug-cancel-btn:hover {
+  background: #444;
+  color: #fff;
+}
+
+/* Success message */
+.bug-success {
+  text-align: center;
+  padding: 40px 20px;
+  color: #4caf50;
+}
+
+.bug-success .checkmark {
+  font-size: 3em;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.bug-success p {
+  color: #aaa;
+  margin-top: 8px;
+  font-size: 0.9em;
+}
+
+/* ─── Bug Report List (View tab) ──────────────────────── */
+.bug-list-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.bug-list-filters select {
+  padding: 6px 8px;
+  background: #0d1117;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 0.85em;
+}
+
+.bug-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bug-list-item {
+  padding: 10px 12px;
+  background: #0d111780;
+  border: 1px solid #333;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bug-list-item:hover {
+  border-color: #e24a4a80;
+  background: #1a1f2e;
+}
+
+.bug-list-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.bug-list-item-title {
+  color: #e0e0e0;
+  font-weight: 600;
+  font-size: 0.95em;
+}
+
+.bug-list-item-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.bug-status-badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.75em;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.bug-status-open        { background: #1b5e20; color: #81c784; }
+.bug-status-in-progress { background: #e65100; color: #ffcc80; }
+.bug-status-resolved    { background: #0d47a1; color: #90caf9; }
+.bug-status-closed      { background: #333;    color: #888; }
+.bug-status-wont-fix    { background: #4a148c; color: #ce93d8; }
+
+.bug-list-item-desc {
+  color: #888;
+  font-size: 0.82em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bug-list-item-date {
+  color: #666;
+  font-size: 0.75em;
+  margin-top: 4px;
+}
+
+.bug-list-empty {
+  text-align: center;
+  color: #666;
+  padding: 30px;
+  font-style: italic;
+}
+
+/* Detail view */
+.bug-detail-back {
+  background: none;
+  border: none;
+  color: #e24a4a;
+  cursor: pointer;
+  font-size: 0.9em;
+  margin-bottom: 12px;
+  padding: 0;
+}
+
+.bug-detail-back:hover {
+  text-decoration: underline;
+}
+
+.bug-detail h3 {
+  color: #e0e0e0;
+  margin: 0 0 8px;
+}
+
+.bug-detail-info {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.bug-detail-section {
+  margin-bottom: 12px;
+}
+
+.bug-detail-section h4 {
+  color: #888;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  margin: 0 0 4px;
+}
+
+.bug-detail-section p {
+  color: #ccc;
+  font-size: 0.9em;
+  margin: 0;
+  white-space: pre-wrap;
+  background: #0d111780;
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.bug-detail-status-select {
+  padding: 6px 8px;
+  background: #0d1117;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 0.85em;
+  margin-top: 8px;
+}

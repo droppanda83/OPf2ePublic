@@ -1,0 +1,159 @@
+{
+  "biomeTypes": [
+    "campsite",
+    "cave entrance",
+    "farm",
+    "path",
+    "pond",
+    "river",
+    "ruins"
+  ],
+  "assignments": {
+    "object:3 Barrels": [
+      "farm"
+    ],
+    "object:Barrel1": [
+      "farm"
+    ],
+    "object:Barrel2": [
+      "farm"
+    ],
+    "object:Boat facing left in water": [
+      "pond",
+      "river"
+    ],
+    "object:Boat facing right - in water": [
+      "pond"
+    ],
+    "object:Bridge Horizontal - no railing": [
+      "river"
+    ],
+    "object:Broken Bridge Railing": [
+      "river"
+    ],
+    "object:Broken Bridge, without Railing": [
+      "river"
+    ],
+    "terrain:Water": [
+      "river",
+      "pond"
+    ],
+    "terrain:Water (grass edge)": [
+      "pond",
+      "river"
+    ],
+    "object:Bridge - Vertical": [
+      "river"
+    ],
+    "object:bucket": [
+      "farm",
+      "pond"
+    ],
+    "object:Bucket 3- empty": [
+      "farm"
+    ],
+    "object:bucket with water": [
+      "farm",
+      "pond"
+    ],
+    "object:Bucket2-empty": [
+      "farm"
+    ],
+    "object:Cart empty2": [
+      "farm"
+    ],
+    "object:Cart filled with Hay": [
+      "farm"
+    ],
+    "object:Cart-empty": [
+      "farm"
+    ],
+    "terrain:Fertile Dirt (Grass edge)": [
+      "farm"
+    ],
+    "object:Fire wood Large": [
+      "farm"
+    ],
+    "object:Firewood small": [
+      "campsite"
+    ],
+    "object:Stone floor, with tufts of grass sticking through": [
+      "ruins"
+    ],
+    "object:Tent": [
+      "campsite"
+    ],
+    "object:Wooden Bridge with railing - front on": [
+      "river"
+    ],
+    "object:Wooden Bridge with Rails - horizontal": [
+      "river"
+    ],
+    "object:Well Pully": [
+      "farm"
+    ],
+    "object:Well roof": [
+      "farm"
+    ],
+    "object:Well roof - tiled": [
+      "farm"
+    ],
+    "object:Well": [
+      "farm"
+    ],
+    "object:CampFire": [
+      "campsite"
+    ],
+    "terrain:Cliff": [
+      "cave entrance"
+    ],
+    "object:Cave Entrance Large": [
+      "cave entrance"
+    ],
+    "terrain:Light Dirt": [
+      "cave entrance"
+    ],
+    "terrain:Light Stone ground": [
+      "path"
+    ],
+    "terrain:Tall Wheat": [
+      "farm"
+    ],
+    "object:Ruined stone slav with plants": [
+      "ruins"
+    ],
+    "object:Ruined stone slab": [
+      "ruins"
+    ],
+    "object:Ruined Colomn (with plants)": [
+      "ruins"
+    ],
+    "object:Well rope with bucket (empty)": [
+      "farm"
+    ],
+    "object:Well bucket with rope - filled": [
+      "farm"
+    ],
+    "object:Water Lilly6": [
+      "pond"
+    ],
+    "object:Water Lilly5": [
+      "pond"
+    ],
+    "object:Water Lilly4": [
+      "pond"
+    ],
+    "object:Water Decoration2": [
+      "pond"
+    ],
+    "object:Water Lilly1": [
+      "pond"
+    ],
+    "object:Rock Head": [
+      "ruins"
+    ],
+    "object:Ruined colomn without plants": [
+      "ruins"
+    ]
+  }
+}

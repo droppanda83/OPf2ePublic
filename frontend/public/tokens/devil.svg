@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#4a148c" stroke="#2a0054" stroke-width="3"/>
+  <!-- Sharp horns -->
+  <path d="M35 38 L28 15 L38 32" fill="#ce93d8" stroke="#7b1fa2" stroke-width="1"/>
+  <path d="M65 38 L72 15 L62 32" fill="#ce93d8" stroke="#7b1fa2" stroke-width="1"/>
+  <!-- Face shape -->
+  <path d="M35 40 Q35 28 50 25 Q65 28 65 40 L65 55 Q65 68 50 72 Q35 68 35 55 Z" fill="#ce93d8" opacity="0.3"/>
+  <!-- Cold calculating eyes -->
+  <path d="M38 44 L46 42 L46 48 Z" fill="#e040fb"/>
+  <path d="M62 44 L54 42 L54 48 Z" fill="#e040fb"/>
+  <!-- Stern mouth -->
+  <line x1="42" y1="58" x2="58" y2="58" stroke="#e040fb" stroke-width="2"/>
+  <!-- Goatee -->
+  <path d="M48 62 L50 72 L52 62" fill="#ce93d8" opacity="0.5"/>
+</svg>

@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+
+# Compiled TypeScript outputs in shared/
+shared/*.js
+shared/*.js.map
+shared/*.d.ts
+
+# Foundry upstream repo
+temp/
+
+pf2e-data/

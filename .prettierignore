@@ -1,0 +1,17 @@
+dist/
+node_modules/
+*.js
+*.d.ts
+shared/bestiary.ts
+shared/foundryEncounterMaps.ts
+shared/spells.ts
+shared/mapGenerator.ts
+shared/*Feats*.ts
+shared/encounterMaps.ts
+scripts/
+atlas-tool/
+temp/
+examples/
+saves/
+images/
+textures/

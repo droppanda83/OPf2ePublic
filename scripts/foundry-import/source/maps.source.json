@@ -1,0 +1,769 @@
+{
+  "maps": [
+    {
+      "id": "dg-large-cave",
+      "name": "Large Cave",
+      "theme": "dungeon",
+      "subTheme": "large-cave",
+      "description": "Large Cave — Free battle map by Dice Grimorium",
+      "width": 30,
+      "height": 20,
+      "terrain": [],
+      "startingZones": {
+        "players": [
+          {
+            "x": 1,
+            "y": 9
+          },
+          {
+            "x": 1,
+            "y": 10
+          },
+          {
+            "x": 2,
+            "y": 9
+          },
+          {
+            "x": 2,
+            "y": 10
+          }
+        ],
+        "enemies": [
+          {
+            "x": 28,
+            "y": 9
+          },
+          {
+            "x": 28,
+            "y": 10
+          },
+          {
+            "x": 27,
+            "y": 9
+          },
+          {
+            "x": 27,
+            "y": 10
+          }
+        ]
+      },
+      "features": [],
+      "imageUrl": "large-cave.jpg",
+      "tags": [
+        "dungeon",
+        "cave"
+      ]
+    },
+    {
+      "id": "dg-dragon-lair",
+      "name": "Dragon Lair",
+      "theme": "dungeon",
+      "subTheme": "dragon-lair",
+      "description": "Dragon Lair — Free battle map by Dice Grimorium",
+      "width": 30,
+      "height": 20,
+      "terrain": [],
+      "startingZones": {
+        "players": [
+          {
+            "x": 1,
+            "y": 9
+          },
+          {
+            "x": 1,
+            "y": 10
+          },
+          {
+            "x": 2,
+            "y": 9
+          },
+          {
+            "x": 2,
+            "y": 10
+          }
+        ],
+        "enemies": [
+          {
+            "x": 28,
+            "y": 9
+          },
+          {
+            "x": 28,
+            "y": 10
+          },
+          {
+            "x": 27,
+            "y": 9
+          },
+          {
+            "x": 27,
+            "y": 10
+          }
+        ]
+      },
+      "features": [],
+      "imageUrl": "dragon-lair.jpg",
+      "tags": [
+        "dungeon",
+        "dragon"
+      ]
+    },
+    {
+      "id": "dg-ancient-crypt-dungeon",
+      "name": "Ancient Crypt Dungeon",
+      "theme": "dungeon",
+      "subTheme": "ancient-crypt-dungeon",
+      "description": "Ancient Crypt Dungeon — Free battle map by Dice Grimorium",
+      "width": 30,
+      "height": 20,
+      "terrain": [],
+      "startingZones": {
+        "players": [
+          {
+            "x": 1,
+            "y": 9
+          },
+          {
+            "x": 1,
+            "y": 10
+          },
+          {
+            "x": 2,
+            "y": 9
+          },
+          {
+            "x": 2,
+            "y": 10
+          }
+        ],
+        "enemies": [
+          {
+            "x": 28,
+            "y": 9
+          },
+          {
+            "x": 28,
+            "y": 10
+          },
+          {
+            "x": 27,
+            "y": 9
+          },
+          {
+            "x": 27,
+            "y": 10
+          }
+        ]
+      },
+      "features": [],
+      "imageUrl": "ancient-crypt-dungeon.jpg",
+      "tags": [
+        "dungeon",
+        "ruins",
+        "graves",
+        "prison"
+      ]
+    },
+    {
+      "id": "dg-treasure-cave",
+      "name": "Treasure Cave",
+      "theme": "dungeon",
+      "subTheme": "treasure-cave",
+      "description": "Treasure Cave — Free battle map by Dice Grimorium",
+      "width": 30,
+      "height": 20,
+      "terrain": [],
+      "startingZones": {
+        "players": [
+          {
+            "x": 1,
+            "y": 9
+          },
+          {
+            "x": 1,
+            "y": 10
+          },
+          {
+            "x": 2,
+            "y": 9
+          },
+          {
+            "x": 2,
+            "y": 10
+          }
+        ],
+        "enemies": [
+          {
+            "x": 28,
+            "y": 9
+          },
+          {
+            "x": 28,
+            "y": 10
+          },
+          {
+            "x": 27,
+            "y": 9
+          },
+          {
+            "x": 27,
+            "y": 10
+          }
+        ]
+      },
+      "features": [],
+      "imageUrl": "treasure-cave.jpg",
+      "tags": [
+        "dungeon",
+        "cave",
+        "treasure"
+      ]
+    },
+    {
+      "id": "dg-forest-path",
+      "name": "Forest Path",
+      "theme": "wilderness",
+      "subTheme": "forest-path",
+      "description": "Forest Path — Free battle map by Dice Grimorium",
+      "width": 30,
+      "height": 20,
+      "terrain": [],
+      "startingZones": {
+        "players": [
+          {
+            "x": 1,
+            "y": 9
+          },
+          {
+            "x": 1,
+            "y": 10
+          },
+          {
+            "x": 2,
+            "y": 9
+          },
+          {
+            "x": 2,
+            "y": 10
+          }
+        ],
+        "enemies": [
+          {
+            "x": 28,
+            "y": 9
+          },
+          {
+            "x": 28,
+            "y": 10
+          },
+          {
+            "x": 27,
+            "y": 9
+          },
+          {
+            "x": 27,
+            "y": 10
+          }
+        ]
+      },
+      "features": [],
+      "imageUrl": "forest-path.jpg",
+      "tags": [
+        "wilderness",
+        "forest",
+        "path"
+      ]
+    },
+    {
+      "id": "dg-mountain-pass",
+      "name": "Mountain Pass",
+      "theme": "wilderness",
+      "subTheme": "mountain-pass",
+      "description": "Mountain Pass — Free battle map by Dice Grimorium",
+      "width": 30,
+      "height": 20,
+      "terrain": [],
+      "startingZones": {
+        "players": [
+          {
+            "x": 1,
+            "y": 9
+          },
+          {
+            "x": 1,
+            "y": 10
+          },
+          {
+            "x": 2,
+            "y": 9
+          },
+          {
+            "x": 2,
+            "y": 10
+          }
+        ],
+        "enemies": [
+          {
+            "x": 28,
+            "y": 9
+          },
+          {
+            "x": 28,
+            "y": 10
+          },
+          {
+            "x": 27,
+            "y": 9
+          },
+          {
+            "x": 27,
+            "y": 10
+          }
+        ]
+      },
+      "features": [],
+      "imageUrl": "mountain-pass.jpg",
+      "tags": [
+        "wilderness",
+        "mountain"
+      ]
+    },
+    {
+      "id": "dg-swamp-path",
+      "name": "Swamp Path",
+      "theme": "wilderness",
+      "subTheme": "swamp-path",
+      "description": "Swamp Path — Free battle map by Dice Grimorium",
+      "width": 30,
+      "height": 20,
+      "terrain": [],
+      "startingZones": {
+        "players": [
+          {
+            "x": 1,
+            "y": 9
+          },
+          {
+            "x": 1,
+            "y": 10
+          },
+          {
+            "x": 2,
+            "y": 9
+          },
+          {
+            "x": 2,
+            "y": 10
+          }
+        ],
+        "enemies": [
+          {
+            "x": 28,
+            "y": 9
+          },
+          {
+            "x": 28,
+            "y": 10
+          },
+          {
+            "x": 27,
+            "y": 9
+          },
+          {
+            "x": 27,
+            "y": 10
+          }
+        ]
+      },
+      "features": [],
+      "imageUrl": "swamp-path.jpg",
+      "tags": [
+        "wilderness",
+        "swamp",
+        "path"
+      ]
+    },
+    {
+      "id": "dg-desert-path",
+      "name": "Desert Path",
+      "theme": "wilderness",
+      "subTheme": "desert-path",
+      "description": "Desert Path — Free battle map by Dice Grimorium",
+      "width": 30,
+      "height": 20,
+      "terrain": [],
+      "startingZones": {
+        "players": [
+          {
+            "x": 1,
+            "y": 9
+          },
+          {
+            "x": 1,
+            "y": 10
+          },
+          {
+            "x": 2,
+            "y": 9
+          },
+          {
+            "x": 2,
+            "y": 10
+          }
+        ],
+        "enemies": [
+          {
+            "x": 28,
+            "y": 9
+          },
+          {
+            "x": 28,
+            "y": 10
+          },
+          {
+            "x": 27,
+            "y": 9
+          },
+          {
+            "x": 27,
+            "y": 10
+          }
+        ]
+      },
+      "features": [],
+      "imageUrl": "desert-path.jpg",
+      "tags": [
+        "wilderness",
+        "desert",
+        "path"
+      ]
+    },
+    {
+      "id": "dg-river-crossing",
+      "name": "River Crossing",
+      "theme": "wilderness",
+      "subTheme": "river-crossing",
+      "description": "River Crossing — Free battle map by Dice Grimorium",
+      "width": 30,
+      "height": 20,
+      "terrain": [],
+      "startingZones": {
+        "players": [
+          {
+            "x": 1,
+            "y": 9
+          },
+          {
+            "x": 1,
+            "y": 10
+          },
+          {
+            "x": 2,
+            "y": 9
+          },
+          {
+            "x": 2,
+            "y": 10
+          }
+        ],
+        "enemies": [
+          {
+            "x": 28,
+            "y": 9
+          },
+          {
+            "x": 28,
+            "y": 10
+          },
+          {
+            "x": 27,
+            "y": 9
+          },
+          {
+            "x": 27,
+            "y": 10
+          }
+        ]
+      },
+      "features": [],
+      "imageUrl": "river-crossing.jpg",
+      "tags": [
+        "wilderness",
+        "water",
+        "bridge"
+      ]
+    },
+    {
+      "id": "dg-sacred-cathedral",
+      "name": "Sacred Cathedral",
+      "theme": "indoor",
+      "subTheme": "sacred-cathedral",
+      "description": "Sacred Cathedral — Free battle map by Dice Grimorium",
+      "width": 30,
+      "height": 20,
+      "terrain": [],
+      "startingZones": {
+        "players": [
+          {
+            "x": 1,
+            "y": 9
+          },
+          {
+            "x": 1,
+            "y": 10
+          },
+          {
+            "x": 2,
+            "y": 9
+          },
+          {
+            "x": 2,
+            "y": 10
+          }
+        ],
+        "enemies": [
+          {
+            "x": 28,
+            "y": 9
+          },
+          {
+            "x": 28,
+            "y": 10
+          },
+          {
+            "x": 27,
+            "y": 9
+          },
+          {
+            "x": 27,
+            "y": 10
+          }
+        ]
+      },
+      "features": [],
+      "imageUrl": "sacred-cathedral.jpg",
+      "tags": [
+        "indoor",
+        "temple"
+      ]
+    },
+    {
+      "id": "dg-sleeping-dwarf-inn",
+      "name": "Sleeping Dwarf Inn",
+      "theme": "indoor",
+      "subTheme": "sleeping-dwarf-inn",
+      "description": "Sleeping Dwarf Inn — Free battle map by Dice Grimorium",
+      "width": 30,
+      "height": 20,
+      "terrain": [],
+      "startingZones": {
+        "players": [
+          {
+            "x": 1,
+            "y": 9
+          },
+          {
+            "x": 1,
+            "y": 10
+          },
+          {
+            "x": 2,
+            "y": 9
+          },
+          {
+            "x": 2,
+            "y": 10
+          }
+        ],
+        "enemies": [
+          {
+            "x": 28,
+            "y": 9
+          },
+          {
+            "x": 28,
+            "y": 10
+          },
+          {
+            "x": 27,
+            "y": 9
+          },
+          {
+            "x": 27,
+            "y": 10
+          }
+        ]
+      },
+      "features": [],
+      "imageUrl": "sleeping-dwarf-inn.jpg",
+      "tags": [
+        "indoor",
+        "tavern"
+      ]
+    },
+    {
+      "id": "dg-old-library",
+      "name": "Old Library",
+      "theme": "indoor",
+      "subTheme": "old-library",
+      "description": "Old Library — Free battle map by Dice Grimorium",
+      "width": 30,
+      "height": 20,
+      "terrain": [],
+      "startingZones": {
+        "players": [
+          {
+            "x": 1,
+            "y": 9
+          },
+          {
+            "x": 1,
+            "y": 10
+          },
+          {
+            "x": 2,
+            "y": 9
+          },
+          {
+            "x": 2,
+            "y": 10
+          }
+        ],
+        "enemies": [
+          {
+            "x": 28,
+            "y": 9
+          },
+          {
+            "x": 28,
+            "y": 10
+          },
+          {
+            "x": 27,
+            "y": 9
+          },
+          {
+            "x": 27,
+            "y": 10
+          }
+        ]
+      },
+      "features": [],
+      "imageUrl": "old-library.jpg",
+      "tags": [
+        "indoor",
+        "library"
+      ]
+    },
+    {
+      "id": "dg-city-gates",
+      "name": "City Gates",
+      "theme": "urban",
+      "subTheme": "city-gates",
+      "description": "City Gates — Free battle map by Dice Grimorium",
+      "width": 30,
+      "height": 20,
+      "terrain": [],
+      "startingZones": {
+        "players": [
+          {
+            "x": 1,
+            "y": 9
+          },
+          {
+            "x": 1,
+            "y": 10
+          },
+          {
+            "x": 2,
+            "y": 9
+          },
+          {
+            "x": 2,
+            "y": 10
+          }
+        ],
+        "enemies": [
+          {
+            "x": 28,
+            "y": 9
+          },
+          {
+            "x": 28,
+            "y": 10
+          },
+          {
+            "x": 27,
+            "y": 9
+          },
+          {
+            "x": 27,
+            "y": 10
+          }
+        ]
+      },
+      "features": [],
+      "imageUrl": "city-gates.jpg",
+      "tags": [
+        "urban",
+        "street"
+      ]
+    },
+    {
+      "id": "dg-ice-dragon-cave",
+      "name": "Ice Dragon Cave",
+      "theme": "dungeon",
+      "subTheme": "ice-dragon-cave",
+      "description": "Ice Dragon Cave — Free battle map by Dice Grimorium",
+      "width": 30,
+      "height": 20,
+      "terrain": [],
+      "startingZones": {
+        "players": [
+          {
+            "x": 1,
+            "y": 9
+          },
+          {
+            "x": 1,
+            "y": 10
+          },
+          {
+            "x": 2,
+            "y": 9
+          },
+          {
+            "x": 2,
+            "y": 10
+          }
+        ],
+        "enemies": [
+          {
+            "x": 28,
+            "y": 9
+          },
+          {
+            "x": 28,
+            "y": 10
+          },
+          {
+            "x": 27,
+            "y": 9
+          },
+          {
+            "x": 27,
+            "y": 10
+          }
+        ]
+      },
+      "features": [],
+      "imageUrl": "ice-dragon-cave.jpg",
+      "tags": [
+        "dungeon",
+        "ice",
+        "cave",
+        "dragon"
+      ]
+    }
+  ]
+}

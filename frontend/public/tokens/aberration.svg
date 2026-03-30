@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#4a1a6b" stroke="#2d0e42" stroke-width="3"/>
+  <!-- Tentacle eye -->
+  <ellipse cx="50" cy="40" rx="14" ry="12" fill="#e0d0f0" stroke="#2d0e42" stroke-width="1.5"/>
+  <circle cx="50" cy="40" r="6" fill="#8b1a8b"/>
+  <circle cx="50" cy="40" r="3" fill="#1a0a2e"/>
+  <!-- Tentacles -->
+  <path d="M30 60 Q25 75 20 80" stroke="#7b3f9e" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M40 65 Q35 80 32 85" stroke="#7b3f9e" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M50 68 Q50 82 50 88" stroke="#7b3f9e" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M60 65 Q65 80 68 85" stroke="#7b3f9e" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M70 60 Q75 75 80 80" stroke="#7b3f9e" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>
