@@ -11204,12 +11204,7 @@ export class RulesEngine {
     let statusMessage = '';
     if (actor.currentHealth <= 0) {
       if (!actor.dying) {
-        actor.dying = true;
-        actor.wounded++;
-        actor.deathSaveFailures = 0;
-        actor.deathSaveSuccesses = 0;
-        actor.conditions.push({ name: 'dying', duration: 'permanent', value: actor.wounded });
-        statusMessage = ` ­ƒÆÇ ${actor.name} is DYING! (Wounded ${actor.wounded})`;
+        statusMessage = initDying(actor);
       } else {
         statusMessage = ` ­ƒÆÇ ${actor.name} is still dying...`;
       }
@@ -11239,12 +11234,7 @@ export class RulesEngine {
     let statusMessage = '';
     if (actor.currentHealth <= 0) {
       if (!actor.dying) {
-        actor.dying = true;
-        actor.wounded++;
-        actor.deathSaveFailures = 0;
-        actor.deathSaveSuccesses = 0;
-        actor.conditions.push({ name: 'dying', duration: 'permanent', value: actor.wounded });
-        statusMessage = ` ­ƒÆÇ ${actor.name} is DYING! (Wounded ${actor.wounded})`;
+        statusMessage = initDying(actor);
       } else {
         statusMessage = ` ­ƒÆÇ ${actor.name} is still dying...`;
       }
