@@ -32,6 +32,23 @@ function fail(message: string, errorCode?: string): ActionFailure {
     : { success: false, message };
 }
 
+// ——— Action Registry Types ————————————————————————————————
+interface ActionContext {
+  actionId: string;
+  actor: Creature;
+  gameState: GameState;
+  targetId?: string;
+  targetPosition?: Position;
+  weaponId?: string;
+  pickupDestination?: string;
+  heroPointsSpent?: number;
+  readyActionId?: string;
+  itemId?: string;
+  spellId?: string;
+}
+
+type ActionHandler = (ctx: ActionContext) => any;
+
 // ÔöÇÔöÇÔöÇ Weapon Trait Parsing Helpers ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 /**
  * Parse weapon traits to extract trait metadata
@@ -119,6 +136,85 @@ function initDying(creature: Creature): string {
 }
 
 export class RulesEngine {
+
+  // ——— Action Registry (lazy-initialized) ———————————————————
+  private _actionRegistry?: Record<string, ActionHandler>;
+
+  private get actionRegistry(): Record<string, ActionHandler> {
+    if (!this._actionRegistry) {
+      this._actionRegistry = this.buildActionRegistry();
+    }
+    return this._actionRegistry;
+  }
+
+  private buildActionRegistry(): Record<string, ActionHandler> {
+    const r: Record<string, ActionHandler> = {};
+
+    // Core combat actions
+    r['strike'] = (ctx) => this.resolveStrike(ctx.actor, ctx.gameState, ctx.targetId, ctx.weaponId, ctx.heroPointsSpent);
+    r['vicious-swing'] = (ctx) => this.resolveViciousStrike(ctx.actor, ctx.gameState, ctx.targetId, ctx.weaponId, ctx.heroPointsSpent);
+    r['draw-weapon'] = (ctx) => this.resolveDrawWeapon(ctx.actor, ctx.weaponId);
+    r['stow-weapon'] = (ctx) => this.resolveStowWeapon(ctx.actor, ctx.weaponId);
+    r['drop-weapon'] = (ctx) => this.resolveDropWeapon(ctx.actor, ctx.gameState, ctx.weaponId);
+    r['pick-up-weapon'] = (ctx) => this.resolvePickUpWeapon(ctx.actor, ctx.gameState, ctx.targetId, ctx.pickupDestination);
+
+    // Movement
+    r['move'] = r['stride'] = (ctx) => this.resolveMovement(ctx.actor, ctx.gameState, ctx.targetPosition, ctx.actionId);
+    r['step'] = (ctx) => this.resolveStep(ctx.actor, ctx.gameState, ctx.targetPosition);
+    r['stand'] = (ctx) => this.resolveStand(ctx.actor);
+
+    // Shield
+    r['raise-shield'] = (ctx) => this.resolveRaiseShield(ctx.actor);
+    r['lower-shield'] = (ctx) => this.resolveLowerShield(ctx.actor);
+
+    // Reactions & damage resolution
+    r['reactive-strike'] = (ctx) => this.resolveReactiveStrike(ctx.actor, ctx.gameState, ctx.targetId);
+    r['shield-block'] = (ctx) => this.resolveShieldBlock(ctx.actor);
+    r['resolve-pending-damage'] = (ctx) => this.resolvePendingDamage(ctx.actor);
+
+    // Exploration / skill actions
+    r['take-cover'] = (ctx) => this.resolveTakeCover(ctx.actor);
+    r['demoralize'] = (ctx) => this.resolveDemoralize(ctx.actor, ctx.gameState, ctx.targetId, ctx.heroPointsSpent);
+    r['feint'] = (ctx) => this.resolveFeint(ctx.actor, ctx.gameState, ctx.targetId, ctx.heroPointsSpent);
+    r['trip'] = (ctx) => this.resolveTrip(ctx.actor, ctx.gameState, ctx.targetId, ctx.heroPointsSpent);
+    r['shove'] = (ctx) => this.resolveShove(ctx.actor, ctx.gameState, ctx.targetId, ctx.heroPointsSpent);
+    r['retching'] = (ctx) => this.resolveRetching(ctx.actor, ctx.heroPointsSpent);
+    r['stabilize-with-hero-points'] = (ctx) => this.stabilizeWithHeroPoints(ctx.actor);
+
+    // Unimplemented core stubs
+    r['aid'] = () => fail('Aid is not implemented yet.');
+    r['recall-knowledge'] = () => fail('Recall Knowledge is not implemented yet.');
+    r['grapple'] = () => fail('Grapple is not implemented yet.');
+    r['disarm'] = () => fail('Disarm is not implemented yet.');
+    r['ready'] = () => fail('Ready is not implemented yet.');
+    r['delay'] = () => fail('Delay is not implemented yet.');
+    r['interact'] = () => fail('Interact is not implemented yet.');
+    r['escape'] = () => fail('Escape is not implemented yet.');
+    r['seek'] = () => fail('Seek is not implemented yet.');
+    r['hide'] = () => fail('Hide is not implemented yet.');
+    r['sneak'] = () => fail('Sneak is not implemented yet.');
+    r['avoid-notice'] = () => fail('Avoid Notice is not implemented yet.');
+    r['detect-magic'] = () => fail('Detect Magic is not implemented yet.');
+    r['follow-the-expert'] = () => fail('Follow the Expert is not implemented yet.');
+    r['investigate'] = () => fail('Investigate is not implemented yet.');
+    r['scout'] = () => fail('Scout is not implemented yet.');
+    r['search'] = () => fail('Search is not implemented yet.');
+    r['track'] = () => fail('Track is not implemented yet.');
+    r['earn-income'] = () => fail('Earn Income is not implemented yet.');
+    r['craft'] = () => fail('Craft is not implemented yet.');
+    r['treat-wounds'] = () => fail('Treat Wounds is not implemented yet.');
+    r['retrain'] = () => fail('Retrain is not implemented yet.');
+    r['subsist'] = () => fail('Subsist is not implemented yet.');
+    r['long-term-rest'] = () => fail('Long-Term Rest is not implemented yet.');
+    r['spellstrike'] = () => fail('Spellstrike is not implemented yet.');
+    r['exploit-vulnerability'] = () => fail('Exploit Vulnerability is not implemented yet.');
+    r['rage'] = () => fail('Rage is not implemented yet.');
+    r['flurry-of-blows'] = () => fail('Flurry of Blows is not implemented yet.');
+    r['hunt-prey'] = () => fail('Hunt Prey is not implemented yet.');
+    r['devise-a-stratagem'] = () => fail('Devise a Stratagem is not implemented yet.');
+
+    return r;
+  }
 
   // ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
   // Feat Action Context Bridge
@@ -302,112 +398,13 @@ export class RulesEngine {
       }
     }
 
-    // Route to specific action type
-    // This grows as you add more action types
+    // Route to specific action type via registry, then legacy switch fallback
+    const ctx: ActionContext = { actionId, actor, gameState, targetId, targetPosition, weaponId, pickupDestination, heroPointsSpent, readyActionId, itemId, spellId };
+    const registeredHandler = this.actionRegistry[actionId];
+    if (registeredHandler) return registeredHandler(ctx);
+
+    // Legacy switch for actions not yet migrated to registry
     switch (actionId) {
-      case 'strike':
-        return this.resolveStrike(actor, gameState, targetId, weaponId, heroPointsSpent);
-      case 'vicious-swing':
-        return this.resolveViciousStrike(actor, gameState, targetId, weaponId, heroPointsSpent);
-      case 'draw-weapon':
-        return this.resolveDrawWeapon(actor, weaponId);
-      case 'stow-weapon':
-        return this.resolveStowWeapon(actor, weaponId);
-      case 'drop-weapon':
-        return this.resolveDropWeapon(actor, gameState, weaponId);
-      case 'pick-up-weapon':
-        return this.resolvePickUpWeapon(actor, gameState, targetId, pickupDestination);
-      case 'move':
-      case 'stride':
-        return this.resolveMovement(actor, gameState, targetPosition, actionId);
-      case 'step':
-        return this.resolveStep(actor, gameState, targetPosition);
-      case 'stand':
-        return this.resolveStand(actor);
-      case 'raise-shield':
-        return this.resolveRaiseShield(actor);
-      case 'lower-shield':
-        return this.resolveLowerShield(actor);
-      case 'reactive-strike':
-        return this.resolveReactiveStrike(actor, gameState, targetId);
-      case 'shield-block':
-        return this.resolveShieldBlock(actor);
-      case 'resolve-pending-damage':
-        return this.resolvePendingDamage(actor);
-      case 'take-cover':
-        return this.resolveTakeCover(actor);
-      case 'aid':
-        return fail('Aid is not implemented yet.');
-      case 'recall-knowledge':
-        return fail('Recall Knowledge is not implemented yet.');
-      case 'demoralize':
-        return this.resolveDemoralize(actor, gameState, targetId, heroPointsSpent);
-      case 'feint':
-        return this.resolveFeint(actor, gameState, targetId, heroPointsSpent);
-      case 'grapple':
-        return fail('Grapple is not implemented yet.');
-      case 'trip':
-        return this.resolveTrip(actor, gameState, targetId, heroPointsSpent);
-      case 'shove':
-        return this.resolveShove(actor, gameState, targetId, heroPointsSpent);
-      case 'disarm':
-        return fail('Disarm is not implemented yet.');
-      case 'ready':
-        return fail('Ready is not implemented yet.');
-      case 'delay':
-        return fail('Delay is not implemented yet.');
-      case 'interact':
-        return fail('Interact is not implemented yet.');
-      case 'retching':
-        return this.resolveRetching(actor, heroPointsSpent);
-      case 'stabilize-with-hero-points':
-        return this.stabilizeWithHeroPoints(actor);
-      case 'escape':
-        return fail('Escape is not implemented yet.');
-      case 'seek':
-        return fail('Seek is not implemented yet.');
-      case 'hide':
-        return fail('Hide is not implemented yet.');
-      case 'sneak':
-        return fail('Sneak is not implemented yet.');
-      case 'avoid-notice':
-        return fail('Avoid Notice is not implemented yet.');
-      case 'detect-magic':
-        return fail('Detect Magic is not implemented yet.');
-      case 'follow-the-expert':
-        return fail('Follow the Expert is not implemented yet.');
-      case 'investigate':
-        return fail('Investigate is not implemented yet.');
-      case 'scout':
-        return fail('Scout is not implemented yet.');
-      case 'search':
-        return fail('Search is not implemented yet.');
-      case 'track':
-        return fail('Track is not implemented yet.');
-      case 'earn-income':
-        return fail('Earn Income is not implemented yet.');
-      case 'craft':
-        return fail('Craft is not implemented yet.');
-      case 'treat-wounds':
-        return fail('Treat Wounds is not implemented yet.');
-      case 'retrain':
-        return fail('Retrain is not implemented yet.');
-      case 'subsist':
-        return fail('Subsist is not implemented yet.');
-      case 'long-term-rest':
-        return fail('Long-Term Rest is not implemented yet.');
-      case 'spellstrike':
-        return fail('Spellstrike is not implemented yet.');
-      case 'exploit-vulnerability':
-        return fail('Exploit Vulnerability is not implemented yet.');
-      case 'rage':
-        return fail('Rage is not implemented yet.');
-      case 'flurry-of-blows':
-        return fail('Flurry of Blows is not implemented yet.');
-      case 'hunt-prey':
-        return fail('Hunt Prey is not implemented yet.');
-      case 'devise-a-stratagem':
-        return fail('Devise a Stratagem is not implemented yet.');
       // ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
       // PHASE 5.2: FIGHTER FEATS (Level 1-4)
       // ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
