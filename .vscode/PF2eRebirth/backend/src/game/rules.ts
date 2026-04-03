@@ -957,7 +957,7 @@ export class RulesEngine {
     gameState: GameState,
     selectedWeapon?: CreatureWeapon | null,
     heroPointsSpent?: number
-  ): AttackRoll {
+  ): AttackRoll | { success: false; message: string; [key: string]: unknown } {
     // Roll d20 for the attack
     let d20 = rollD20();
     let sureStrikeUsed = false;
@@ -1010,7 +1010,7 @@ export class RulesEngine {
           success: false,
           message: `Target is beyond maximum range! (${Math.round(distance * 5)}ft away, max 6 range increments = ${rangeIncrementSq * 5 * 6}ft)`,
           details: { distance: Math.round(distance * 5), maxRange: rangeIncrementSq * 5 * 6 },
-        } as any;
+        };
       }
       
       rangeModifier = incrementPenalty;
@@ -1063,7 +1063,7 @@ export class RulesEngine {
           result: 'critical-failure',
           marginOfSuccess: -999,
           heroPointError: spendResult.message,
-        } as any;
+        };
       }
 
       finalD20 = spendResult.newRoll.d20;

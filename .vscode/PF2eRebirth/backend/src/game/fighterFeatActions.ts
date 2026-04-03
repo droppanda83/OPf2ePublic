@@ -59,9 +59,12 @@ export function resolvePowerAttack(ctx: FeatActionContext, actor: Creature,
     strikeResult.details.damage.appliedDamage += extraDamage;
     
     // Recalculate final damage
-    const damageCalc = calculateFinalDamage(strikeResult.details.damage.appliedDamage, 'bludgeoning', gameState.creatures.find(c => c.id === targetId) || {} as any);
-    const finalDamage = damageCalc.finalDamage;
-    strikeResult.targetHealth = (gameState.creatures.find(c => c.id === targetId)?.currentHealth || 0) - finalDamage;
+    const target = gameState.creatures.find(c => c.id === targetId);
+    if (target) {
+      const damageCalc = calculateFinalDamage(strikeResult.details.damage.appliedDamage, 'bludgeoning', target);
+      const finalDamage = damageCalc.finalDamage;
+      strikeResult.targetHealth = target.currentHealth - finalDamage;
+    }
     strikeResult.message = `Â­Æ’Ã¶Â¿ POWER ATTACK! ${strikeResult.message} (+${extraDamage} extra die)`;
   }
 

@@ -179,7 +179,7 @@ export function resolveMovement(actor: Creature, gameState: GameState, targetPos
   const maxDistance = (actor.speed ?? 25) / 5; // Convert feet to squares
   
   // 2. PATHFINDING WITH TERRAIN
-  const gameMap = (actor as any)._map as any;
+  const gameMap = actor._map;
   const terrainGrid = gameMap?.terrain;
   const mapWidth = gameState.map?.width ?? terrainGrid?.[0]?.length ?? 0;
   const mapHeight = gameState.map?.height ?? terrainGrid?.length ?? 0;
@@ -293,7 +293,7 @@ export function resolveStep(
   }
   
   // 3. VALIDATE DESTINATION WITHIN BOUNDS
-  const gameMap = (actor as any)._map as any;
+  const gameMap = actor._map;
   const terrainGrid = gameMap?.terrain;
   const mapWidth = gameState.map?.width ?? terrainGrid?.[0]?.length ?? 0;
   const mapHeight = gameState.map?.height ?? terrainGrid?.length ?? 0;

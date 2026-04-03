@@ -28,20 +28,19 @@ function calculateDistance(pos1: Position, pos2: Position): number {
 export function resolveSelectedWeapon(actor: Creature, weaponId?: string): CreatureWeapon | null {
   const buildLegacyWeapon = (): CreatureWeapon => {
     const catalogWeapon = actor.equippedWeapon ? getWeapon(actor.equippedWeapon) : undefined;
-    const catalogAttackType = (catalogWeapon as any)?.attackType ?? (catalogWeapon as any)?.type;
-    const attackType: 'melee' | 'ranged' = catalogAttackType === 'ranged' ? 'ranged' : 'melee';
+    const attackType: 'melee' | 'ranged' = catalogWeapon?.type === 'ranged' ? 'ranged' : 'melee';
 
     return {
       id: weaponId || actor.equippedWeapon || '__legacy__',
-      display: actor.weaponDisplay || (catalogWeapon as any)?.name || 'Unarmed Strike',
+      display: actor.weaponDisplay || catalogWeapon?.name || 'Unarmed Strike',
       attackType,
       attackBonus: actor.pbAttackBonus,
-      damageDice: actor.weaponDamageDice || (catalogWeapon as any)?.damageFormula || '1d4',
+      damageDice: actor.weaponDamageDice || catalogWeapon?.damageFormula || '1d4',
       damageBonus: actor.weaponDamageBonus ?? 0,
-      damageType: (actor.weaponDamageType as any) || (catalogWeapon as any)?.damageType || 'bludgeoning',
-      hands: Number((catalogWeapon as any)?.hands) || (actor.equippedWeapon ? 1 : 0),
-      traits: (catalogWeapon as any)?.traits || [],
-      range: (catalogWeapon as any)?.range,
+      damageType: actor.weaponDamageType || catalogWeapon?.damageType || 'bludgeoning',
+      hands: Number(catalogWeapon?.hands) || (actor.equippedWeapon ? 1 : 0),
+      traits: catalogWeapon?.traits || [],
+      range: catalogWeapon?.range,
       weaponCatalogId: actor.equippedWeapon,
       isNatural: !actor.equippedWeapon,
     };
