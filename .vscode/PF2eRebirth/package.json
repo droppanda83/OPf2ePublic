@@ -1,0 +1,14 @@
+{
+  "name": "pf2e-rebirth",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PF2e Rebirth rules engine",
+  "scripts": {
+    "validate:syntax": "tsc --noEmit --pretty",
+    "validate:types": "tsc --noEmit --strict --pretty",
+    "validate": "npm run validate:syntax"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}
