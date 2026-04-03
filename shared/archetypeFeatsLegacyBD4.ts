@@ -142,7 +142,7 @@ export const VAMPIRE_FEATS: FeatEntry[] = [
     source: 'Vampire (Archetype)',
     category: 'archetype',
     level: 2,
-    description: 'You\'re a newly risen vampire. You gain the undead and vampire traits and basic undead benefits. Your undead craving is for blood. You gain a fangs unarmed attack (1d6 piercing, brawling, grapple, unarmed). You gain revulsion (garlic, religious symbols of non-evil deities — fleeing, DC 25 Will to overcome) and sunlight vulnerabilities (slowed 1, increasing each turn, destroyed if all actions lost). You gain Drink Blood [one-action] (divine, necromancy): grabbed/paralyzed/restrained/unconscious/willing creature within reach, Athletics vs Fort DC. Success: target drained 1, you gain temp HP = target\'s level for 10 min.',
+    description: 'You\'re a newly risen vampire. You gain the undead and vampire traits and basic undead benefits. Your undead craving is for blood. You gain a fangs unarmed attack (1d6 piercing, brawling, grapple, unarmed). You gain revulsion (garlic, religious symbols of deities without unholy sanctification — fleeing, DC 25 Will to overcome) and sunlight vulnerabilities (slowed 1, increasing each turn, destroyed if all actions lost). You gain Drink Blood [one-action] (divine, necromancy): grabbed/paralyzed/restrained/unconscious/willing creature within reach, Athletics vs Fort DC. Success: target drained 1, you gain temp HP = target\'s level for 10 min.',
     implemented: 'full',
     traits: ['Rare', 'Archetype', 'Dedication'],
     actionCost: 'passive',

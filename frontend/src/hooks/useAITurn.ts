@@ -4,7 +4,7 @@
  * Handles step-by-step replay with battle animations.
  */
 import { useEffect, useRef } from 'react';
-import type { Creature, GameState, GMSession } from '../../../shared/types';
+import type { Creature, GameLog, GameState, GMSession } from '../../../shared/types';
 import type { BattleAnimationRequest } from '../components/BattleAnimationOverlay';
 import * as api from '../services/apiService';
 import { devLog, devError } from '../utils/devLog';
@@ -16,7 +16,7 @@ interface UseAITurnOptions {
   gmSession: GMSession | null;
   playBattleAnimation: (req: BattleAnimationRequest) => Promise<void>;
   onTurnComplete: (gameState: GameState, nextCreatureId: string) => void;
-  onStepUpdate: (creatures: any[], log?: any[]) => void;
+  onStepUpdate: (creatures: Creature[], log?: GameLog[]) => void;
   onPositionOverrides: (overrides: Map<string, { x: number; y: number }>) => void;
   onGMSessionUpdate: (session: GMSession) => void;
   onError: (error: string) => void;
@@ -88,10 +88,10 @@ export function useAITurn(options: UseAITurnOptions): void {
         const { gameState: newGameState, executionResults } = response;
         const nextCreatureId = newGameState.currentRound.turnOrder[newGameState.currentRound.currentTurnIndex];
 
-        devLog('🤖 AI turn completed. Actions:', executionResults.map((r: any) =>
+        devLog('🤖 AI turn completed. Actions:', executionResults.map((r) =>
           `${r.planned?.action?.actionId}: ${r.result?.success ? '✅' : '❌'} ${r.result?.message || ''}`));
 
-        const successfulSteps = executionResults.filter((r: any) => r.result?.success && r.stateSnapshot);
+        const successfulSteps = executionResults.filter((r) => r.result?.success && r.stateSnapshot);
 
         if (successfulSteps.length > 0) {
           const STEP_DELAY = 800;
@@ -104,7 +104,20 @@ export function useAITurn(options: UseAITurnOptions): void {
               const step = successfulSteps[stepIdx];
               const actionId = step.planned?.action?.actionId || 'action';
               const isMovement = ['stride', 'move', 'step'].includes(actionId);
-              const details = step.result?.details;
+              const details = step.result?.details as {
+                d20?: number;
+                bonus?: number;
+                total?: number;
+                result?: 'critical-success' | 'success' | 'failure' | 'critical-failure';
+                targetName?: string;
+                damage?: {
+                  dice?: { sides: number; results: number[] };
+                  weaponName?: string;
+                  appliedDamage?: number;
+                  total?: number;
+                  damageType?: string;
+                };
+              } | undefined;
 
               // Battle animation for NPC attacks
               if (details && typeof details.d20 === 'number' && !isMovement) {
@@ -123,7 +136,7 @@ export function useAITurn(options: UseAITurnOptions): void {
                     d20: details.d20,
                     bonus: details.bonus ?? 0,
                     total: details.total ?? (details.d20 + (details.bonus ?? 0)),
-                    result: details.result as any,
+                    result: details.result as 'critical-success' | 'success' | 'failure' | 'critical-failure',
                   },
                 };
 
@@ -177,7 +190,7 @@ export function useAITurn(options: UseAITurnOptions): void {
             onGMSessionUpdate(newGameState.gmSession);
           }
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (cancelled) { aiTurnInFlightRef.current = false; return; }
         devError('❌ AI turn error:', error);
         aiTurnInFlightRef.current = false;
@@ -186,10 +199,12 @@ export function useAITurn(options: UseAITurnOptions): void {
           const recoveredState = await api.endTurn(gameId);
           const nextId = recoveredState.currentRound.turnOrder[recoveredState.currentRound.currentTurnIndex];
           onTurnComplete(recoveredState, nextId);
-          onError(`AI turn failed for ${currentCreature.name} — skipped. (${error.message || 'timeout'})`);
+          const msg = error instanceof Error ? error.message : 'timeout';
+          onError(`AI turn failed for ${currentCreature.name} — skipped. (${msg})`);
         } catch {
           onLoadingChange(false);
-          onError(`AI turn failed: ${error.message || 'Unknown error'}`);
+          const msg = error instanceof Error ? error.message : 'Unknown error';
+          onError(`AI turn failed: ${msg}`);
         }
       }
     };

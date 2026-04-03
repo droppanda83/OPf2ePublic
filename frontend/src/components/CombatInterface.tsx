@@ -13,20 +13,20 @@ import { CharacterSheetModal } from './CharacterSheetModal';
 import { LevelUpWizard } from './LevelUpWizard';
 import { computeMovementCostMap, getEffectiveSpeed } from '../utils/movement';
 import { useBattleAnimation, type BattleAnimationRequest } from './BattleAnimationOverlay';
-import type { Creature, GameState, GroundObject, GMSession, CampaignPreferences } from '../../../shared/types';
+import type { Creature, GameState, GroundObject, GMSession, CampaignPreferences, Condition, WeaponSlot } from '../../../shared/types';
 import type { Difficulty } from '../../../shared/encounterBuilder';
 
 // Error Boundary
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
-  { hasError: boolean; error: any }
+  { hasError: boolean; error: unknown }
 > {
-  constructor(props: any) {
+  constructor(props: { children: React.ReactNode }) {
     super(props);
     this.state = { hasError: false, error: null };
   }
 
-  static getDerivedStateFromError(error: any) {
+  static getDerivedStateFromError(error: unknown) {
     console.error('💥 Error Boundary caught:', error);
     console.error('Stack:', error.stack);
     return { hasError: true, error };
@@ -100,6 +100,57 @@ interface CombatInterfaceProps {
   onReturnToLanding?: () => void;
 }
 
+interface CombatAction {
+  id: string;
+  name?: string;
+  cost: number;
+  requiresTarget?: boolean;
+  movementType?: string;
+  aoe?: boolean;
+  range?: number;
+  weaponId?: string;
+  spellId?: string;
+  pickupDestination?: string;
+  readyActionId?: string;
+  itemId?: string;
+  targetId?: string;
+  usesD20?: boolean;
+}
+
+interface AIExecutionResult {
+  planned?: { action?: { actionId?: string; targetId?: string } };
+  result?: {
+    success?: boolean;
+    message?: string;
+    details?: {
+      d20?: number;
+      bonus?: number;
+      total?: number;
+      result?: 'critical-success' | 'success' | 'failure' | 'critical-failure';
+      targetName?: string;
+      damage?: {
+        dice?: { sides: number; results: number[] };
+        weaponName?: string;
+        appliedDamage?: number;
+        total?: number;
+        damageType?: string;
+      };
+    };
+    pendingDamage?: {
+      targetId: string;
+      targetName: string;
+      amount?: number;
+      triggeringActionName?: string;
+      attackerName?: string;
+    };
+    path?: { x: number; y: number }[];
+  };
+  stateSnapshot?: {
+    creatures: Array<{ id: string; positions: { x: number; y: number }; currentHealth: number; conditions: Condition[]; dead?: boolean }>;
+    log?: unknown[];
+  };
+}
+
 const CombatInterface: React.FC<CombatInterfaceProps> = ({
   initialCreatures,
   difficulty = 'moderate',
@@ -118,13 +169,13 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
     actionPoints: 3
   });
 
-  const [selectedAction, setSelectedAction] = useState<any>(null);
+  const [selectedAction, setSelectedAction] = useState<CombatAction | null>(null);
   const [saveLoadModal, setSaveLoadModal] = useState<{ isOpen: boolean; mode: 'save' | 'load' }>({
     isOpen: false,
     mode: 'save'
   });
-  const [selectedCreatureForStats, setSelectedCreatureForStats] = useState<any>(null);
-  const [selectedCharacterForSheet, setSelectedCharacterForSheet] = useState<any>(null);
+  const [selectedCreatureForStats, setSelectedCreatureForStats] = useState<Creature | null>(null);
+  const [selectedCharacterForSheet, setSelectedCharacterForSheet] = useState<Creature | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
   const [pathbuilderModalOpen, setPathbuilderModalOpen] = useState(false);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
@@ -136,7 +187,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
   const [reactionQueue, setReactionQueue] = useState<ReactionPrompt[]>([]);
   const [activeReaction, setActiveReaction] = useState<ReactionPrompt | null>(null);
   const [pickupDestinationModalOpen, setPickupDestinationModalOpen] = useState(false);
-  const [pendingPickupAction, setPendingPickupAction] = useState<any>(null);
+  const [pendingPickupAction, setPendingPickupAction] = useState<CombatAction | null>(null);
   const [heroPointSpend, setHeroPointSpend] = useState(0);
   const [combatResult, setCombatResult] = useState<'victory' | 'defeat' | null>(null);
   const [gmSession, setGMSession] = useState<GMSession | null>(null);
@@ -200,7 +251,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
     }
 
     const currentCreature = uiState.gameState.creatures.find(
-      (creature: any) => creature.id === currentCreatureId
+      (creature: Creature) => creature.id === currentCreatureId
     );
 
     if (!currentCreature) {
@@ -218,12 +269,12 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
     const maxDistance = (selectedAction.range && selectedAction.range > 0) 
       ? selectedAction.range 
       : getEffectiveSpeed(currentCreature) / 5;
-    const isProne = currentCreature.conditions?.some((c: any) => c.name === 'prone') ?? false;
+    const isProne = currentCreature.conditions?.some((c: Condition) => c.name === 'prone') ?? false;
     const terrainCostMultiplier = isProne ? { difficult: 4 } : undefined;
     const occupiedPositions: Set<string> = new Set(
       uiState.gameState.creatures
-        .filter((creature: any) => creature.id !== currentCreature.id && creature.currentHealth > 0)
-        .map((creature: any) => `${creature.positions.x},${creature.positions.y}`)
+        .filter((creature: Creature) => creature.id !== currentCreature.id && creature.currentHealth > 0)
+        .map((creature: Creature) => `${creature.positions.x},${creature.positions.y}`)
     );
 
     const { costMap } = computeMovementCostMap(currentCreature.positions, terrain, {
@@ -249,7 +300,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
   useEffect(() => {
     if (!uiState.gameState || !uiState.currentCreatureId) return;
     const currentCreature = uiState.gameState.creatures.find(
-      (creature: any) => creature.id === uiState.currentCreatureId
+      (creature: Creature) => creature.id === uiState.currentCreatureId
     );
     const availableHeroPoints = Math.max(0, Math.min(currentCreature?.heroPoints ?? 1, 3));
     if (heroPointSpend > availableHeroPoints) {
@@ -359,7 +410,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
         if (cancelled) { aiTurnInFlightRef.current = false; return; }
         aiTurnInFlightRef.current = false;
         const newGameState = response.data.gameState || response.data;
-        const executionResults: any[] = response.data.executionResults || [];
+        const executionResults: AIExecutionResult[] = response.data.executionResults || [];
         const nextCreatureId = newGameState.currentRound.turnOrder[
           newGameState.currentRound.currentTurnIndex
         ];
@@ -367,10 +418,10 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
           ? response.data.actionPoints
           : 3;
         
-        console.log('🤖 AI turn completed. Actions:', executionResults.map((r: any) => `${r.planned?.action?.actionId}: ${r.result?.success ? '✅' : '❌'} ${r.result?.message || ''}`));
+        console.log('🤖 AI turn completed. Actions:', executionResults.map((r) => `${r.planned?.action?.actionId}: ${r.result?.success ? '✅' : '❌'} ${r.result?.message || ''}`));
 
         // Step-by-step replay of NPC actions
-        const successfulSteps = executionResults.filter((r: any) => r.result?.success && r.stateSnapshot);
+        const successfulSteps = executionResults.filter((r) => r.result?.success && r.stateSnapshot);
         
         if (successfulSteps.length > 0) {
           // Replay each action step-by-step with delays and battle animations
@@ -404,7 +455,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                     d20: details.d20,
                     bonus: details.bonus ?? 0,
                     total: details.total ?? (details.d20 + (details.bonus ?? 0)),
-                    result: details.result as any,
+                    result: details.result as BattleAnimationRequest['attackRoll']['result'],
                   },
                 };
 
@@ -440,7 +491,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
               setUiState(prev => {
                 if (!prev.gameState) return prev;
                 const updatedCreatures = prev.gameState.creatures.map((c: Creature) => {
-                  const snap = snapshot.find((s: any) => s.id === c.id);
+                  const snap = snapshot.find((s) => s.id === c.id);
                   if (snap) {
                     return {
                       ...c,
@@ -512,7 +563,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
           }
           setSelectedAction(null);
         }
-      } catch (error: any) {
+      } catch (error) {
         if (cancelled) { aiTurnInFlightRef.current = false; return; }
         console.error('❌ AI turn error:', error);
         aiTurnInFlightRef.current = false;
@@ -580,7 +631,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
         : 1;
       const partySize = initialCreatures?.length || 1;
 
-      let encounterCreatures: any[] = [];
+      let encounterCreatures: Creature[] = [];
 
       // In campaign mode, don't auto-generate enemies — start with players only
       // In encounter mode, generate enemies from the bestiary
@@ -609,10 +660,10 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
           console.log(`[startNewGame] Player ${idx} (${c.name}):`, {
             hasSkills: !!c.skills,
             skillsCount: c.skills?.length,
-            skills: c.skills?.slice(0, 2).map((s: any) => `${s.name}(${s.proficiency})`),
+            skills: c.skills?.slice(0, 2).map((s) => `${s.name}(${s.proficiency})`),
             hasFeats: !!c.feats,
             featsCount: c.feats?.length,
-            feats: c.feats?.slice(0, 2).map((f: any) => `${f.name}(${f.type})`),
+            feats: c.feats?.slice(0, 2).map((f) => `${f.name}(${f.type})`),
             hasLores: !!c.lores,
             loresCount: c.lores?.length,
             hasFocusSpells: !!c.focusSpells,
@@ -630,6 +681,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
         mapTheme: campaignPreferences?.mapTheme || undefined,
         mapSubTheme: campaignPreferences?.mapSubTheme || undefined,
         aiModel: campaignPreferences?.aiModel || undefined,
+        foundryMapId: campaignPreferences?.foundryMapId || undefined,
       });
 
       console.log('✅ Game created successfully:', response.data);
@@ -650,14 +702,14 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
       
       // Debug: Log what we got back from the backend
       console.log(`[startNewGame] ===== RECEIVED FROM BACKEND =====`);
-      response.data.creatures.forEach((c: any, i: number) => {
+      response.data.creatures.forEach((c: Creature, i: number) => {
         console.log(`[startNewGame] Creature ${i} (${c.name}):`, {
           hasSkills: !!c.skills,
           skillsCount: c.skills?.length,
-          skills: c.skills?.slice(0, 2).map((s: any) => `${s.name}(${s.proficiency})`),
+          skills: c.skills?.slice(0, 2).map((s) => `${s.name}(${s.proficiency})`),
           hasFeats: !!c.feats,
           featsCount: c.feats?.length,
-          feats: c.feats?.slice(0, 2).map((f: any) => `${f.name}(${f.type})`),
+          feats: c.feats?.slice(0, 2).map((f) => `${f.name}(${f.type})`),
           hasLores: !!c.lores,
           loresCount: c.lores?.length
         });
@@ -666,7 +718,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
 
       // Debug: Log all creatures with their shield properties
       console.log('🛡️ Game creatures shield properties:');
-      response.data.creatures.forEach((creature: any, index: number) => {
+      response.data.creatures.forEach((creature: Creature, index: number) => {
         console.log(`  Creature ${index} (${creature.name}):`, {
           equippedShield: creature.equippedShield,
           shieldRaised: creature.shieldRaised,
@@ -722,7 +774,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
               gameState: gmRes.data.gameState,
             }));
           }
-        } catch (gmError: any) {
+        } catch (gmError) {
           console.warn('⚠️ GM session auto-init failed:', gmError);
           const detail = gmError?.response?.data?.error || gmError?.message || 'Unknown error';
           setUiState(prev => ({
@@ -734,7 +786,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
           setGmInitStatus('');
         }
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('❌ Game creation error:', error);
       const errorMessage = error.response?.data?.error || error.message || 'Failed to create game';
       setUiState(prev => ({
@@ -788,7 +840,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
         gameState: response.data
       }));
       setPathbuilderModalOpen(false);
-    } catch (error: any) {
+    } catch (error) {
       console.error('❌ Import error:', error);
       console.error('📡 Response status:', error.response?.status);
       console.error('📡 Response data:', error.response?.data);
@@ -804,8 +856,8 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
 
   // Execute action
   const executeAction = async (
-    action: any,
-    targetOrPosition?: any,
+    action: CombatAction,
+    targetOrPosition?: string | { x: number; y: number } | null,
     overrideCreatureId?: string,
     heroPointsSpent?: number
   ) => {
@@ -823,7 +875,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
 
     setUiState(prev => ({ ...prev, loading: true }));
     try {
-      let payload: any = {
+      let payload: Record<string, unknown> = {
         creatureId: actingCreatureId,
         actionId: action.id
       };
@@ -945,7 +997,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
               d20: details.d20,
               bonus: details.bonus ?? 0,
               total: details.total ?? (details.d20 + (details.bonus ?? 0)),
-              result: details.result as any,
+              result: details.result as BattleAnimationRequest['attackRoll']['result'],
             },
           };
 
@@ -1033,7 +1085,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
       if (nextPrompts.length > 0) {
         setReactionQueue(prev => [...prev, ...nextPrompts]);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('❌ Action execution error:', error);
       setUiState(prev => ({
         ...prev,
@@ -1043,7 +1095,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
     }
   };
 
-  const executeActionWithHeroPoints = (action: any, targetOrPosition?: any, overrideCreatureId?: string) => {
+  const executeActionWithHeroPoints = (action: CombatAction, targetOrPosition?: string | { x: number; y: number } | null, overrideCreatureId?: string) => {
     if (!action?.usesD20) {
       executeAction(action, targetOrPosition, overrideCreatureId);
       return;
@@ -1051,7 +1103,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
 
     const actingCreatureId = overrideCreatureId ?? uiState.currentCreatureId;
     const actingCreature = uiState.gameState?.creatures.find(
-      (creature: any) => creature.id === actingCreatureId
+      (creature: Creature) => creature.id === actingCreatureId
     );
     const availableHeroPoints = Math.max(0, Math.min(actingCreature?.heroPoints ?? 1, 3));
     const spend = Math.max(0, Math.min(heroPointSpend, availableHeroPoints));
@@ -1063,7 +1115,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
     }
   };
 
-  const handleSelectAction = (action: any) => {
+  const handleSelectAction = (action: CombatAction) => {
     setSelectedAction(action);
     setUiState(prev => ({ ...prev, selectedTarget: null }));
   };
@@ -1073,7 +1125,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
     
     // Intercept pick-up-weapon to show destination choice
     if (selectedAction.id === 'pick-up-weapon') {
-      const targetId = (selectedAction as any).targetId || uiState.selectedTarget;
+      const targetId = selectedAction.targetId || uiState.selectedTarget;
       if (targetId) {
         setPickupDestinationModalOpen(true);
         setPendingPickupAction(selectedAction);
@@ -1086,9 +1138,9 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
       return;
     }
 
-    const targetId = (selectedAction as any).targetId || uiState.selectedTarget;
+    const targetId = selectedAction.targetId || uiState.selectedTarget;
     if (targetId) {
-      let targetData: any = targetId;
+      let targetData: string | { x: number; y: number } = targetId;
       // Convert grid coordinates to position object for movement and AoE spells
       if ((selectedAction.movementType || selectedAction.aoe) && typeof targetId === 'string') {
         const [x, y] = targetId.split('-').map(Number);
@@ -1169,7 +1221,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
         ...prev,
         error: null
       }));
-    } catch (error: any) {
+    } catch (error) {
       console.error('❌ Save error:', error);
       setUiState(prev => ({
         ...prev,
@@ -1205,7 +1257,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
       }
       setSelectedAction(null);
       setSaveLoadModal({ isOpen: false, mode: 'load' });
-    } catch (error: any) {
+    } catch (error) {
       console.error('❌ Load error:', error);
       setUiState(prev => ({
         ...prev,
@@ -1245,7 +1297,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
         selectedTarget: null
       }));
       setSelectedAction(null);
-    } catch (error: any) {
+    } catch (error) {
       console.error('❌ End turn error:', error);
       setUiState(prev => ({
         ...prev,
@@ -1276,7 +1328,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
         selectedTarget: null
       }));
       setSelectedAction(null);
-    } catch (error: any) {
+    } catch (error) {
       console.error('❌ Resume delay error:', error);
       setUiState(prev => ({
         ...prev,
@@ -1343,7 +1395,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
           gameState: response.data.gameState,
         }));
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('🚶 Exploration move failed:', error);
       const errorMsg = error.response?.data?.error || error.message || 'Move failed';
       setUiState(prev => ({
@@ -1377,11 +1429,12 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
       });
 
       setUiState(prev => ({ ...prev, error: null }));
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as { response?: { data?: { error?: string } }; message?: string };
       console.error('❌ Failed to update AI model:', error);
       setUiState(prev => ({
         ...prev,
-        error: error.response?.data?.error || error.message || 'Failed to update AI model',
+        error: err.response?.data?.error || err.message || 'Failed to update AI model',
       }));
     } finally {
       setUpdatingModel(false);
@@ -1597,7 +1650,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                 }}>
                   {uiState.gameState.creatures
                     .filter((c: Creature) => c.type === 'player')
-                    .map((character: any) => (
+                    .map((character: Creature) => (
                       <button
                         key={character.id}
                         onClick={() => { setSelectedCreatureForStats(null); setSelectedCharacterForSheet(character); }}
@@ -1727,7 +1780,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                   }}>
                     <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>Delayed Creatures</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                      {delayedCreatures.map((creature: any) => (
+                      {delayedCreatures.map((creature: Creature) => (
                         <button
                           key={creature.id}
                           onClick={() => handleResumeDelay(creature.id)}
@@ -1968,7 +2021,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                         }
                         // Handle level-ups
                         if (res.data.levelUps?.length > 0) {
-                          setPendingLevelUps(res.data.levelUps.map((lu: any) => ({ id: lu.id, name: lu.name, newLevel: lu.newLevel })));
+                          setPendingLevelUps(res.data.levelUps.map((lu: { id: string; name: string; newLevel: number }) => ({ id: lu.id, name: lu.name, newLevel: lu.newLevel })));
                           const first = res.data.levelUps[0];
                           const creature = (res.data.gameState || uiState.gameState)?.creatures?.find((c: Creature) => c.id === first.id);
                           if (creature) {
@@ -1979,7 +2032,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                         // Dismiss overlay
                         setCombatResult(null);
                         if (res.data.restoredNPCs?.length > 0) {
-                          console.log(`🔄 Restored NPCs: ${res.data.restoredNPCs.map((n: any) => n.name).join(', ')}`);
+                          console.log(`🔄 Restored NPCs: ${res.data.restoredNPCs.map((n: { name: string }) => n.name).join(', ')}`);
                         }
                       } catch (error) {
                         console.error('Failed to conclude encounter:', error);
@@ -2331,7 +2384,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                 <button
                   onClick={() => {
                     const actionWithDestination = { ...pendingPickupAction, pickupDestination: 'held' };
-                    const targetId = (pendingPickupAction as any).targetId || uiState.selectedTarget;
+                    const targetId = pendingPickupAction.targetId || uiState.selectedTarget;
                     executeAction(actionWithDestination, targetId);
                     setPickupDestinationModalOpen(false);
                     setPendingPickupAction(null);
@@ -2341,10 +2394,10 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                       const currentCreature = uiState.gameState?.creatures.find((c: Creature) => c.id === uiState.currentCreatureId);
                       if (!currentCreature) return true;
                       const handsInUse = (currentCreature.weaponInventory || [])
-                        .filter((s: any) => s.state === 'held' && !s.weapon?.isNatural)
-                        .reduce((sum: number, s: any) => sum + (s.weapon?.hands || 1), 0);
+                        .filter((s: WeaponSlot) => s.state === 'held' && !s.weapon?.isNatural)
+                        .reduce((sum: number, s: WeaponSlot) => sum + (s.weapon?.hands || 1), 0);
                       // Find the ground object to get weapon hand requirement
-                      const targetId = (pendingPickupAction as any).targetId || uiState.selectedTarget;
+                      const targetId = pendingPickupAction.targetId || uiState.selectedTarget;
                       const groundObj = uiState.gameState?.groundObjects?.find((g: GroundObject) => g.id === targetId);
                       const handsNeeded = groundObj?.weapon?.hands || 1;
                       return handsInUse + handsNeeded > 2;
@@ -2356,8 +2409,8 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                       const currentCreature = uiState.gameState?.creatures.find((c: Creature) => c.id === uiState.currentCreatureId);
                       if (!currentCreature) return '#555';
                       const handsInUse = (currentCreature.weaponInventory || [])
-                        .filter((s: any) => s.state === 'held' && !s.weapon?.isNatural)
-                        .reduce((sum: number, s: any) => sum + (s.weapon?.hands || 1), 0);
+                        .filter((s: WeaponSlot) => s.state === 'held' && !s.weapon?.isNatural)
+                        .reduce((sum: number, s: WeaponSlot) => sum + (s.weapon?.hands || 1), 0);
                       const groundObj = uiState.gameState?.groundObjects?.find((g: GroundObject) => g.id === uiState.selectedTarget);
                       const handsNeeded = groundObj?.weapon?.hands || 1;
                       if (handsInUse + handsNeeded > 2) return '#555';
@@ -2367,8 +2420,8 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                       const currentCreature = uiState.gameState?.creatures.find((c: Creature) => c.id === uiState.currentCreatureId);
                       if (!currentCreature) return '#999';
                       const handsInUse = (currentCreature.weaponInventory || [])
-                        .filter((s: any) => s.state === 'held' && !s.weapon?.isNatural)
-                        .reduce((sum: number, s: any) => sum + (s.weapon?.hands || 1), 0);
+                        .filter((s: WeaponSlot) => s.state === 'held' && !s.weapon?.isNatural)
+                        .reduce((sum: number, s: WeaponSlot) => sum + (s.weapon?.hands || 1), 0);
                       const groundObj = uiState.gameState?.groundObjects?.find((g: GroundObject) => g.id === uiState.selectedTarget);
                       const handsNeeded = groundObj?.weapon?.hands || 1;
                       if (handsInUse + handsNeeded > 2) return '#666';
@@ -2387,9 +2440,9 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                     const currentCreature = uiState.gameState?.creatures.find((c: Creature) => c.id === uiState.currentCreatureId);
                     if (!currentCreature) return '';
                     const handsInUse = (currentCreature.weaponInventory || [])
-                      .filter((s: any) => s.state === 'held' && !s.weapon?.isNatural)
-                      .reduce((sum: number, s: any) => sum + (s.weapon?.hands || 1), 0);
-                    const targetId = (pendingPickupAction as any).targetId || uiState.selectedTarget;
+                      .filter((s: WeaponSlot) => s.state === 'held' && !s.weapon?.isNatural)
+                      .reduce((sum: number, s: WeaponSlot) => sum + (s.weapon?.hands || 1), 0);
+                    const targetId = pendingPickupAction.targetId || uiState.selectedTarget;
                     const groundObj = uiState.gameState?.groundObjects?.find((g: GroundObject) => g.id === targetId);
                     const handsNeeded = groundObj?.weapon?.hands || 1;
                     if (handsInUse + handsNeeded > 2) return ' (hands full)';
@@ -2401,7 +2454,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({
                 <button
                   onClick={() => {
                     const actionWithDestination = { ...pendingPickupAction, pickupDestination: 'stowed' };
-                    const targetId = (pendingPickupAction as any).targetId || uiState.selectedTarget;
+                    const targetId = pendingPickupAction.targetId || uiState.selectedTarget;
                     executeAction(actionWithDestination, targetId);
                     setPickupDestinationModalOpen(false);
                     setPendingPickupAction(null);

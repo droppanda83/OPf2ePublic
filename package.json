@@ -21,6 +21,7 @@
     "format:check": "prettier --check \"shared/**/*.ts\" \"backend/src/**/*.ts\" \"frontend/src/**/*.{ts,tsx}\"",
     "test": "npx tsx --test backend/src/game/*.test.ts",
     "import:foundry": "node scripts/foundry-import/index.js",
+    "import:token-art": "node scripts/foundry-import/import-token-art.js",
     "convert:foundry:scenes": "node scripts/foundry-import/convert-foundry-scenes.js"
   },
   "dependencies": {

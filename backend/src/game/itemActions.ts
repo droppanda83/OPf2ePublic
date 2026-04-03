@@ -3,14 +3,14 @@
 // Phase 14 refactor: consumable item activation (potions, elixirs, scrolls)
 // 
 
-import { Creature, GameState, getConsumable, rollDamageFormula } from 'pf2e-shared';
+import { Creature, GameState, getConsumable, rollDamageFormula, ActionResult } from 'pf2e-shared';
 
 export function resolveUseItem(
   actor: Creature,
   gameState: GameState,
   itemId?: string,
   targetId?: string
-): any {
+): ActionResult {
   // Validate item ID provided
   if (!itemId) {
     return {

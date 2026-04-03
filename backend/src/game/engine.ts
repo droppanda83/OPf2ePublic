@@ -1,15 +1,302 @@
-import { Creature, GameState, EncounterMap, TerrainTile, CombatRound, Position, getShield, getWeapon, computeDerivedStats, createDefaultAbilities, createDefaultProficiencies } from 'pf2e-shared';
+import {
+  Creature,
+  Condition,
+  GameState,
+  EncounterMap,
+  TerrainTile,
+  Position,
+  ActionResult,
+  WeaponSlot,
+  CreatureWeapon,
+  ProficiencyProfile,
+  CreatureSize,
+  getShield,
+  getWeapon,
+  getSpell,
+  computeDerivedStats,
+  createDefaultAbilities,
+  createDefaultProficiencies,
+} from 'pf2e-shared';
+import type { GameEventBus } from '../events/eventBus';
 import { RulesEngine } from './rules';
 import { getActionCost } from './ruleValidator';
 import { debugLog } from './logger';
 import { applySize, getSpaceForSize, getEffectiveSize } from './subsystems';
+import { checkHazardsAtPosition } from './hazardActions';
+
+interface ReactionOpportunity {
+  type: 'reactive-strike' | 'ready-action';
+  reactorId: string;
+  reactorName: string;
+  targetId: string;
+  targetName: string;
+  trigger: string;
+  triggeringActionId: string;
+  triggeringActionName: string;
+  triggeringCreatureName: string;
+  readiedActionId?: string;
+}
+
+interface PersistentDamageEntry {
+  message: string;
+  source?: string;
+  finalDamage?: number;
+  damage?: number;
+  damageType?: string;
+}
+
+interface CreatureEventSnapshot {
+  id: string;
+  name: string;
+  currentHealth: number;
+  maxHealth: number;
+  dead: boolean;
+  dying: boolean;
+  wounded: number;
+  conditions: Array<Pick<Condition, 'name' | 'value' | 'source' | 'duration'>>;
+}
 
 export class GameEngine {
   private games: Map<string, GameState> = new Map();
   private rulesEngine: RulesEngine;
+  private eventBus: GameEventBus | null;
 
-  constructor() {
+  constructor(eventBus?: GameEventBus) {
     this.rulesEngine = new RulesEngine();
+    this.eventBus = eventBus ?? null;
+  }
+
+  private getEventCreatures(gameState: GameState): Creature[] {
+    return [...gameState.creatures, ...(gameState.companions || [])];
+  }
+
+  private snapshotCreatureStates(gameState: GameState): Map<string, CreatureEventSnapshot> {
+    return new Map(
+      this.getEventCreatures(gameState).map(creature => [
+        creature.id,
+        {
+          id: creature.id,
+          name: creature.name,
+          currentHealth: creature.currentHealth,
+          maxHealth: creature.maxHealth,
+          dead: !!creature.dead,
+          dying: !!creature.dying,
+          wounded: creature.wounded || 0,
+          conditions: (creature.conditions || []).map(condition => ({
+            name: condition.name,
+            value: condition.value,
+            source: condition.source,
+            duration: condition.duration,
+          })),
+        },
+      ]),
+    );
+  }
+
+  private conditionKey(condition: Pick<Condition, 'name' | 'value' | 'source' | 'duration'>): string {
+    return [condition.name, condition.value ?? '', condition.source ?? '', condition.duration].join('|');
+  }
+
+  private emitCreatureDeltaEvents(
+    gameId: string,
+    before: Map<string, CreatureEventSnapshot>,
+    gameState: GameState,
+    source: string,
+    removedReason: 'expired' | 'removed' | 'overridden' = 'removed',
+  ): void {
+    for (const creature of this.getEventCreatures(gameState)) {
+      const previous = before.get(creature.id);
+      if (!previous) continue;
+
+      if (creature.currentHealth < previous.currentHealth) {
+        this.eventBus?.emit({
+          type: 'creature:damaged',
+          timestamp: Date.now(),
+          gameId,
+          creatureId: creature.id,
+          creatureName: creature.name,
+          damage: previous.currentHealth - creature.currentHealth,
+          damageType: 'untyped',
+          source,
+          currentHp: creature.currentHealth,
+          maxHp: creature.maxHealth,
+        });
+      } else if (creature.currentHealth > previous.currentHealth) {
+        this.eventBus?.emit({
+          type: 'creature:healed',
+          timestamp: Date.now(),
+          gameId,
+          creatureId: creature.id,
+          creatureName: creature.name,
+          healing: creature.currentHealth - previous.currentHealth,
+          source,
+          currentHp: creature.currentHealth,
+          maxHp: creature.maxHealth,
+        });
+      }
+
+      if (!previous.dying && creature.dying) {
+        this.eventBus?.emit({
+          type: 'creature:dying',
+          timestamp: Date.now(),
+          gameId,
+          creatureId: creature.id,
+          creatureName: creature.name,
+          dyingValue: Math.max(1, creature.wounded || 1),
+        });
+      }
+
+      if (previous.dying && !creature.dying && !creature.dead) {
+        this.eventBus?.emit({
+          type: 'creature:stabilized',
+          timestamp: Date.now(),
+          gameId,
+          creatureId: creature.id,
+          creatureName: creature.name,
+        });
+      }
+
+      if (!previous.dead && !!creature.dead) {
+        this.eventBus?.emit({
+          type: 'creature:dead',
+          timestamp: Date.now(),
+          gameId,
+          creatureId: creature.id,
+          creatureName: creature.name,
+        });
+      }
+
+      const prevConditions = new Map(previous.conditions.map(condition => [this.conditionKey(condition), condition]));
+      const nextConditions = new Map(
+        (creature.conditions || []).map(condition => [
+          this.conditionKey(condition),
+          {
+            name: condition.name,
+            value: condition.value,
+            source: condition.source,
+            duration: condition.duration,
+          },
+        ]),
+      );
+
+      for (const [key, condition] of nextConditions) {
+        if (!prevConditions.has(key)) {
+          this.eventBus?.emit({
+            type: 'condition:applied',
+            timestamp: Date.now(),
+            gameId,
+            creatureId: creature.id,
+            creatureName: creature.name,
+            condition,
+          });
+        }
+      }
+
+      for (const [key, condition] of prevConditions) {
+        if (!nextConditions.has(key)) {
+          this.eventBus?.emit({
+            type: 'condition:removed',
+            timestamp: Date.now(),
+            gameId,
+            creatureId: creature.id,
+            creatureName: creature.name,
+            conditionName: condition.name,
+            reason: removedReason,
+          });
+        }
+      }
+    }
+  }
+
+  private hasNamedFeat(creature: Creature, featName: string): boolean {
+    const lowerFeatName = featName.toLowerCase().trim();
+    const featMatch = creature.feats?.some((feat) => {
+      const name = feat?.name;
+      return typeof name === 'string' && name.toLowerCase().trim() === lowerFeatName;
+    }) ?? false;
+    const specialsMatch = creature.specials?.some((entry) =>
+      typeof entry === 'string' && entry.toLowerCase().trim() === lowerFeatName
+    ) ?? false;
+    return featMatch || specialsMatch;
+  }
+
+  private shouldBreakInvisibilityOnAction(
+    actor: Creature,
+    gameState: GameState,
+    actionId: string,
+    targetId: string | undefined,
+    result: ActionResult
+  ): boolean {
+    const hasBreakableInvisibility = actor.conditions?.some((condition) => condition.name === 'invisibility-breaks-on-hostile-action');
+    if (!hasBreakableInvisibility || result?.errorCode) {
+      return false;
+    }
+
+    const hostileActions = new Set([
+      'strike',
+      'vicious-swing',
+      'reactive-strike',
+      'spellstrike',
+      'power-attack',
+      'sudden-charge',
+      'double-slice',
+      'intimidating-strike',
+      'exacting-strike',
+      'snagging-strike',
+      'knockdown',
+      'brutish-shove',
+      'lunge',
+      'grapple',
+      'trip',
+      'shove',
+      'demoralize',
+    ]);
+
+    if (hostileActions.has(actionId)) {
+      return true;
+    }
+
+    if (typeof result.damage === 'number' && result.damage > 0) {
+      return true;
+    }
+
+    const areaResults = (result as ActionResult & { results?: Array<{ finalDamage?: number }> }).results;
+    if (Array.isArray(areaResults) && areaResults.some((entry) => typeof entry.finalDamage === 'number' && entry.finalDamage > 0)) {
+      return true;
+    }
+
+    const spell = getSpell(actionId);
+    if (spell) {
+      if (spell.damageFormula || spell.saveType) {
+        return true;
+      }
+
+      if (targetId) {
+        const target = gameState.creatures.find((creature) => creature.id === targetId)
+          || (gameState.companions || []).find((creature) => creature.id === targetId);
+        if (target && target.isNPC !== actor.isNPC) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  private breakInvisibilityOnHostileAction(
+    actor: Creature,
+    gameState: GameState,
+    actionId: string,
+    targetId: string | undefined,
+    result: ActionResult
+  ): boolean {
+    if (!this.shouldBreakInvisibilityOnAction(actor, gameState, actionId, targetId, result) || !actor.conditions) {
+      return false;
+    }
+
+    const beforeCount = actor.conditions.length;
+    actor.conditions = actor.conditions.filter((condition) => condition.name !== 'invisible' && condition.name !== 'invisibility-breaks-on-hostile-action');
+    return actor.conditions.length !== beforeCount;
   }
 
   createGame(
@@ -81,6 +368,28 @@ export class GameEngine {
     }
 
     this.games.set(id, gameState);
+
+    this.eventBus?.emit({
+      type: 'initiative:rolled',
+      timestamp: Date.now(),
+      gameId: id,
+      results: allCreatures.map(c => ({
+        creatureId: c.id,
+        creatureName: c.name,
+        initiative: c.initiative,
+      })),
+      turnOrder,
+    });
+
+    // Emit combat started event
+    this.eventBus?.emit({
+      type: 'combat:started',
+      timestamp: Date.now(),
+      gameId: id,
+      turnOrder,
+      creatureCount: allCreatures.length,
+    });
+
     return gameState;
   }
 
@@ -96,9 +405,10 @@ export class GameEngine {
     readyActionId?: string,
     itemId?: string,
     spellId?: string
-  ): any {
+  ): { gameState: GameState; result: ActionResult; reactionOpportunities: ReactionOpportunity[] } {
     const gameState = this.games.get(gameId);
     if (!gameState) throw new Error('Game not found');
+    const preActionState = this.snapshotCreatureStates(gameState);
 
     const actor = gameState.creatures.find((c) => c.id === creatureId)
       || (gameState.companions || []).find((c) => c.id === creatureId);
@@ -121,6 +431,11 @@ export class GameEngine {
       spellId
     );
 
+    const brokeInvisibility = this.breakInvisibilityOnHostileAction(actor, gameState, actionId, targetId, result);
+    if (brokeInvisibility) {
+      result.message += `\n👻 ${actor.name} becomes visible after taking a hostile action.`;
+    }
+
     const actionCost = getActionCost(actionId);
     if (!result?.errorCode) {
       if (typeof actionCost === 'number') {
@@ -139,6 +454,36 @@ export class GameEngine {
       details: result,
     });
 
+    // Phase 24: Check hazards at new position after movement
+    const moveActions = ['move', 'stride', 'step', 'warp-step', 'fly', 'burrow', 'climb', 'swim', 'tumble-through'];
+    let hazardResults: ReturnType<typeof checkHazardsAtPosition> = [];
+    if (moveActions.includes(actionId) && !result?.errorCode && gameState.hazardInstances?.length) {
+      const moved = prePosition.x !== actor.positions.x || prePosition.y !== actor.positions.y;
+      if (moved) {
+        hazardResults = checkHazardsAtPosition(actor, actor.positions, gameState.hazardInstances);
+        for (const hr of hazardResults) {
+          gameState.log.push({
+            timestamp: Date.now(),
+            type: 'damage',
+            message: hr.message + ' ' + hr.targetResults.map(tr => tr.message).join(' '),
+            details: hr,
+          });
+        }
+      }
+    }
+
+    if (moveActions.includes(actionId) && !result?.errorCode) {
+      const spellAreaEntries = this.rulesEngine.processSpellAreaMovement(actor, gameState);
+      for (const entry of spellAreaEntries) {
+        gameState.log.push({
+          timestamp: Date.now(),
+          type: 'condition',
+          message: entry.message,
+          details: entry,
+        });
+      }
+    }
+
     const skipReactionCheck = ['reactive-strike', 'shield-block', 'resolve-pending-damage', 'teleport'].includes(actionId);
     const reactionOpportunities = skipReactionCheck
       ? []
@@ -148,6 +493,53 @@ export class GameEngine {
     // Do NOT auto-advance turn - let player manually end their turn
     // Refresh derived stats for all creatures
     this.refreshDerivedStats(gameState);
+
+    // Emit action event
+    const logEntry = gameState.log[gameState.log.length - 1];
+    if (result?.errorCode) {
+      this.eventBus?.emit({
+        type: 'action:failed',
+        timestamp: Date.now(),
+        gameId,
+        actorId: creatureId,
+        actorName: actor.name,
+        actionId,
+        errorCode: result.errorCode,
+        message: result.message,
+      });
+    } else {
+      const target = targetId ? gameState.creatures.find(c => c.id === targetId) : undefined;
+      this.eventBus?.emit({
+        type: 'action:executed',
+        timestamp: Date.now(),
+        gameId,
+        actorId: creatureId,
+        actorName: actor.name,
+        actionId,
+        targetId,
+        targetName: target?.name,
+        result: { ...result, success: true, message: result.message },
+        logEntry,
+      });
+
+      // Emit reaction opportunities
+      for (const opp of [...reactionOpportunities, ...readyOpportunities]) {
+        this.eventBus?.emit({
+          type: 'reaction:opportunity',
+          timestamp: Date.now(),
+          gameId,
+          reactorId: opp.reactorId,
+          reactorName: opp.reactorName,
+          triggerId: opp.targetId,
+          triggerName: opp.targetName,
+          reactionType: opp.type === 'ready-action' ? 'ready-action' : 'reactive-strike',
+          triggerAction: opp.triggeringActionId,
+        });
+      }
+
+      this.emitCreatureDeltaEvents(gameId, preActionState, gameState, actionId);
+    }
+
     return { gameState, result, reactionOpportunities: [...reactionOpportunities, ...readyOpportunities] };
   }
 
@@ -156,7 +548,7 @@ export class GameEngine {
     actor: Creature,
     actionId: string,
     prePosition: Position
-  ): any[] {
+  ): ReactionOpportunity[] {
     debugLog('🔍 [FIND_OPPS] Called for actionId:', actionId);
     const trigger = this.getReactiveStrikeTrigger(actionId, actor);
     debugLog('🔍 [GET_TRIGGER] Result:', trigger);
@@ -181,7 +573,7 @@ export class GameEngine {
     }
     const actionName = this.getActionDisplayName(actionId, actor);
 
-    const opportunities: any[] = [];
+    const opportunities: ReactionOpportunity[] = [];
     const triggerContext = {
       actionId,
       actionName,
@@ -258,12 +650,12 @@ export class GameEngine {
     gameState: GameState,
     actor: Creature,
     actionId: string
-  ): any[] {
+  ): ReactionOpportunity[] {
     if (['ready', 'execute-ready', 'resume-delay', 'delay'].includes(actionId)) {
       return [];
     }
 
-    const opportunities: any[] = [];
+    const opportunities: ReactionOpportunity[] = [];
     for (const creature of gameState.creatures) {
       if (creature.id === actor.id) continue;
       if (creature.currentHealth <= 0 || creature.dying) continue;
@@ -361,7 +753,7 @@ export class GameEngine {
 
     const specials = creature.specials;
     const specialsMatch = Array.isArray(specials)
-      ? specials.some((entry: any) => typeof entry === 'string' && entry.toLowerCase().includes('reactive strike'))
+      ? specials.some((entry: string) => typeof entry === 'string' && entry.toLowerCase().includes('reactive strike'))
       : false;
 
     debugLog(`  ✅ featMatch: ${featMatch}, specialsMatch: ${specialsMatch}`);
@@ -370,11 +762,11 @@ export class GameEngine {
 
   private hasFeat(creature: Creature, featName: string): boolean {
     const lowerFeatName = featName.toLowerCase().trim();
-    const featMatch = creature.feats?.some((feat: any) => {
-      const name = typeof feat === 'string' ? feat : feat?.name;
+    const featMatch = creature.feats?.some((feat) => {
+      const name = feat?.name;
       return typeof name === 'string' && name.toLowerCase().trim() === lowerFeatName;
     }) ?? false;
-    const specialsMatch = creature.specials?.some((entry: any) =>
+    const specialsMatch = creature.specials?.some((entry) =>
       typeof entry === 'string' && entry.toLowerCase().trim() === lowerFeatName
     ) ?? false;
     return featMatch || specialsMatch;
@@ -386,9 +778,10 @@ export class GameEngine {
     return Math.max(dx, dy) <= 1; // Chebyshev distance: adjacent including diagonals
   }
 
-  startTurn(gameId: string, creatureId: string): any {
+  startTurn(gameId: string, creatureId: string): { gameState: GameState; persistentDamageEntries: PersistentDamageEntry[]; actionPoints: number; conditionMessages: string[] } {
     const gameState = this.games.get(gameId);
     if (!gameState) throw new Error('Game not found');
+    const preTurnState = this.snapshotCreatureStates(gameState);
 
     const creature = gameState.creatures.find((c) => c.id === creatureId);
     if (!creature) throw new Error('Creature not found');
@@ -450,7 +843,7 @@ export class GameEngine {
     // Reset reaction availability at the start of the turn
     creature.reactionUsed = false;
     // Reset Combat Reflexes extra reaction
-    (creature as any).combatReflexesUsed = false;
+    creature.combatReflexesUsed = false;
 
     // Clear any pending shield block state
     if (creature.conditions?.length) {
@@ -463,19 +856,11 @@ export class GameEngine {
     creature.flourishUsedThisTurn = false;
 
     // PASSIVE FIGHTER FEAT: Improved Dueling Parry — auto-apply +2 AC if wielding 1-handed weapon with free hand
-    const hasFeat = (c: any, name: string) => {
-      const lower = name.toLowerCase();
-      return c.feats?.some((f: any) => {
-        const n = typeof f === 'string' ? f : f?.name;
-        return typeof n === 'string' && n.toLowerCase().trim() === lower;
-      }) || c.specials?.some((s: string) => typeof s === 'string' && s.toLowerCase().trim() === lower);
-    };
-
     // Remove previous auto-parry bonuses
     creature.bonuses = (creature.bonuses || []).filter(b => b.source !== 'improved-dueling-parry' && b.source !== 'twinned-defense');
 
-    if (hasFeat(creature, 'improved dueling parry')) {
-      const heldWeapons = creature.weaponInventory?.filter((s: any) => s.state === 'held') || [];
+    if (this.hasNamedFeat(creature, 'improved dueling parry')) {
+      const heldWeapons = creature.weaponInventory?.filter((s: WeaponSlot) => s.state === 'held') || [];
       if (heldWeapons.length === 1) {
         if (!creature.bonuses) creature.bonuses = [];
         creature.bonuses.push({ source: 'improved-dueling-parry', value: 2, type: 'circumstance', applyTo: 'ac' });
@@ -484,10 +869,10 @@ export class GameEngine {
     }
 
     // PASSIVE FIGHTER FEAT: Twinned Defense — auto-apply Twin Parry AC bonus if dual-wielding
-    if (hasFeat(creature, 'twinned defense')) {
-      const heldWeapons = creature.weaponInventory?.filter((s: any) => s.state === 'held') || [];
+    if (this.hasNamedFeat(creature, 'twinned defense')) {
+      const heldWeapons = creature.weaponInventory?.filter((s: WeaponSlot) => s.state === 'held') || [];
       if (heldWeapons.length >= 2) {
-        const hasParryTrait = heldWeapons.some((s: any) =>
+        const hasParryTrait = heldWeapons.some((s: WeaponSlot) =>
           s.weapon?.traits?.some((t: string) => typeof t === 'string' && t.toLowerCase() === 'parry')
         );
         const acBonus = hasParryTrait ? 2 : 1;
@@ -500,6 +885,10 @@ export class GameEngine {
     // Process persistent damage at the start of the turn
     const persistentDamageEntries = this.rulesEngine.processPersistentDamage(creature);
 
+    this.rulesEngine.updateSpellAreaOccupancy(creature, gameState);
+    this.rulesEngine.refreshSpellAreaConditions(creature, gameState);
+    const spellAreaEntries = this.rulesEngine.processSpellAreaEffects(creature, gameState, 'start-turn');
+
     // Log each persistent damage effect
     persistentDamageEntries.forEach((entry) => {
       gameState.log.push({
@@ -510,7 +899,36 @@ export class GameEngine {
       });
     });
 
+    spellAreaEntries.forEach((entry) => {
+      gameState.log.push({
+        timestamp: Date.now(),
+        type: 'condition',
+        message: entry.message,
+        details: entry,
+      });
+    });
+
     creature.actionsRemaining = actionPoints;
+
+  this.emitCreatureDeltaEvents(gameId, preTurnState, gameState, 'turn-start');
+
+    // Emit turn started event
+    this.eventBus?.emit({
+      type: 'turn:started',
+      timestamp: Date.now(),
+      gameId,
+      creatureId,
+      creatureName: creature.name,
+      creatureType: creature.type,
+      actionPoints,
+      conditionMessages,
+      persistentDamage: persistentDamageEntries.map((e: PersistentDamageEntry) => ({
+        source: e.source ?? 'unknown',
+        damage: e.finalDamage ?? e.damage ?? 0,
+        damageType: e.damageType ?? 'untyped',
+      })),
+    });
+
     return { gameState, persistentDamageEntries, actionPoints, conditionMessages };
   }
 
@@ -548,17 +966,63 @@ export class GameEngine {
       actions: [],
     };
 
+    this.eventBus?.emit({
+      type: 'initiative:rolled',
+      timestamp: Date.now(),
+      gameId,
+      results: combatants.map(c => ({
+        creatureId: c.id,
+        creatureName: c.name,
+        initiative: c.initiative,
+      })),
+      turnOrder,
+    });
+
     return gameState;
   }
 
   endTurn(gameId: string): GameState {
     const gameState = this.games.get(gameId);
     if (!gameState) throw new Error('Game not found');
+    const preTurnState = this.snapshotCreatureStates(gameState);
     const round = gameState.currentRound;
     const endingCreatureId = round.turnOrder[round.currentTurnIndex];
+    const endingCreature = gameState.creatures.find(c => c.id === endingCreatureId);
+
+    // Track conditions before expiration to report what was removed
+    const conditionsBefore = new Map<string, string[]>();
+    for (const c of gameState.creatures) {
+      conditionsBefore.set(c.id, (c.conditions || []).map(cond => cond.name));
+    }
 
     this.expireEndOfTurnConditions(gameState, endingCreatureId);
+
+    // Determine expired conditions
+    const expiredConditions: string[] = [];
+    if (endingCreature) {
+      const before = conditionsBefore.get(endingCreatureId) || [];
+      const after = (endingCreature.conditions || []).map(cond => cond.name);
+      for (const name of before) {
+        if (!after.includes(name)) {
+          expiredConditions.push(name);
+        }
+      }
+    }
+
     this.advanceTurn(gameState);
+
+  this.emitCreatureDeltaEvents(gameId, preTurnState, gameState, 'turn-end', 'expired');
+
+    // Emit turn ended event
+    this.eventBus?.emit({
+      type: 'turn:ended',
+      timestamp: Date.now(),
+      gameId,
+      creatureId: endingCreatureId,
+      creatureName: endingCreature?.name ?? 'Unknown',
+      expiredConditions,
+    });
+
     return gameState;
   }
 
@@ -626,19 +1090,19 @@ export class GameEngine {
     });
   }
 
-  private initializeWeaponInventory(partial: Partial<Creature>): any[] {
+  private initializeWeaponInventory(partial: Partial<Creature>): WeaponSlot[] {
     // If weaponInventory is already provided, use that
     if (partial.weaponInventory && partial.weaponInventory.length > 0) {
       return partial.weaponInventory;
     }
 
     // Otherwise, try to build from equippedWeapon
-    const inventory: any[] = [];
+    const inventory: WeaponSlot[] = [];
     if (partial.equippedWeapon) {
       const weapon = getWeapon(partial.equippedWeapon);
       if (weapon) {
         // Convert Weapon from catalog to CreatureWeapon
-        const creatureWeapon: any = {
+        const creatureWeapon: CreatureWeapon = {
           id: weapon.id,
           display: weapon.name,
           attackType: weapon.type,
@@ -691,7 +1155,7 @@ export class GameEngine {
     // before their class data was corrected (e.g., Fighters should have expert weapons)
     const className = partial.characterClass?.toLowerCase();
     if (className === 'fighter') {
-      const p = proficiencies as any;
+      const p = proficiencies as ProficiencyProfile;
       // Fighter: expert in unarmed, simple, martial weapons; trained in advanced
       if (p.unarmed !== 'expert' && p.unarmed !== 'master' && p.unarmed !== 'legendary') p.unarmed = 'expert';
       if (p.simpleWeapons !== 'expert' && p.simpleWeapons !== 'master' && p.simpleWeapons !== 'legendary') p.simpleWeapons = 'expert';
@@ -781,8 +1245,8 @@ export class GameEngine {
     computeDerivedStats(creature);
 
     // Initialize size-derived fields (space, naturalReach) from creature size
-    const creatureSize = partial.size ?? 'medium';
-    applySize(creature, creatureSize as any);
+    const creatureSize: CreatureSize = partial.size ?? 'medium';
+    applySize(creature, creatureSize);
 
     // For NPC/bestiary creatures with an explicitly provided AC, override the computed value
     if (partial.armorClass !== undefined && partial.armorClass > 0) {
@@ -833,13 +1297,13 @@ export class GameEngine {
       // gain a reaction at the start of each OTHER creature's turn
       gameState.creatures.forEach((c) => {
         if (c.id !== currentCreature!.id && c.reactionUsed) {
-          const hasBoundless = c.feats?.some((f: any) => {
-            const name = typeof f === 'string' ? f : f?.name;
+          const hasBoundless = c.feats?.some((f) => {
+            const name = f?.name;
             return typeof name === 'string' && name.toLowerCase().trim() === 'boundless reprisals';
           }) || c.specials?.some((s: string) => s.toLowerCase().trim() === 'boundless reprisals');
           if (hasBoundless) {
             c.reactionUsed = false;
-            (c as any).combatReflexesUsed = false;
+            c.combatReflexesUsed = false;
             debugLog(`⚔️ ${c.name}: Boundless Reprisals — reaction refreshed for ${currentCreature!.name}'s turn`);
           }
         }
@@ -848,6 +1312,24 @@ export class GameEngine {
 
     if (round.currentTurnIndex === 0) {
       round.number++;
+
+      const expiredSpellAreas = this.rulesEngine.tickSpellAreas(gameState);
+      expiredSpellAreas.forEach((name) => {
+        gameState.log.push({
+          timestamp: Date.now(),
+          type: 'condition',
+          message: `✨ ${name} fades from the battlefield.`,
+        });
+      });
+
+      // Emit round started event
+      this.eventBus?.emit({
+        type: 'round:started',
+        timestamp: Date.now(),
+        gameId: gameState.id,
+        roundNumber: round.number,
+      });
+
       // Apply condition durations, etc.
       gameState.creatures.forEach((c) => {
         c.conditions = c.conditions.filter((cond) => {

@@ -5,7 +5,7 @@
  */
 
 import type { CharacterSheet, Party, PathbuilderCharacter, Creature, AbilityScores, ProficiencyProfile, DamageResistance, DamageWeakness, ImmunityType, CreatureWeapon, WeaponSlot, CastableSpell, SpellSlot, StashItem, StashItemCatalog } from '../../../shared/types';
-import { getProficiencyBonus } from '../../../shared/bonuses';
+import { getProficiencyBonus, type Bonus } from '../../../shared/bonuses';
 import { WEAPON_CATALOG, type Weapon } from '../../../shared/weapons';
 import { ARMOR_CATALOG } from '../../../shared/armor';
 import { SHIELD_CATALOG } from '../../../shared/shields';
@@ -526,7 +526,7 @@ export class CharacterService {
   /**
    * Parse JSON file and return as parsed object
    */
-  static async parseJSONFile(file: File): Promise<any> {
+  static async parseJSONFile(file: File): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -637,7 +637,7 @@ export class CharacterService {
     if (hasFeat('Orc Ferocity')) specials.push('Orc Ferocity');
 
     // ── Build bonuses array from passive feats ──
-    const bonuses: any[] = [];
+    const bonuses: Bonus[] = [];
     const getStrikingDice = (rune: 'striking' | 'greater-striking' | 'major-striking'): number => {
       if (rune === 'striking') return 1;
       if (rune === 'greater-striking') return 2;

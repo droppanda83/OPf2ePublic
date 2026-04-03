@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateDistance, getSkillBonus, getPerceptionDC, getWillDC, getReflexDC, getFortitudeDC, hasFeat, getSelectedWeapon } from './statHelpers';
-import type { Creature } from 'pf2e-shared';
+import type { Creature, WeaponSlot } from 'pf2e-shared';
 
 // ─── Test Fixture Helpers ────────────────────────────────────
 
@@ -130,11 +130,11 @@ test('hasFeat: case-insensitive match', () => {
 
 test('getSelectedWeapon: returns weapon by ID from inventory', () => {
   // weaponInventory stores slot objects { weapon, state }
-  const inventory: any[] = [
+  const inventory: WeaponSlot[] = [
     { weapon: { id: 'longsword-1', display: 'Longsword', attackType: 'melee', damageDice: '1d8', damageType: 'slashing', hands: 1 }, state: 'held' },
     { weapon: { id: 'shortbow-1', display: 'Shortbow', attackType: 'ranged', damageDice: '1d6', damageType: 'piercing', hands: 2, range: 12 }, state: 'stowed' },
   ];
-  const creature = makeCreature({ weaponInventory: inventory as any });
+  const creature = makeCreature({ weaponInventory: inventory });
   const selected = getSelectedWeapon(creature, 'shortbow-1');
   assert.ok(selected);
   assert.equal(selected!.display, 'Shortbow');

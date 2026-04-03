@@ -1,25 +1,21 @@
-import React, { useEffect, useState } from 'react';
-import { AtlasViewer } from './pages/AtlasViewer';
-import { AtlasApprovedDatabase } from './pages/AtlasApprovedDatabase';
+import React, { useEffect, useState, useCallback } from 'react';
 import { LandingPage } from './pages/LandingPage';
 import CombatInterface from './components/CombatInterface';
 import { MusicPlayer } from './components/MusicPlayer';
 import DiceQuickRoll from './components/DiceQuickRoll';
-import { fetchAIModels, updateDefaultAIModel } from './services/apiService';
-import type { Creature, CampaignPreferences } from '../../shared/types';
+import { SessionZeroWizard, type SessionZeroInput } from './components/SessionZeroWizard';
+import { CampaignDashboard } from './components/CampaignDashboard';
+import { EncounterPreview } from './components/EncounterPreview';
+import { DowntimeMenu } from './components/DowntimeMenu';
+import { fetchAIModels, updateDefaultAIModel, createGame, runSessionZero, initGMSession } from './services/apiService';
+import axios from 'axios';
+import type { Creature, CampaignPreferences, GMSession, GameState } from '../../shared/types';
 import type { Difficulty } from '../../shared/encounterBuilder';
 
-type Page = 'home' | 'campaignSetup' | 'encounterSetup' | 'loadGame' | 'characters' | 'combat' | 'viewer' | 'database';
+type Page = 'home' | 'campaignSetup' | 'encounterSetup' | 'loadGame' | 'characters' | 'combat' | 'campaign';
 
 const App: React.FC = () => {
-  const params = new URLSearchParams(window.location.search);
-  const [page, setPage] = useState<Page>(
-    params.get('page') === 'viewer'
-      ? 'viewer'
-      : params.get('page') === 'database'
-        ? 'database'
-        : 'home',
-  );
+  const [page, setPage] = useState<Page>('home');
 
   // Combat state — populated when LandingPage calls onStartBattle
   const [battleCreatures, setBattleCreatures] = useState<Creature[]>([]);
@@ -28,6 +24,15 @@ const App: React.FC = () => {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [isSavingModel, setIsSavingModel] = useState(false);
+
+  // Campaign (Phase 9) state
+  const [showSessionZero, setShowSessionZero] = useState(false);
+  const [sessionZeroLoading, setSessionZeroLoading] = useState(false);
+  const [campaignGameId, setCampaignGameId] = useState<string | null>(null);
+  const [campaignGmSession, setCampaignGmSession] = useState<GMSession | null>(null);
+  const [campaignGameState, setCampaignGameState] = useState<GameState | null>(null);
+  const [showEncounterPreview, setShowEncounterPreview] = useState(false);
+  const [showDowntimeMenu, setShowDowntimeMenu] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -67,7 +72,70 @@ const App: React.FC = () => {
     setPage('combat');
   };
 
+  // Session Zero handler — creates game, runs session zero, then navigates to campaign dashboard
+  const handleSessionZeroComplete = async (input: SessionZeroInput) => {
+    setSessionZeroLoading(true);
+    try {
+      // Create a minimal game for campaign mode
+      const gameState = await createGame({
+        players: battleCreatures.length > 0 ? battleCreatures : [],
+        creatures: [],
+        aiModel: selectedModel || undefined,
+      });
+      const gameId = gameState.id;
+      setCampaignGameId(gameId);
+
+      // Run Session Zero
+      const result = await runSessionZero(gameId, input);
+      if (result.gmSession) setCampaignGmSession(result.gmSession);
+      if (result.gameState) setCampaignGameState(result.gameState);
+
+      setShowSessionZero(false);
+      setPage('campaign');
+    } catch (err) {
+      console.error('Session Zero failed:', err);
+      // Fallback: still open campaign page if we have a game
+      if (campaignGameId) {
+        setShowSessionZero(false);
+        setPage('campaign');
+      }
+    } finally {
+      setSessionZeroLoading(false);
+    }
+  };
+
+  // Refresh campaign state from server (e.g. after returning from combat)
+  const refreshCampaignState = useCallback(async () => {
+    if (!campaignGameId) return;
+    try {
+      const res = await axios.get(`/api/game/${campaignGameId}`);
+      if (res.data) {
+        setCampaignGameState(res.data);
+        if (res.data.gmSession) setCampaignGmSession(res.data.gmSession);
+      }
+    } catch (err) {
+      console.error('Failed to refresh campaign state:', err);
+    }
+  }, [campaignGameId]);
+
+  // Handle encounter start from preview
+  const handleEncounterAccept = () => {
+    setShowEncounterPreview(false);
+    if (campaignGameState && campaignGameId) {
+      // Navigate to combat with the campaign game
+      setBattleCreatures(campaignGameState.creatures || []);
+      setBattleDifficulty('moderate');
+      setBattlePreferences(campaignGmSession?.campaignPreferences);
+      setPage('combat');
+    }
+  };
+
   const gameActions = [
+    {
+      key: 'ai-campaign',
+      title: 'AI GM Campaign',
+      target: 'campaign' as Page,
+    },
     {
       key: 'new-campaign',
       title: 'Start New Campaign',
@@ -107,7 +175,23 @@ const App: React.FC = () => {
           <span style={{ fontWeight: 800, marginRight: 8, color: '#ead8be', letterSpacing: 0.6, fontFamily: "'Cinzel', 'Times New Roman', serif" }}>
             Algorithms Of Fate
           </span>
-          {page === 'home' && availableModels.length > 0 && (
+          {page !== 'home' && (
+            <button
+              onClick={() => setPage('home')}
+              style={{
+                background: 'none',
+                border: '1px solid #5a3a3a',
+                borderRadius: 5,
+                color: '#d0c3b4',
+                fontSize: 11,
+                padding: '4px 10px',
+                cursor: 'pointer',
+              }}
+            >
+              ← Home
+            </button>
+          )}
+          {(page === 'home' || page === 'campaign') && availableModels.length > 0 && (
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
               <label htmlFor="global-ai-model" style={{ color: '#d0c3b4', fontSize: 12, fontWeight: 600 }}>
                 AI Model
@@ -210,19 +294,76 @@ const App: React.FC = () => {
             initialCreatures={battleCreatures}
             difficulty={battleDifficulty}
             campaignPreferences={battlePreferences}
-            onReturnToLanding={() => setPage('home')}
+            onReturnToLanding={() => {
+              // If we came from campaign mode, go back to campaign and refresh state
+              if (campaignGameId && campaignGmSession) {
+                refreshCampaignState();
+                setPage('campaign');
+              } else {
+                setPage('home');
+              }
+            }}
           />
-        ) : page === 'campaignSetup' || page === 'encounterSetup' || page === 'loadGame' || page === 'characters' ? (
+        ) : page === 'campaign' ? (
+          <>
+            {!campaignGmSession ? (
+              // No session yet — show Session Zero wizard
+              <SessionZeroWizard
+                onComplete={handleSessionZeroComplete}
+                onCancel={() => setPage('home')}
+                loading={sessionZeroLoading}
+                playerCount={battleCreatures.filter(c => c.type === 'player').length || 1}
+                averageLevel={1}
+              />
+            ) : (
+              <CampaignDashboard
+                gameId={campaignGameId}
+                gmSession={campaignGmSession}
+                gameState={campaignGameState}
+                onSessionUpdate={setCampaignGmSession}
+                onNavigateToChat={() => {
+                  // Navigate to combat view with campaign context (which has GMChatPanel)
+                  if (campaignGameState) {
+                    setBattleCreatures(campaignGameState.creatures || []);
+                    setBattleDifficulty('moderate');
+                    setBattlePreferences(campaignGmSession?.campaignPreferences);
+                    setPage('combat');
+                  }
+                }}
+                onNavigateToDowntime={() => setShowDowntimeMenu(true)}
+              />
+            )}
+
+            {/* Encounter Preview overlay */}
+            {showEncounterPreview && (
+              <EncounterPreview
+                gameId={campaignGameId}
+                gmSession={campaignGmSession}
+                onAccept={handleEncounterAccept}
+                onReject={() => {/* keep preview open, re-rolls automatically */}}
+                onCancel={() => setShowEncounterPreview(false)}
+              />
+            )}
+
+            {/* Downtime Menu overlay */}
+            {showDowntimeMenu && (
+              <DowntimeMenu
+                gameId={campaignGameId}
+                gmSession={campaignGmSession}
+                gameState={campaignGameState}
+                onSessionUpdate={setCampaignGmSession}
+                onGameStateUpdate={setCampaignGameState}
+                onClose={() => setShowDowntimeMenu(false)}
+              />
+            )}
+          </>
+        ) : (page === 'campaignSetup' || page === 'encounterSetup' || page === 'loadGame' || page === 'characters') ? (
           <LandingPage
             initialScreen={page}
             onStartBattle={handleStartBattle}
             onReturnHome={() => setPage('home')}
           />
-        ) : page === 'viewer' ? (
-          <AtlasViewer />
-        ) : (
-          <AtlasApprovedDatabase />
-        )}
+        ) : null}
       </div>
 
       {/* Persistent floating music player — available on all pages */}

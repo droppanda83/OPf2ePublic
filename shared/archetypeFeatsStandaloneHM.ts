@@ -351,7 +351,7 @@ export const LOREMASTER_FEATS: FeatEntry[] = [
     source: 'Loremaster (Archetype)',
     category: 'archetype',
     level: 10,
-    description: 'You\'ve continued to expand your compendium of tools to compile knowledge. You can cast comprehend language, mindlink, and secret page as innate occult spells, each once per day. When you cast secret page, it is automatically heightened to the same spell level as your cantrips from Magical Edification.',
+    description: 'You\'ve continued to expand your compendium of tools to compile knowledge. You can cast comprehend language, mindlink, and secret page as innate occult spells, each once per day. When you cast secret page, it is automatically heightened to the same spell rank as your cantrips from Magical Edification.',
     implemented: 'full',
     traits: ['Archetype'],
     actionCost: 'passive',

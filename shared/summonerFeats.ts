@@ -1,4 +1,4 @@
-import type { FeatEntry } from './featTypes';
+﻿import type { FeatEntry } from './featTypes';
 import { createClassFeature, WEAPON_SPECIALIZATION } from './sharedFeats';
 
 // ──────────────────────────────────────────────────────────
@@ -765,7 +765,7 @@ const RAW_SUMMONER_CLASS_FEATS: FeatEntry[] = [
     category: 'class',
     level: 6,
     description:
-      'During daily preparations, you can designate one of your spell slots to become two summoning slots of the same spell level, from which you can cast only summoning or incarnate spells.',
+      'During daily preparations, you can designate one of your spell slots to become two summoning slots of the same spell rank, from which you can cast only summoning or incarnate spells.',
     implemented: 'full',
     traits: ['Summoner'],
     actionCost: 'passive',
@@ -782,11 +782,11 @@ const RAW_SUMMONER_CLASS_FEATS: FeatEntry[] = [
     category: 'class',
     level: 6,
     description:
-      'If the next action you take is to Manifest your Eidolon as a three-action activity, or to Cast a three-action summoning Spell, the creature appears in an explosion. All creatures except you in a 10-foot emanation around the creature take 1d4 fire damage per spell level for a summoning spell, or 1d4 damage per 2 levels for Manifesting your Eidolon. If the creature has the acid, cold, electricity, fire, sonic, or water trait, the damage is that type instead (or cold damage for the water trait). If the creature has more than one of these traits, you choose which damage type to deal.',
+      'If the next action you take is to Manifest your Eidolon as a three-action activity, or to Cast a three-action summoning Spell, the creature appears in an explosion. All creatures except you in a 10-foot emanation around the creature take 1d4 fire damage per spell rank for a summoning spell, or 1d4 damage per 2 levels for Manifesting your Eidolon. If the creature has the acid, cold, electricity, fire, sonic, or water trait, the damage is that type instead (or cold damage for the water trait). If the creature has more than one of these traits, you choose which damage type to deal.',
     implemented: 'full',
     traits: ['Concentrate', 'Manipulate', 'Metamagic', 'Summoner'],
     actionCost: 'free',
-    mechanics: 'Free action before 3-action Manifest Eidolon or 3-action summoning spell. 10-ft emanation around creature. Damage: 1d4/spell level (summoning) or 1d4/2 levels (manifest). Fire default; changes to acid/cold/electricity/fire/sonic if creature has that trait.',
+    mechanics: 'Free action before 3-action Manifest Eidolon or 3-action summoning spell. 10-ft emanation around creature. Damage: 1d4/spell rank (summoning) or 1d4/2 levels (manifest). Fire default; changes to acid/cold/electricity/fire/sonic if creature has that trait.',
   },
   {
     id: 'summoner-phase-out',
@@ -1218,7 +1218,7 @@ const RAW_SUMMONER_CLASS_FEATS: FeatEntry[] = [
     category: 'class',
     level: 18,
     description:
-      'Your eidolon gains a bevy of lower-level spells. Choose an innate spell of your eidolon\'s tradition of each of the spell levels from 1 to 7 in which your eidolon doesn\'t currently have an innate spell from Magical Adept. Your eidolon can cast each once per day as innate spells. You can swap these spells at every even level, but your eidolon can never know more than one spell of each spell level 1 through 7.',
+      'Your eidolon gains a bevy of lower-level spells. Choose an innate spell of your eidolon\'s tradition of each of the spell ranks from 1 to 7 in which your eidolon doesn\'t currently have an innate spell from Magical Adept. Your eidolon can cast each once per day as innate spells. You can swap these spells at every even level, but your eidolon can never know more than one spell of each spell rank 1 through 7.',
     implemented: 'full',
     traits: ['Evolution', 'Summoner'],
     actionCost: 'passive',

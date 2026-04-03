@@ -8,9 +8,11 @@ Session 44 scaffolding for deterministic catalog generation.
 - Spells from `source/spells.source.json` into `shared/spells.ts`
 - Feats from `source/feats.source.json` into `shared/feats.ts`
 - Encounter maps from `source/maps.source.json` into `shared/foundryEncounterMaps.ts`
+- Token art from PF2e Foundry VTT + manual sources into `frontend/public/art/`
 
 ## Run
-- From repo root: `npm run import:foundry`
+- From repo root: `npm run import:foundry` (all imports including token art download)
+- Token art only: `npm run import:token-art`
 
 ## Convert Foundry Scene Export to maps source
 - Convert scene export JSON to `maps.source.json`:

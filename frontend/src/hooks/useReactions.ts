@@ -30,7 +30,7 @@ interface UseReactionsReturn {
 }
 
 interface UseReactionsOptions {
-  executeAction: (action: any, target?: any, overrideCreatureId?: string) => Promise<void>;
+  executeAction: (action: { id: string; name: string; cost: number; requiresTarget: boolean }, target?: string | null, overrideCreatureId?: string) => Promise<void>;
 }
 
 export function useReactions(options: UseReactionsOptions): UseReactionsReturn {

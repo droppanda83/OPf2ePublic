@@ -247,7 +247,7 @@ export const HELLKNIGHT_FEATS: FeatEntry[] = [
     implemented: 'full',
     traits: ['Uncommon', 'Archetype', 'Dedication'],
     actionCost: 'passive',
-    prerequisites: ['Hellknight Armiger Dedication', 'Lawful alignment', 'Member of a Hellknight Order', 'Passed the Hellknight Test'],
+    prerequisites: ['Hellknight Armiger Dedication', 'Member of a Hellknight Order', 'Passed the Hellknight Test'],
     mechanics: 'Uncommon. Expert Intimidation. Hellknight plate specialization (resistance +1). +1 Intimidation in plate.',
   },
   {
@@ -256,12 +256,12 @@ export const HELLKNIGHT_FEATS: FeatEntry[] = [
     source: 'Hellknight (Archetype)',
     category: 'archetype',
     level: 8,
-    description: 'You sense chaos as an uncomfortable nervous energy (vague sense like smell). Detect powerful/overwhelming chaos auras eventually. Chaotic creatures use Deception vs your Perception DC to hide. Success: immune 1 day.',
+    description: 'You sense the presence of extradimensional disorder as an uncomfortable nervous energy (vague sense like smell). Detect powerful/overwhelming chaotic auras eventually. Creatures with the chaotic trait use Deception vs your Perception DC to hide their nature. Success: immune 1 day.',
     implemented: 'full',
     traits: ['Archetype'],
     actionCost: 'passive',
     prerequisites: ['Hellknight Dedication'],
-    mechanics: 'Vague sense: detect powerful/overwhelming chaos auras. Chaotic creature: Deception vs Perception DC.',
+    mechanics: 'Vague sense: detect powerful/overwhelming chaotic auras. Chaotic creature: Deception vs Perception DC.',
   },
   {
     id: 'hellknight-blade-of-law',
@@ -306,7 +306,7 @@ export const HELLKNIGHT_SIGNIFER_FEATS: FeatEntry[] = [
     implemented: 'full',
     traits: ['Uncommon', 'Archetype', 'Dedication'],
     actionCost: 'passive',
-    prerequisites: ['Spellcasting class feature', 'Hellknight Armiger Dedication', 'Lawful alignment', 'Member of Hellknight Order', 'Passed Hellknight Test'],
+    prerequisites: ['Spellcasting class feature', 'Hellknight Armiger Dedication', 'Member of Hellknight Order', 'Passed Hellknight Test'],
     mechanics: 'Uncommon. Signifer mask: +1 Deception (Lie), Intimidation, Deception DC vs Sense Motive. Expert Intimidation + Arcana/Nature/Occultism/Religion.',
   },
   {

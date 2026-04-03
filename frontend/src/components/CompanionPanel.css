@@ -1,0 +1,324 @@
+/* Companion Panel Styles */
+
+.cp-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 200;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.cp-panel {
+  width: min(600px, 92vw);
+  max-height: 80vh;
+  background: linear-gradient(180deg, #1a1010 0%, var(--pf2e-bg-surface) 100%);
+  border: 1px solid var(--pf2e-border);
+  border-radius: var(--pf2e-radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #3f2626;
+}
+
+.cp-header h3 {
+  margin: 0;
+  color: var(--pf2e-text-heading);
+  font-family: var(--pf2e-font-display);
+  font-size: 16px;
+}
+
+.cp-close {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.cp-close:hover {
+  color: var(--pf2e-gold);
+}
+
+/* Tabs */
+.cp-tabs {
+  display: flex;
+  border-bottom: 1px solid #3f2626;
+}
+
+.cp-tab {
+  flex: 1;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s, border-bottom 0.15s;
+  border-bottom: 2px solid transparent;
+}
+
+.cp-tab.active {
+  color: var(--pf2e-gold);
+  border-bottom-color: var(--pf2e-gold);
+}
+
+.cp-tab:hover:not(.active) {
+  color: #b0a090;
+}
+
+/* Body */
+.cp-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.cp-empty {
+  color: #888;
+  font-size: 12px;
+  text-align: center;
+  padding: 24px;
+}
+
+/* NPC Cards */
+.cp-npc-card {
+  border: 1px solid #3f2626;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  background: rgba(20, 12, 12, 0.6);
+}
+
+.cp-npc-card:hover {
+  border-color: #5a3a3a;
+  background: rgba(30, 18, 18, 0.8);
+}
+
+.cp-npc-card.expanded {
+  border-color: var(--pf2e-gold);
+}
+
+.cp-npc-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cp-npc-role {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: #2a1a1a;
+  color: #b0a090;
+}
+
+.cp-role-ally { background: #1a2a1a; color: #6cce6c; }
+.cp-role-merchant { background: #2a2a1a; color: #d4af37; }
+.cp-role-quest-giver { background: #1a1a2a; color: #6c8cce; }
+.cp-role-villain { background: #2a1a1a; color: #cc5050; }
+
+.cp-npc-name {
+  color: #ead8be;
+  font-weight: 700;
+  font-size: 13px;
+  flex: 1;
+}
+
+.cp-npc-disp {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.cp-npc-dead {
+  font-size: 14px;
+}
+
+/* NPC Details (expanded) */
+.cp-npc-details {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #2a1a1a;
+}
+
+.cp-npc-desc {
+  color: #b0a090;
+  font-size: 11px;
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
+
+.cp-npc-location {
+  color: #888;
+  font-size: 10px;
+  margin-bottom: 8px;
+}
+
+/* Disposition bar */
+.cp-disp-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.cp-disp-label {
+  font-size: 10px;
+  color: #888;
+  min-width: 60px;
+}
+
+.cp-disp-bar {
+  flex: 1;
+  height: 6px;
+  background: #1a1010;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.cp-disp-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.cp-disp-score {
+  font-size: 10px;
+  color: #b0a090;
+  min-width: 24px;
+  text-align: right;
+}
+
+/* Interaction history */
+.cp-npc-interactions {
+  margin-top: 8px;
+}
+
+.cp-npc-interactions strong {
+  font-size: 10px;
+  color: #b0a090;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.cp-npc-interaction {
+  font-size: 10px;
+  color: #888;
+  line-height: 1.4;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(60, 40, 40, 0.3);
+}
+
+/* Companion Cards */
+.cp-companion-card {
+  border: 1px solid #3f2626;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: rgba(20, 12, 12, 0.6);
+}
+
+.cp-companion-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.cp-companion-name {
+  color: #ead8be;
+  font-weight: 700;
+  font-size: 13px;
+  flex: 1;
+}
+
+.cp-companion-level {
+  font-size: 11px;
+  color: #d4af37;
+  font-weight: 600;
+}
+
+.cp-companion-class,
+.cp-companion-type {
+  font-size: 10px;
+  color: #888;
+  text-transform: capitalize;
+}
+
+.cp-companion-hp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cp-hp-bar {
+  flex: 1;
+  height: 6px;
+  background: #1a1010;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.cp-hp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #cc5050, #60a060);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.cp-hp-text {
+  font-size: 10px;
+  color: #b0a090;
+  min-width: 60px;
+  text-align: right;
+}
+
+.cp-companion-conditions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.cp-condition-tag {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #2a1a1a;
+  color: #cc8040;
+}
+
+.cp-manifest-tag {
+  display: inline-block;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-top: 4px;
+  background: #2a1a1a;
+  color: #888;
+}
+
+.cp-manifest-tag.active {
+  background: #1a2a1a;
+  color: #6cce6c;
+}
+
+.cp-companion-support {
+  font-size: 10px;
+  color: #b0a090;
+  margin-top: 6px;
+  line-height: 1.4;
+}

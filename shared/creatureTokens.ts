@@ -114,6 +114,64 @@ const TAG_TO_TOKEN: [tag: string, token: CreatureTokenType][] = [
   ['ethereal', 'spirit'],
   ['shadow', 'spirit'],
   ['spellcaster', 'humanoid'], // fallback for magic users
+
+  // === PF2e-specific tags without broad-type matches ===
+  ['shade', 'spirit'],           // Shade creatures (shadow/void entities)
+  ['kami', 'fey'],               // Kami (Japanese nature spirits)
+  ['siktempora', 'monitor'],     // Siktempora (time creatures)
+  ['force', 'construct'],        // Force creatures (magical constructs)
+  ['mortic', 'undead'],          // Mortic (undead-touched living)
+  ['werecreature', 'beast'],     // Werecreatures
+  ['darvakka', 'undead'],        // Darvakka (void undead)
+  ['inevitable', 'construct'],   // Inevitables (law constructs)
+  ['summoned', 'spirit'],        // Summoned entities
+  ['illusion', 'fey'],           // Illusion creatures
+  ['mental', 'aberration'],      // Mental creatures
+  ['arcane', 'construct'],       // Arcane constructs
+  ['divine', 'celestial'],       // Divine creatures fallback
+  ['primal', 'beast'],           // Primal creatures fallback
+  ['occult', 'aberration'],      // Occult creatures fallback
+  ['alchemical', 'construct'],   // Alchemical creatures
+
+  // === Ancestries → humanoid fallback ===
+  ['human', 'humanoid'],
+  ['elf', 'humanoid'],
+  ['dwarf', 'humanoid'],
+  ['gnome', 'humanoid'],
+  ['halfling', 'humanoid'],
+  ['orc', 'humanoid'],
+  ['goblin', 'humanoid'],
+  ['kobold', 'humanoid'],
+  ['hobgoblin', 'humanoid'],
+  ['gnoll', 'humanoid'],
+  ['lizardfolk', 'humanoid'],
+  ['catfolk', 'humanoid'],
+  ['ratfolk', 'humanoid'],
+  ['tengu', 'humanoid'],
+  ['fetchling', 'humanoid'],
+  ['changeling', 'humanoid'],
+  ['dhampir', 'humanoid'],
+  ['drow', 'humanoid'],
+  ['duergar', 'humanoid'],
+  ['boggard', 'humanoid'],
+  ['grippli', 'humanoid'],
+  ['strix', 'humanoid'],
+  ['merfolk', 'humanoid'],
+  ['kitsune', 'humanoid'],
+  ['nagaji', 'humanoid'],
+  ['vanara', 'humanoid'],
+  ['vishkanya', 'humanoid'],
+  ['azarketi', 'humanoid'],
+  ['caligni', 'humanoid'],
+  ['serpentfolk', 'humanoid'],
+  ['xulgath', 'humanoid'],
+  ['dero', 'humanoid'],
+  ['aiuvarin', 'humanoid'],
+  ['dromaar', 'humanoid'],
+  ['naari', 'humanoid'],
+  ['nephilim', 'humanoid'],
+  ['centaur', 'beast'],
+  ['creature', 'beast'],        // Generic "creature" tag
 ];
 
 // ─── Public API ──────────────────────────────────────

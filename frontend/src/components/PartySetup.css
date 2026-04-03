@@ -10,7 +10,7 @@
   max-height: 100vh;
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
   color: #ddd;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--pf2e-font-body);
 }
 
 /* ─── HEADER ─── */
@@ -24,7 +24,7 @@
 .setup-header h1 {
   margin: 0 0 8px 0;
   font-size: 32px;
-  color: #d4af37;
+  color: var(--pf2e-gold);
 }
 
 .setup-header p {
@@ -43,15 +43,15 @@
 .form-section {
   max-width: 600px;
   margin: 0 auto 30px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--pf2e-bg-card);
   padding: 25px;
-  border-radius: 8px;
-  border-left: 3px solid #d4af37;
+  border-radius: var(--pf2e-radius-lg);
+  border-left: 3px solid var(--pf2e-gold);
 }
 
 .form-section h2 {
   margin-top: 0;
-  color: #d4af37;
+  color: var(--pf2e-gold);
   font-size: 18px;
   margin-bottom: 10px;
 }

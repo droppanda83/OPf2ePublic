@@ -218,7 +218,7 @@ export const ADVENTURING_GEAR: Record<string, GearItem> = {
   },
   'caltrops': {
     id: 'caltrops', name: 'Caltrops', price: 0.3, bulk: 'L', level: 0,
-    description: 'Cover a 5-foot square. Creatures stepping in take 1d4 piercing and are flat-footed (DC 14 Reflex to avoid).',
+    description: 'Cover a 5-foot square. Creatures stepping in take 1d4 piercing and are off-guard (DC 14 Reflex to avoid).',
     category: 'tool',
   },
   'ten-foot-pole': {

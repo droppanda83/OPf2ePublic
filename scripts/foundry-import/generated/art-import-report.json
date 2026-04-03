@@ -1,0 +1,20 @@
+{
+  "timestamp": "2026-03-30T23:30:53.650Z",
+  "totalCreatures": 1695,
+  "downloaded": 21,
+  "cached": 1662,
+  "manualArt": 0,
+  "failed": 0,
+  "noMatch": 12,
+  "matchTypes": {
+    "curated-override": 69,
+    "keyword-name": 656,
+    "tag-fallback": 958
+  },
+  "sources": {
+    "game-icons": 1683,
+    "manual/custom": 0,
+    "no-match": 12,
+    "failed": 0
+  }
+}

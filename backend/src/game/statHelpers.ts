@@ -3,7 +3,7 @@
 // Phase 14 refactor: skill bonuses, save DCs, distance, weapon selection, feat checks
 // 
 
-import { Creature, CreatureWeapon, Position, getProficiencyBonus, calculateSaveBonus, getArmor, calculateCheckPenalty } from 'pf2e-shared';
+import { Creature, CreatureWeapon, Position, WeaponSlot, Spell, getProficiencyBonus, calculateSaveBonus, getArmor, calculateCheckPenalty } from 'pf2e-shared';
 import type { AbilityScores } from 'pf2e-shared';
 
 export function calculateDistance(pos1: Position, pos2: Position): number {
@@ -115,12 +115,12 @@ export function getFortitudeDC(creature: Creature): number {
 
 export function getSelectedWeapon(actor: Creature, weaponId?: string): CreatureWeapon | null {
   if (weaponId && actor.weaponInventory) {
-    const slot = actor.weaponInventory.find((s: any) => s.weapon?.id === weaponId);
+    const slot = actor.weaponInventory.find((s: WeaponSlot) => s.weapon?.id === weaponId);
     if (slot) return slot.weapon;
   }
   // Fallback to first held weapon
   if (actor.weaponInventory) {
-    const held = actor.weaponInventory.find((s: any) => s.state === 'held');
+    const held = actor.weaponInventory.find((s: WeaponSlot) => s.state === 'held');
     if (held) return held.weapon;
   }
   return null;
@@ -130,8 +130,8 @@ export function hasFeat(creature: Creature, featName: string): boolean {
   const lowerFeatName = featName.toLowerCase().trim();
   
   // Check feats array (exact match on feat name)
-  const featMatch = creature.feats?.some((f: any) => {
-    const name = typeof f === 'string' ? f : f?.name;
+  const featMatch = creature.feats?.some((f) => {
+    const name = f?.name;
     return typeof name === 'string' && name.toLowerCase().trim() === lowerFeatName;
   });
   
@@ -143,7 +143,7 @@ export function hasFeat(creature: Creature, featName: string): boolean {
   return featMatch || hasSpecial || false;
 }
 
-export function canCastAndConsumeSlot(actor: Creature, spell: any, requestedRank?: number): { canCast: boolean; message?: string; heightenedRank?: number } {
+export function canCastAndConsumeSlot(actor: Creature, spell: Spell, requestedRank?: number): { canCast: boolean; message?: string; heightenedRank?: number } {
   // Cantrips (rank 0) don't consume slots
   if (spell.rank === 0) {
     // Auto-heighten cantrips to half caster level (rounded up)

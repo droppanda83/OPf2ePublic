@@ -1,4 +1,4 @@
-import { Creature, GameState, AttackRoll, Position, CreatureWeapon, computePathCost, calculateAC, getAttackResult, getDegreeOfSuccess, calculateAttackBonus, calculateSaveBonus, calculateSpellDC, calculateSpellAttack, calculateSpellAttackModifier, getConditionModifiers, resolveStacking, getProficiencyBonus, rollD20, getSpell, getWeapon, rollDamageFormula, calculateFinalDamage, applyDamageToShield, AbilityScores, calculateDamageFormula } from 'pf2e-shared';
+import { Creature, GameState, AttackRoll, Position, CreatureWeapon, ActionResult, computePathCost, calculateAC, getAttackResult, getDegreeOfSuccess, calculateAttackBonus, calculateSaveBonus, calculateSpellDC, calculateSpellAttack, calculateSpellAttackModifier, getConditionModifiers, resolveStacking, getProficiencyBonus, rollD20, getSpell, getWeapon, rollDamageFormula, calculateFinalDamage, applyDamageToShield, AbilityScores, calculateDamageFormula } from 'pf2e-shared';
 import { validateAction } from './ruleValidator';
 import { spawnCompanion, commandCompanion, companionSupport, matureCompanion, dismissCompanion, resetCompanionTurnState, getCompanion, getOwnerCompanions, isCompanion, getAnyCreature } from './companionManager';
 import { spawnFamiliar, selectFamiliarAbilities, dismissFamiliar, familiarDeliverSpell } from './familiarManager';
@@ -92,6 +92,25 @@ function initDying(creature: Creature): string {
   return ` 💀 ${creature.name} is DYING! (Wounded ${creature.wounded})`;
 }
 
+interface SpellAreaInstance {
+  id: string;
+  spellId: string;
+  spellName: string;
+  center: Position;
+  radius: number;
+  duration: number;
+  sourceActorId: string;
+  saveDC?: number;
+  heightenedRank: number;
+  followsSourceActor?: boolean;
+  trackedCreatureIds?: string[];
+  resolvedCreatureIds?: string[];
+}
+
+type RuntimeGameState = GameState & {
+  spellAreas?: SpellAreaInstance[];
+};
+
 export class RulesEngine {
 
   // ═══════════════════════════════════════════════════════════
@@ -110,11 +129,11 @@ export class RulesEngine {
       getSelectedWeapon: (actor: Creature, weaponId?: string) => this.resolveSelectedWeapon(actor, weaponId),
       resolveStrike: (actor: Creature, gameState: GameState, targetId?: string) => this.resolveStrike(actor, gameState, targetId),
       resolveAttackAction: (actor: Creature, gameState: GameState, targetId?: string, weaponId?: string, options?: { isVicious: boolean }, heroPointsSpent?: number) => this.resolveAttackAction(actor, gameState, targetId, weaponId, options, heroPointsSpent),
-      resolveMovement: (actor: Creature, gameState: GameState, destination: any, actionId?: string) => this.resolveMovement(actor, gameState, destination, actionId),
+      resolveMovement: (actor: Creature, gameState: GameState, destination: Position | undefined, actionId?: string) => this.resolveMovement(actor, gameState, destination, actionId),
       resolveShove: (actor: Creature, gameState: GameState, targetId?: string, heroPointsSpent?: number) => this.resolveShove(actor, gameState, targetId, heroPointsSpent),
       resolveTrip: (actor: Creature, gameState: GameState, targetId?: string, heroPointsSpent?: number) => this.resolveTrip(actor, gameState, targetId, heroPointsSpent),
-      resolveStep: (actor: Creature, gameState: GameState, destination: any) => this.resolveStep(actor, gameState, destination),
-      spendHeroPoints: (creature: Creature, heroPointsSpent: number, currentRoll: any) => this.spendHeroPoints(creature, heroPointsSpent, currentRoll),
+      resolveStep: (actor: Creature, gameState: GameState, destination: Position | undefined) => this.resolveStep(actor, gameState, destination),
+      spendHeroPoints: (creature: Creature, heroPointsSpent: number, currentRoll: number) => this.spendHeroPoints(creature, heroPointsSpent, currentRoll),
       rollSave: (creature: Creature, saveType: 'reflex' | 'fortitude' | 'will', saveDC: number, heroPointsSpent?: number, effectTraits?: string[]) => this.rollSave(creature, saveType, saveDC, heroPointsSpent),
     };
   }
@@ -145,8 +164,8 @@ export class RulesEngine {
    * Process persistent damage (fire burns, bleed, etc.) at the start of a creature's turn
    * Returns array of log entries for this creature's persistent damage
    */
-  processPersistentDamage(creature: Creature): any[] {
-    const entries: any[] = [];
+  processPersistentDamage(creature: Creature): ActionResult[] {
+    const entries: ActionResult[] = [];
 
     if (!creature.conditions || creature.conditions.length === 0) {
       return entries;
@@ -221,6 +240,268 @@ export class RulesEngine {
     return entries;
   }
 
+  private getSpellAreas(gameState: GameState): SpellAreaInstance[] {
+    const runtimeGameState = gameState as RuntimeGameState;
+    runtimeGameState.spellAreas ??= [];
+    return runtimeGameState.spellAreas;
+  }
+
+  private ensureConditions(creature: Creature): NonNullable<Creature['conditions']> {
+    creature.conditions ??= [];
+    return creature.conditions;
+  }
+
+  private addOrRefreshCondition(
+    creature: Creature,
+    name: string,
+    duration: number | string,
+    value: number,
+    source: string
+  ): void {
+    const conditions = this.ensureConditions(creature);
+    const existing = conditions.find((condition) => condition.name === name && condition.source === source);
+    if (existing) {
+      existing.duration = duration;
+      existing.value = value;
+      return;
+    }
+    conditions.push({ name, duration, value, source });
+  }
+
+  private getSpellAreaCenter(area: SpellAreaInstance, gameState: GameState): Position {
+    if (area.followsSourceActor) {
+      const source = gameState.creatures.find((creature) => creature.id === area.sourceActorId);
+      if (source) {
+        return source.positions;
+      }
+    }
+    return area.center;
+  }
+
+  private isCreatureInSpellArea(creature: Creature, area: SpellAreaInstance, gameState: GameState): boolean {
+    const center = this.getSpellAreaCenter(area, gameState);
+    const dx = creature.positions.x - center.x;
+    const dy = creature.positions.y - center.y;
+    return Math.sqrt(dx * dx + dy * dy) <= area.radius;
+  }
+
+  private createSpellArea(
+    gameState: GameState,
+    spellId: string,
+    spellName: string,
+    center: Position,
+    radius: number,
+    duration: number,
+    sourceActorId: string,
+    heightenedRank: number,
+    saveDC?: number
+  ): SpellAreaInstance {
+    const area: SpellAreaInstance = {
+      id: `${spellId}-${sourceActorId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      spellId,
+      spellName,
+      center: { ...center },
+      radius,
+      duration,
+      sourceActorId,
+      heightenedRank,
+      trackedCreatureIds: [],
+      resolvedCreatureIds: [],
+      ...(typeof saveDC === 'number' && { saveDC }),
+    };
+    this.getSpellAreas(gameState).push(area);
+    return area;
+  }
+
+  public updateSpellAreaOccupancy(creature: Creature, gameState: GameState): { enteredAreaIds: string[]; exitedAreaIds: string[] } {
+    const enteredAreaIds: string[] = [];
+    const exitedAreaIds: string[] = [];
+
+    this.getSpellAreas(gameState).forEach((area) => {
+      area.trackedCreatureIds ??= [];
+      const currentlyInArea = this.isCreatureInSpellArea(creature, area, gameState);
+      const trackedIndex = area.trackedCreatureIds.indexOf(creature.id);
+
+      if (currentlyInArea && trackedIndex === -1) {
+        area.trackedCreatureIds.push(creature.id);
+        enteredAreaIds.push(area.id);
+      } else if (!currentlyInArea && trackedIndex !== -1) {
+        area.trackedCreatureIds.splice(trackedIndex, 1);
+        exitedAreaIds.push(area.id);
+      }
+    });
+
+    return { enteredAreaIds, exitedAreaIds };
+  }
+
+  public processSpellAreaMovement(actor: Creature, gameState: GameState): ActionResult[] {
+    const entries: ActionResult[] = [];
+    const affectsAllCreatures = this.getSpellAreas(gameState).some(
+      (area) => area.followsSourceActor && area.sourceActorId === actor.id
+    );
+    const creaturesToCheck = affectsAllCreatures ? gameState.creatures : [actor];
+
+    for (const creature of creaturesToCheck) {
+      const occupancy = this.updateSpellAreaOccupancy(creature, gameState);
+      this.refreshSpellAreaConditions(creature, gameState);
+      entries.push(...this.processSpellAreaEffects(creature, gameState, 'enter-area', occupancy.enteredAreaIds));
+    }
+
+    return entries;
+  }
+
+  private applySpellAreaOnCreation(
+    area: SpellAreaInstance,
+    gameState: GameState,
+    options?: { excludeSourceActor?: boolean }
+  ): ActionResult[] {
+    const entries: ActionResult[] = [];
+
+    for (const creature of gameState.creatures) {
+      if (options?.excludeSourceActor && creature.id === area.sourceActorId) {
+        continue;
+      }
+
+      const occupancy = this.updateSpellAreaOccupancy(creature, gameState);
+      if (occupancy.enteredAreaIds.includes(area.id)) {
+        this.refreshSpellAreaConditions(creature, gameState);
+        entries.push(...this.processSpellAreaEffects(creature, gameState, 'enter-area', [area.id]));
+      }
+    }
+
+    return entries;
+  }
+
+  private applyTemporaryHealth(creature: Creature, amount: number): number {
+    const runtimeCreature = creature as Creature & { temporaryHealth?: number };
+    runtimeCreature.temporaryHealth = Math.max(runtimeCreature.temporaryHealth || 0, amount);
+    return runtimeCreature.temporaryHealth;
+  }
+
+  public refreshSpellAreaConditions(creature: Creature, gameState: GameState): void {
+    if (!creature.conditions?.length) return;
+
+    const activeAreaSources = new Set(
+      this.getSpellAreas(gameState)
+        .filter((area) => this.isCreatureInSpellArea(creature, area, gameState) && (area.spellId === 'darkness' || area.spellId === 'stinking-cloud' || area.spellId === 'web' || area.spellId === 'bane'))
+        .map((area) => `spell-area-${area.id}`)
+    );
+
+    creature.conditions = creature.conditions.filter((condition) => {
+      if (condition.source && condition.source.startsWith('spell-area-')) {
+        return activeAreaSources.has(condition.source);
+      }
+      return true;
+    });
+  }
+
+  public processSpellAreaEffects(
+    creature: Creature,
+    gameState: GameState,
+    trigger: 'start-turn' | 'enter-area',
+    areaIds?: string[]
+  ): ActionResult[] {
+    const entries: ActionResult[] = [];
+    const activeAreas = this.getSpellAreas(gameState).filter((area) => {
+      if (Array.isArray(areaIds) && !areaIds.includes(area.id)) {
+        return false;
+      }
+      return this.isCreatureInSpellArea(creature, area, gameState);
+    });
+
+    for (const area of activeAreas) {
+      const source = `spell-area-${area.id}`;
+
+      if (area.spellId === 'bane') {
+        const sourceActor = gameState.creatures.find((candidate) => candidate.id === area.sourceActorId);
+        const isEnemy = sourceActor ? sourceActor.isNPC !== creature.isNPC : creature.id !== area.sourceActorId;
+        if (!isEnemy) {
+          continue;
+        }
+
+        area.resolvedCreatureIds ??= [];
+        if (!area.resolvedCreatureIds.includes(creature.id)) {
+          if (typeof area.saveDC === 'number') {
+            const saveRoll = this.rollSave(creature, 'will', area.saveDC);
+            if (saveRoll.result === 'failure' || saveRoll.result === 'critical-failure') {
+              this.addOrRefreshCondition(creature, 'bane', 1, 1, source);
+            }
+            area.resolvedCreatureIds.push(creature.id);
+            entries.push({
+              success: true,
+              message: `👿 ${creature.name} is caught in Bane: ${saveRoll.result.toUpperCase()} on Will save${saveRoll.result === 'failure' || saveRoll.result === 'critical-failure' ? ', taking a -1 status penalty to attacks while in the aura' : '.'}`,
+              saveResult: saveRoll.result,
+            });
+          }
+        } else if (creature.conditions?.some((condition) => condition.name === 'bane' && condition.source === source)) {
+          this.addOrRefreshCondition(creature, 'bane', 1, 1, source);
+        }
+        continue;
+      }
+
+      if (area.spellId === 'darkness') {
+        if (trigger === 'enter-area') {
+          entries.push({ success: true, message: `🌑 ${creature.name} enters magical darkness and vision becomes obscured.` });
+        }
+        continue;
+      }
+
+      if (area.spellId === 'stinking-cloud') {
+        this.addOrRefreshCondition(creature, 'concealed', 1, 1, source);
+        if (typeof area.saveDC === 'number') {
+          const saveRoll = this.rollSave(creature, 'fortitude', area.saveDC);
+          if (saveRoll.result === 'failure' || saveRoll.result === 'critical-failure') {
+            const sickenedValue = saveRoll.result === 'critical-failure' ? 2 : 1;
+            this.addOrRefreshCondition(creature, 'sickened', 3, sickenedValue, `stinking-cloud-${area.id}`);
+          }
+          entries.push({
+            success: true,
+            message: `☁️ ${creature.name} is in Stinking Cloud: ${saveRoll.result.toUpperCase()} on Fortitude save${saveRoll.result === 'failure' || saveRoll.result === 'critical-failure' ? `, sickened ${saveRoll.result === 'critical-failure' ? 2 : 1}` : ''}.`,
+            saveResult: saveRoll.result,
+          });
+        }
+        continue;
+      }
+
+      if (area.spellId === 'web' && typeof area.saveDC === 'number') {
+        const saveRoll = this.rollSave(creature, 'reflex', area.saveDC);
+        if (saveRoll.result === 'failure' || saveRoll.result === 'critical-failure') {
+          const immobilizedDuration = saveRoll.result === 'critical-failure' ? 2 : 1;
+          this.addOrRefreshCondition(creature, 'immobilized', immobilizedDuration, 1, source);
+        }
+        entries.push({
+          success: true,
+          message: `🕸️ ${creature.name} struggles in Web: ${saveRoll.result.toUpperCase()} on Reflex save${saveRoll.result === 'failure' || saveRoll.result === 'critical-failure' ? ', immobilized' : ''}.`,
+          saveResult: saveRoll.result,
+        });
+      }
+    }
+
+    return entries;
+  }
+
+  public tickSpellAreas(gameState: GameState): string[] {
+    const runtimeGameState = gameState as RuntimeGameState;
+    const areas = this.getSpellAreas(gameState);
+    const expiredNames: string[] = [];
+
+    runtimeGameState.spellAreas = areas.filter((area) => {
+      area.duration -= 1;
+      const keep = area.duration > 0;
+      if (!keep) {
+        expiredNames.push(area.spellName);
+      }
+      return keep;
+    });
+
+    gameState.creatures.forEach((creature) => {
+      this.updateSpellAreaOccupancy(creature, gameState);
+      this.refreshSpellAreaConditions(creature, gameState);
+    });
+
+    return expiredNames;
+  }
+
   resolveAction(
     actor: Creature,
     gameState: GameState,
@@ -233,7 +514,7 @@ export class RulesEngine {
     readyActionId?: string,
     itemId?: string,
     spellId?: string
-  ): any {
+  ): ActionResult {
     // ═══════════════════════════════════════════════════════════
     // PHASE 0: ACTION VALIDATION LAYER
     // All actions must pass validation before execution.
@@ -313,13 +594,13 @@ export class RulesEngine {
       case 'aid':
         return { success: false, message: 'Aid is not implemented yet.' };
       case 'recall-knowledge':
-        return { success: false, message: 'Recall Knowledge is not implemented yet.' };
+        return this.resolveRecallKnowledge(actor, gameState, targetId);
       case 'demoralize':
         return this.resolveDemoralize(actor, gameState, targetId, heroPointsSpent);
       case 'feint':
         return this.resolveFeint(actor, gameState, targetId, heroPointsSpent);
       case 'grapple':
-        return { success: false, message: 'Grapple is not implemented yet.' };
+        return this.resolveGrapple(actor, gameState, targetId, heroPointsSpent);
       case 'trip':
         return this.resolveTrip(actor, gameState, targetId, heroPointsSpent);
       case 'shove':
@@ -337,7 +618,7 @@ export class RulesEngine {
       case 'stabilize-with-hero-points':
         return this.stabilizeWithHeroPoints(actor);
       case 'escape':
-        return { success: false, message: 'Escape is not implemented yet.' };
+        return this.resolveEscape(actor, gameState, heroPointsSpent);
       case 'seek':
         return { success: false, message: 'Seek is not implemented yet.' };
       case 'hide':
@@ -371,17 +652,34 @@ export class RulesEngine {
       case 'long-term-rest':
         return { success: false, message: 'Long-Term Rest is not implemented yet.' };
       case 'spellstrike':
-        return { success: false, message: 'Spellstrike is not implemented yet.' };
+        return this.resolveSpellstrike(actor, gameState, targetId, spellId, weaponId, heroPointsSpent);
+      case 'recharge-spellstrike':
+        if (!actor.classSpecific?.spellstrikeSpent) {
+          return { success: true, message: `${actor.name}'s Spellstrike is already charged.` };
+        }
+        actor.classSpecific = actor.classSpecific ?? {};
+        actor.classSpecific.spellstrikeSpent = false;
+        return { success: true, message: `⚡ ${actor.name} recharges Spellstrike! Ready to channel a spell through their weapon again.` };
+      case 'end-rage':
+        if (!actor.rageActive) {
+          return { success: false, message: `${actor.name} is not raging.` };
+        }
+        actor.rageActive = false;
+        actor.rageRoundsLeft = 0;
+        actor.rageUsedThisEncounter = true;
+        actor.conditions = (actor.conditions ?? []).filter(c => c.name !== 'rage');
+        actor.bonuses = (actor.bonuses ?? []).filter(b => b.source !== 'rage');
+        return { success: true, message: `${actor.name} drops out of their rage.` };
       case 'exploit-vulnerability':
-        return { success: false, message: 'Exploit Vulnerability is not implemented yet.' };
+        return this.resolveExploitVulnerability(actor, gameState, targetId);
       case 'rage':
-        return { success: false, message: 'Rage is not implemented yet.' };
+        return this.resolveRage(actor, gameState);
       case 'flurry-of-blows':
-        return { success: false, message: 'Flurry of Blows is not implemented yet.' };
+        return this.resolveFlurryOfBlows(actor, gameState, targetId, heroPointsSpent);
       case 'hunt-prey':
-        return { success: false, message: 'Hunt Prey is not implemented yet.' };
+        return this.resolveHuntPrey(actor, gameState, targetId);
       case 'devise-a-stratagem':
-        return { success: false, message: 'Devise a Stratagem is not implemented yet.' };
+        return this.resolveDeviseAStratagem(actor, gameState, targetId);
       // ═══════════════════════════════════════════════════════════
       // PHASE 5.2: FIGHTER FEATS (Level 1-4)
       // ═══════════════════════════════════════════════════════════
@@ -7859,7 +8157,7 @@ export class RulesEngine {
         // ─── Companion / Familiar / Eidolon Actions ──────────────────────
         case 'spawn-companion': {
           const speciesId = targetId || 'wolf';
-          const maturity = (weaponId as any) || 'young';
+          const maturity = (weaponId as string) || 'young';
           return spawnCompanion(actor, speciesId, gameState, maturity);
         }
         case 'command-companion': {
@@ -7872,7 +8170,7 @@ export class RulesEngine {
         }
         case 'mature-companion': {
           if (!targetId) return { success: false, message: 'Must specify companion to mature.' };
-          const newMaturity = (weaponId as any) || 'mature';
+          const newMaturity = (weaponId as string) || 'mature';
           const specialization = pickupDestination;
           return matureCompanion(targetId, newMaturity, gameState, specialization);
         }
@@ -7933,8 +8231,95 @@ export class RulesEngine {
     targetId?: string,
     weaponId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     return this.resolveAttackAction(actor, gameState, targetId, weaponId, { isVicious: false }, heroPointsSpent);
+  }
+
+  private isDarknessObscured(actor: Creature, target: Creature, gameState: GameState): boolean {
+    return this.getSpellAreas(gameState)
+      .filter((area) => area.spellId === 'darkness')
+      .some((area) => this.isCreatureInSpellArea(actor, area, gameState) || this.isCreatureInSpellArea(target, area, gameState));
+  }
+
+  private resolveVisibilityFlatCheck(
+    actor: Creature,
+    target: Creature,
+    gameState: GameState,
+    attackDetails: Record<string, unknown>,
+    missLabel: string
+  ): ActionResult | null {
+    const attackerBlinded = actor.conditions?.some((condition) => condition.name === 'blinded');
+    if (attackerBlinded) {
+      const flatCheck = rollD20();
+      if (flatCheck < 11) {
+        return {
+          success: false,
+          message: `${actor.name} is blinded! DC 11 flat check failed (${flatCheck}) - ${missLabel}`,
+          details: { ...attackDetails, flatCheckFailed: true, flatCheck, flatCheckDC: 11 },
+        };
+      }
+    }
+
+    const attackerDazzled = actor.conditions?.some((condition) => condition.name === 'dazzled');
+    if (attackerDazzled) {
+      const flatCheck = rollD20();
+      if (flatCheck < 5) {
+        return {
+          success: false,
+          message: `${actor.name} is dazzled! DC 5 flat check failed (${flatCheck}) - ${missLabel}`,
+          details: { ...attackDetails, flatCheckFailed: true, flatCheck, flatCheckDC: 5 },
+        };
+      }
+    }
+
+    const targetConcealed = target.conditions?.some((condition) => condition.name === 'concealed');
+    if (targetConcealed) {
+      const flatCheck = rollD20();
+      if (flatCheck < 5) {
+        return {
+          success: false,
+          message: `${target.name} is concealed! DC 5 flat check failed (${flatCheck}) - ${missLabel}`,
+          details: { ...attackDetails, flatCheckFailed: true, flatCheck, flatCheckDC: 5 },
+        };
+      }
+    }
+
+    const targetHidden = target.conditions?.some((condition) => condition.name === 'hidden');
+    if (targetHidden) {
+      const flatCheck = rollD20();
+      if (flatCheck < 11) {
+        return {
+          success: false,
+          message: `${target.name} is hidden! DC 11 flat check failed (${flatCheck}) - ${missLabel}`,
+          details: { ...attackDetails, flatCheckFailed: true, flatCheck, flatCheckDC: 11 },
+        };
+      }
+    }
+
+    const targetInvisible = target.conditions?.some((condition) => condition.name === 'invisible');
+    if (targetInvisible) {
+      const flatCheck = rollD20();
+      if (flatCheck < 11) {
+        return {
+          success: false,
+          message: `${target.name} is invisible! DC 11 flat check failed (${flatCheck}) - ${missLabel}`,
+          details: { ...attackDetails, flatCheckFailed: true, flatCheck, flatCheckDC: 11 },
+        };
+      }
+    }
+
+    if (this.isDarknessObscured(actor, target, gameState)) {
+      const flatCheck = rollD20();
+      if (flatCheck < 5) {
+        return {
+          success: false,
+          message: `Magical darkness obscures ${target.name}! DC 5 flat check failed (${flatCheck}) - ${missLabel}`,
+          details: { ...attackDetails, flatCheckFailed: true, flatCheck, flatCheckDC: 5, source: 'darkness' },
+        };
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -7946,16 +8331,16 @@ export class RulesEngine {
     targetId?: string,
     weaponId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // First, check if the actor has Vicious Swing
-    const specials = (actor as any).specials;
-    const feats = (actor as any).feats;
+    const specials = actor.specials;
+    const feats = actor.feats;
     const hasViciousStrike = Array.isArray(specials)
-      ? specials.some((entry: any) => typeof entry === 'string'
+      ? specials.some((entry: string) => typeof entry === 'string'
         && entry.toLowerCase().includes('vicious swing'))
       : false;
     const hasViciousFeat = Array.isArray(feats)
-      ? feats.some((feat: any) => {
+      ? feats.some((feat: { name: string; type: string; level: number }) => {
         const name = typeof feat === 'string' ? feat : feat?.name;
         return typeof name === 'string'
           && name.toLowerCase().includes('vicious swing');
@@ -7988,7 +8373,7 @@ export class RulesEngine {
     weaponId?: string,
     options: { isVicious: boolean } = { isVicious: false },
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     const actionName = options.isVicious ? 'Vicious Swing' : 'Strike';
 
     if (!targetId) {
@@ -8036,71 +8421,9 @@ export class RulesEngine {
     // ═══════════════════════════════════════════════════════════
     // PHASE 2.1: FLAT CHECKS FOR CONCEALED/HIDDEN/INVISIBLE
     // ═══════════════════════════════════════════════════════════
-    // Check for visibility conditions that require flat checks
-    
-    // BLINDED attacker: All creatures are hidden to you (DC 11 flat check)
-    const attackerBlinded = actor.conditions?.some((c) => c.name === 'blinded');
-    if (attackerBlinded) {
-      const flatCheck = rollD20();
-      if (flatCheck < 11) {
-        return {
-          success: false,
-          message: `${actor.name} is blinded! DC 11 flat check failed (${flatCheck}) - attack failed`,
-          details: { ...attackRoll, flatCheckFailed: true, flatCheck, flatCheckDC: 11 },
-        };
-      }
-    }
-    
-    // DAZZLED attacker: All creatures are concealed to you (DC 5 flat check)
-    const attackerDazzled = actor.conditions?.some((c) => c.name === 'dazzled');
-    if (attackerDazzled) {
-      const flatCheck = rollD20();
-      if (flatCheck < 5) {
-        return {
-          success: false,
-          message: `${actor.name} is dazzled! DC 5 flat check failed (${flatCheck}) - attack failed`,
-          details: { ...attackRoll, flatCheckFailed: true, flatCheck, flatCheckDC: 5 },
-        };
-      }
-    }
-    
-    // CONCEALED target: DC 5 flat check or attack fails
-    const targetConcealed = target.conditions?.some((c) => c.name === 'concealed');
-    if (targetConcealed) {
-      const flatCheck = rollD20();
-      if (flatCheck < 5) {
-        return {
-          success: false,
-          message: `${target.name} is concealed! DC 5 flat check failed (${flatCheck}) - attack failed`,
-          details: { ...attackRoll, flatCheckFailed: true, flatCheck, flatCheckDC: 5 },
-        };
-      }
-    }
-    
-    // HIDDEN target: DC 11 flat check or attack auto-misses
-    const targetHidden = target.conditions?.some((c) => c.name === 'hidden');
-    if (targetHidden) {
-      const flatCheck = rollD20();
-      if (flatCheck < 11) {
-        return {
-          success: false,
-          message: `${target.name} is hidden! DC 11 flat check failed (${flatCheck}) - attack auto-missed`,
-          details: { ...attackRoll, flatCheckFailed: true, flatCheck, flatCheckDC: 11 },
-        };
-      }
-    }
-    
-    // INVISIBLE target: combines Hidden + Undetected rules (DC 11 flat check)
-    const targetInvisible = target.conditions?.some((c) => c.name === 'invisible');
-    if (targetInvisible) {
-      const flatCheck = rollD20();
-      if (flatCheck < 11) {
-        return {
-          success: false,
-          message: `${target.name} is invisible! DC 11 flat check failed (${flatCheck}) - attack auto-missed`,
-          details: { ...attackRoll, flatCheckFailed: true, flatCheck, flatCheckDC: 11 },
-        };
-      }
+    const visibilityFailure = this.resolveVisibilityFlatCheck(actor, target, gameState, attackRoll, 'attack failed');
+    if (visibilityFailure) {
+      return visibilityFailure;
     }
 
     // Handle misses and critical failures
@@ -8149,7 +8472,7 @@ export class RulesEngine {
     attackRoll.damage = damageRoll;
 
     // Apply damage resistances using weapon's damage type
-    const weaponDamageType: any = selectedWeapon?.damageType
+    const weaponDamageType: string = selectedWeapon?.damageType
       ?? actor.weaponDamageType
       ?? (actor.equippedWeapon ? getWeapon(actor.equippedWeapon)?.damageType : null)
       ?? 'bludgeoning';
@@ -8249,20 +8572,20 @@ export class RulesEngine {
   private resolveSelectedWeapon(actor: Creature, weaponId?: string): CreatureWeapon | null {
     const buildLegacyWeapon = (): CreatureWeapon => {
       const catalogWeapon = actor.equippedWeapon ? getWeapon(actor.equippedWeapon) : undefined;
-      const catalogAttackType = (catalogWeapon as any)?.attackType ?? (catalogWeapon as any)?.type;
+      const catalogAttackType = catalogWeapon?.attackType ?? catalogWeapon?.type;
       const attackType: 'melee' | 'ranged' = catalogAttackType === 'ranged' ? 'ranged' : 'melee';
 
       return {
         id: weaponId || actor.equippedWeapon || '__legacy__',
-        display: actor.weaponDisplay || (catalogWeapon as any)?.name || 'Unarmed Strike',
+        display: actor.weaponDisplay || catalogWeapon?.name || 'Unarmed Strike',
         attackType,
         attackBonus: actor.pbAttackBonus,
-        damageDice: actor.weaponDamageDice || (catalogWeapon as any)?.damageFormula || '1d4',
+        damageDice: actor.weaponDamageDice || catalogWeapon?.damageFormula || '1d4',
         damageBonus: actor.weaponDamageBonus ?? 0,
-        damageType: (actor.weaponDamageType as any) || (catalogWeapon as any)?.damageType || 'bludgeoning',
-        hands: Number((catalogWeapon as any)?.hands) || (actor.equippedWeapon ? 1 : 0),
-        traits: (catalogWeapon as any)?.traits || [],
-        range: (catalogWeapon as any)?.range,
+        damageType: (actor.weaponDamageType as string) || catalogWeapon?.damageType || 'bludgeoning',
+        hands: Number(catalogWeapon?.hands) || (actor.equippedWeapon ? 1 : 0),
+        traits: catalogWeapon?.traits || [],
+        range: catalogWeapon?.range,
         weaponCatalogId: actor.equippedWeapon,
         isNatural: !actor.equippedWeapon,
       };
@@ -8289,7 +8612,7 @@ export class RulesEngine {
    * Draw a weapon (Interact action, 1 action). Move weapon from stowed → held.
    * Must have free hands to hold it.
    */
-  private resolveDrawWeapon(actor: Creature, weaponId?: string): any {
+  private resolveDrawWeapon(actor: Creature, weaponId?: string): ActionResult {
     if (!actor.weaponInventory || !weaponId) {
       return { success: false, message: 'No weapon to draw.' };
     }
@@ -8318,7 +8641,7 @@ export class RulesEngine {
   /**
    * Stow a weapon (Interact action, 1 action). Move weapon from held → stowed.
    */
-  private resolveStowWeapon(actor: Creature, weaponId?: string): any {
+  private resolveStowWeapon(actor: Creature, weaponId?: string): ActionResult {
     if (!actor.weaponInventory || !weaponId) {
       return { success: false, message: 'No weapon to stow.' };
     }
@@ -8337,7 +8660,7 @@ export class RulesEngine {
   /**
    * Drop a weapon (free action). Move weapon from held → dropped.
    */
-  private resolveDropWeapon(actor: Creature, gameState: GameState, weaponId?: string): any {
+  private resolveDropWeapon(actor: Creature, gameState: GameState, weaponId?: string): ActionResult {
     if (!actor.weaponInventory || !weaponId) {
       return { success: false, message: 'No weapon to drop.' };
     }
@@ -8392,7 +8715,7 @@ export class RulesEngine {
     }
   }
 
-  private resolvePickUpWeapon(actor: Creature, gameState: GameState, groundObjectId?: string, pickupDestination?: string): any {
+  private resolvePickUpWeapon(actor: Creature, gameState: GameState, groundObjectId?: string, pickupDestination?: string): ActionResult {
     if (!groundObjectId || !gameState.groundObjects || !actor.weaponInventory) {
       return { success: false, message: 'Cannot pick up weapon.' };
     }
@@ -8513,7 +8836,7 @@ export class RulesEngine {
     return { ok: true, message: '' };
   }
 
-  private resolveMovement(actor: Creature, gameState: GameState, targetPosition?: Position, actionId?: string): any {
+  private resolveMovement(actor: Creature, gameState: GameState, targetPosition?: Position, actionId?: string): ActionResult {
     if (!targetPosition) {
       return { success: false, message: 'No destination specified' };
     }
@@ -8545,7 +8868,7 @@ export class RulesEngine {
     const maxDistance = (actor.speed ?? 25) / 5; // Convert feet to squares
     
     // 2. PATHFINDING WITH TERRAIN
-    const gameMap = (actor as any)._map as any;
+    const gameMap = actor._map as EncounterMap | undefined;
     const terrainGrid = gameMap?.terrain;
     const mapWidth = gameState.map?.width ?? terrainGrid?.[0]?.length ?? 0;
     const mapHeight = gameState.map?.height ?? terrainGrid?.length ?? 0;
@@ -8640,7 +8963,7 @@ export class RulesEngine {
     actor: Creature,
     gameState: GameState,
     targetPosition?: Position
-  ): any {
+  ): ActionResult {
     if (!targetPosition) {
       return { success: false, message: 'No destination specified for Step action' };
     }
@@ -8659,7 +8982,7 @@ export class RulesEngine {
     }
     
     // 3. VALIDATE DESTINATION WITHIN BOUNDS
-    const gameMap = (actor as any)._map as any;
+    const gameMap = actor._map as EncounterMap | undefined;
     const terrainGrid = gameMap?.terrain;
     const mapWidth = gameState.map?.width ?? terrainGrid?.[0]?.length ?? 0;
     const mapHeight = gameState.map?.height ?? terrainGrid?.length ?? 0;
@@ -8945,7 +9268,7 @@ export class RulesEngine {
           success: false,
           message: `Target is beyond maximum range! (${Math.round(distance * 5)}ft away, max 6 range increments = ${rangeIncrementSq * 5 * 6}ft)`,
           details: { distance: Math.round(distance * 5), maxRange: rangeIncrementSq * 5 * 6 },
-        } as any;
+        } as unknown as AttackRoll;
       }
       
       rangeModifier = incrementPenalty;
@@ -8998,7 +9321,7 @@ export class RulesEngine {
           result: 'critical-failure',
           marginOfSuccess: -999,
           heroPointError: spendResult.message,
-        } as any;
+        } as unknown as AttackRoll;
       }
 
       finalD20 = spendResult.newRoll.d20;
@@ -9043,7 +9366,7 @@ export class RulesEngine {
     return isAgile ? -8 : -10;
   }
 
-  private rollDamage(attacker: Creature, isCriticalHit: boolean = false, selectedWeapon?: CreatureWeapon | null, targetIsOffGuard: boolean = false): any {
+  private rollDamage(attacker: Creature, isCriticalHit: boolean = false, selectedWeapon?: CreatureWeapon | null, targetIsOffGuard: boolean = false): ActionResult {
     // If a specific weapon from inventory is selected, use its stats
     if (selectedWeapon) {
       // PHASE 1.5 FIX: Apply striking runes from creature bonuses
@@ -9238,7 +9561,7 @@ export class RulesEngine {
    * Critical Failure: dying increased by 2
    * Dying 4+ = dead
    */
-  private rollDeathSave(creature: Creature, heroPointsSpent?: number): any {
+  private rollDeathSave(creature: Creature, heroPointsSpent?: number): ActionResult {
     // Check if recovery check already made this turn
     if (creature.deathSaveMadeThisTurn) {
       return {
@@ -9369,7 +9692,7 @@ export class RulesEngine {
    * Check if a creature can cast a spell and consume the appropriate slot/resource
    * Returns { canCast: boolean, message?, heightenedRank? }
    */
-  private canCastAndConsumeSlot(actor: Creature, spell: any, requestedRank?: number): { canCast: boolean; message?: string; heightenedRank?: number } {
+  private canCastAndConsumeSlot(actor: Creature, spell: Record<string, unknown>, requestedRank?: number): { canCast: boolean; message?: string; heightenedRank?: number } {
     // Cantrips (rank 0) don't consume slots
     if (spell.rank === 0) {
       // Auto-heighten cantrips to half caster level (rounded up)
@@ -9418,7 +9741,7 @@ export class RulesEngine {
     return { canCast: true, heightenedRank: rankToCast };
   }
 
-  private resolveSpell(actor: Creature, gameState: GameState, spell: any, targetId?: string, targetPosition?: Position, requestedRank?: number): any {
+  private resolveSpell(actor: Creature, gameState: GameState, spell: Record<string, unknown>, targetId?: string, targetPosition?: Position, requestedRank?: number): ActionResult {
     // Check if the spell can be cast and consume resources
     const castCheck = this.canCastAndConsumeSlot(actor, spell, requestedRank);
     
@@ -9454,12 +9777,49 @@ export class RulesEngine {
         return this.resolveDaze(actor, gameState, targetId, heightenedRank);
       case 'fear':
         return this.resolveFear(actor, gameState, targetId, heightenedRank);
+      case 'bane':
+        return this.resolveBane(actor, gameState, heightenedRank);
       case 'grease':
         return this.resolveGrease(actor, gameState, targetPosition, heightenedRank);
       case 'haste':
         return this.resolveHaste(actor, gameState, targetId, heightenedRank);
       case 'slow':
         return this.resolveSlow(actor, gameState, targetId, heightenedRank);
+      case 'color-spray':
+        return this.resolveColorSpray(actor, gameState, targetPosition, heightenedRank);
+      case 'sleep':
+        return this.resolveSleep(actor, gameState, targetPosition, heightenedRank);
+      case 'earthbind':
+        return this.resolveEarthbind(actor, gameState, targetId, heightenedRank);
+      case 'enthrall':
+        return this.resolveEnthrall(actor, gameState, targetId, heightenedRank);
+      case 'blur':
+        return this.resolveBlur(actor, gameState, targetId, heightenedRank);
+      case 'blindness':
+        return this.resolveBlindness(actor, gameState, targetId, heightenedRank);
+      case 'paralyze':
+        return this.resolveParalyze(actor, gameState, targetId, heightenedRank);
+      case 'darkness':
+        return this.resolveDarkness(actor, gameState, targetPosition, heightenedRank);
+      case 'web':
+        return this.resolveWeb(actor, gameState, targetPosition, heightenedRank);
+      case 'stinking-cloud':
+        return this.resolveStinkingCloud(actor, gameState, targetPosition, heightenedRank);
+      case 'deafness':
+        return this.resolveDeafness(actor, gameState, targetId, heightenedRank);
+      case 'false-life':
+      case 'false-vitality':
+        return this.resolveFalseVitality(actor, gameState, targetId, heightenedRank);
+      case 'invisibility':
+        return this.resolveInvisibility(actor, gameState, targetId, heightenedRank);
+      case 'harm':
+        return this.resolveHarm(actor, gameState, targetId, heightenedRank);
+      case 'phantom-pain':
+        return this.resolvePhantomPain(actor, gameState, targetId, heightenedRank);
+      case 'hydraulic-push':
+        return this.resolveHydraulicPush(actor, gameState, targetId, heightenedRank);
+      case 'grim-tendrils':
+        return this.resolveGrimTendrils(actor, gameState, targetPosition, heightenedRank);
       case 'lightning-bolt':
         return this.resolveLightningBolt(actor, gameState, targetPosition, heightenedRank);
       case 'heroism':
@@ -9492,11 +9852,11 @@ export class RulesEngine {
   private resolveGenericSpell(
     actor: Creature,
     gameState: GameState,
-    spell: any,
+    spell: Record<string, unknown>,
     targetId?: string,
     targetPosition?: Position,
     heightenedRank: number = 1
-  ): any {
+  ): ActionResult {
     // ── Heightened damage formula ──────────────────────────────
     const calcDamageFormula = (base: string, rank: number): string => {
       if (!spell.heightening || spell.heightening.type !== 'interval' || !spell.heightening.damage) return base;
@@ -9533,7 +9893,7 @@ export class RulesEngine {
 
       const formula = spell.damageFormula ? calcDamageFormula(spell.damageFormula, heightenedRank) : null;
       const baseDamageRoll = formula ? rollDamageFormula(formula) : null;
-      const results: any[] = [];
+      const results: ActionResult[] = [];
 
       for (const target of targetsInAoE) {
         const saveRoll = this.rollSave(target, spell.saveType, saveDC);
@@ -9650,6 +10010,10 @@ export class RulesEngine {
         const d20 = rollD20();
         const total = d20 + attackBonus;
         const targetAC = calculateAC(target);
+        const visibilityFailure = this.resolveVisibilityFlatCheck(actor, target, gameState, { d20, attackBonus, total, targetAC }, 'spell attack missed');
+        if (visibilityFailure) {
+          return visibilityFailure;
+        }
         const attackResult = getAttackResult(d20, total, targetAC);
 
         if (attackResult === 'critical-failure' || attackResult === 'failure') {
@@ -9742,7 +10106,7 @@ export class RulesEngine {
         return Math.sqrt(dx * dx + dy * dy) <= radius;
       });
 
-      const results: any[] = [];
+      const results: ActionResult[] = [];
       for (const target of targetsInAoE) {
         const damageCalc = calculateFinalDamage(roll.total, spell.damageType || 'force', target);
         const shieldResult = applyDamageToShield(target, damageCalc.finalDamage);
@@ -9766,7 +10130,7 @@ export class RulesEngine {
     return { success: true, message: `${spell.icon} ${actor.name} casts ${spell.name}. ${spell.description.slice(0, 140)}` };
   }
 
-  private resolveMagicMissile(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): any {
+  private resolveMagicMissile(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): ActionResult {
     if (!targetId) {
       return { success: false, message: 'No target specified' };
     }
@@ -9824,7 +10188,7 @@ export class RulesEngine {
     };
   }
 
-  private resolveFireball(actor: Creature, gameState: GameState, targetPosition?: Position, heightenedRank: number = 3): any {
+  private resolveFireball(actor: Creature, gameState: GameState, targetPosition?: Position, heightenedRank: number = 3): ActionResult {
     if (!targetPosition || typeof targetPosition !== 'object' || !('x' in targetPosition) || !('y' in targetPosition)) {
       return { success: false, message: 'Invalid target location specified' };
     }
@@ -9862,7 +10226,7 @@ export class RulesEngine {
 
     // Roll damage once for all targets
     const baseDamageRoll = rollDamageFormula(damageFormula);
-    const results: any[] = [];
+    const results: ActionResult[] = [];
 
     targetsInAoE.forEach((target) => {
       // Make a Reflex save
@@ -9954,7 +10318,7 @@ export class RulesEngine {
     };
   }
 
-  private resolveBurningHands(actor: Creature, gameState: GameState, targetPosition?: Position, heightenedRank: number = 1): any {
+  private resolveBurningHands(actor: Creature, gameState: GameState, targetPosition?: Position, heightenedRank: number = 1): ActionResult {
     if (!targetPosition || typeof targetPosition !== 'object' || !('x' in targetPosition) || !('y' in targetPosition)) {
       return { success: false, message: 'Invalid target location specified' };
     }
@@ -10017,7 +10381,7 @@ export class RulesEngine {
 
     // Roll damage once for all targets
     const baseDamageRoll = rollDamageFormula(damageFormula);
-    const results: any[] = [];
+    const results: ActionResult[] = [];
 
     targetsInAoE.forEach((target) => {
       // Make a Reflex save (basic save)
@@ -10105,7 +10469,7 @@ export class RulesEngine {
     };
   }
 
-  private resolveShield(actor: Creature, heightenedRank: number = 1): any {
+  private resolveShield(actor: Creature, heightenedRank: number = 1): ActionResult {
     // PF2e Remaster: Shield cantrip grants +1 circumstance bonus to AC
     // TODO: Implement full Shield mechanics (Hardness, HP, Broken Threshold based on heightening)
     // Rank 1: Hardness 5, HP 20, BT 10
@@ -10119,7 +10483,7 @@ export class RulesEngine {
     };
   }
 
-  private resolveHeal(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): any {
+  private resolveHeal(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): ActionResult {
     if (!targetId) {
       return { success: false, message: 'No target specified for Heal!' };
     }
@@ -10156,7 +10520,7 @@ export class RulesEngine {
     };
   }
 
-  private resolveProduceFlame(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): any {
+  private resolveProduceFlame(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): ActionResult {
     if (!targetId) {
       return { success: false, message: 'No target specified for Produce Flame!' };
     }
@@ -10185,6 +10549,10 @@ export class RulesEngine {
     }
     const total = d20 + spellAttackBonus;
     const targetAC = calculateAC(target, actor.id, 'ranged');
+    const visibilityFailure = this.resolveVisibilityFlatCheck(actor, target, gameState, { d20, spellAttackBonus, total, targetAC }, 'spell attack missed');
+    if (visibilityFailure) {
+      return visibilityFailure;
+    }
     const result = getAttackResult(d20, total, targetAC);
 
     let message = `🔥 ${actor.name} casts Ignition${heightenedRank > 1 ? ` (Rank ${heightenedRank})` : ''} at ${target.name}!\n`;
@@ -10244,7 +10612,7 @@ export class RulesEngine {
     };
   }
 
-  private resolveElectricArc(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): any {
+  private resolveElectricArc(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): ActionResult {
     if (!targetId) {
       return { success: false, message: 'No target specified for Electric Arc!' };
     }
@@ -10296,7 +10664,7 @@ export class RulesEngine {
     };
   }
 
-  private resolveTelekineticProjectile(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): any {
+  private resolveTelekineticProjectile(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): ActionResult {
     if (!targetId) {
       return { success: false, message: 'No target specified for Telekinetic Projectile!' };
     }
@@ -10325,6 +10693,10 @@ export class RulesEngine {
     }
     const total = d20 + spellAttackBonus;
     const targetAC = calculateAC(target, actor.id, 'ranged');
+    const visibilityFailure = this.resolveVisibilityFlatCheck(actor, target, gameState, { d20, spellAttackBonus, total, targetAC }, 'spell attack missed');
+    if (visibilityFailure) {
+      return visibilityFailure;
+    }
     const result = getAttackResult(d20, total, targetAC);
 
     let message = `🪨 ${actor.name} casts Telekinetic Projectile${heightenedRank > 1 ? ` (Rank ${heightenedRank})` : ''} at ${target.name}!\n`;
@@ -10367,7 +10739,7 @@ export class RulesEngine {
     };
   }
 
-  private resolveDaze(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): any {
+  private resolveDaze(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): ActionResult {
     if (!targetId) {
       return { success: false, message: 'No target specified for Daze!' };
     }
@@ -10426,7 +10798,7 @@ export class RulesEngine {
     };
   }
 
-  private resolveFear(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): any {
+  private resolveFear(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): ActionResult {
     if (!targetId) {
       return { success: false, message: 'No target specified for Fear!' };
     }
@@ -10470,7 +10842,20 @@ export class RulesEngine {
     };
   }
 
-  private resolveGrease(actor: Creature, gameState: GameState, targetPosition?: Position, heightenedRank: number = 1): any {
+  private resolveBane(actor: Creature, gameState: GameState, heightenedRank: number = 1): ActionResult {
+    const area = this.createSpellArea(gameState, 'bane', 'Bane', actor.positions, 3, 10, actor.id, heightenedRank, calculateSpellDC(actor));
+    area.followsSourceActor = true;
+    const entries = this.applySpellAreaOnCreation(area, gameState, { excludeSourceActor: true });
+
+    return {
+      success: true,
+      message: `👿 ${actor.name} casts Bane! ${entries.length > 0 ? entries.map((entry) => entry.message).join(' ') : 'No enemies are affected yet, but the aura remains around the caster.'}`,
+      affectedCount: entries.length,
+      heightenedRank,
+    };
+  }
+
+  private resolveGrease(actor: Creature, gameState: GameState, targetPosition?: Position, heightenedRank: number = 1): ActionResult {
     if (!targetPosition || typeof targetPosition !== 'object' || !('x' in targetPosition) || !('y' in targetPosition)) {
       return { success: false, message: 'Invalid target location specified for Grease!' };
     }
@@ -10495,7 +10880,7 @@ export class RulesEngine {
       };
     }
 
-    const results: any[] = [];
+    const results: ActionResult[] = [];
     let message = `🛢️ ${actor.name} casts Grease${heightenedRank > 1 ? ` (Rank ${heightenedRank})` : ''} at (${targetPosition.x}, ${targetPosition.y})!\n`;
 
     targetsInAoE.forEach((target) => {
@@ -10528,7 +10913,95 @@ export class RulesEngine {
     };
   }
 
-  private resolveHaste(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): any {
+  private resolveColorSpray(actor: Creature, gameState: GameState, targetPosition?: Position, heightenedRank: number = 1): ActionResult {
+    if (!targetPosition) {
+      return { success: false, message: 'Invalid target location specified for Color Spray!' };
+    }
+
+    const coneRange = 3;
+    const saveDC = calculateSpellDC(actor);
+    const dx = targetPosition.x - actor.positions.x;
+    const dy = targetPosition.y - actor.positions.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const dirX = distance > 0 ? dx / distance : 1;
+    const dirY = distance > 0 ? dy / distance : 0;
+
+    const targets = gameState.creatures.filter((creature) => {
+      if (creature.id === actor.id) return false;
+      const cdx = creature.positions.x - actor.positions.x;
+      const cdy = creature.positions.y - actor.positions.y;
+      const creatureDistance = Math.sqrt(cdx * cdx + cdy * cdy);
+      if (creatureDistance > coneRange) return false;
+      if (creatureDistance === 0) return false;
+      const creatureDirX = cdx / creatureDistance;
+      const creatureDirY = cdy / creatureDistance;
+      return dirX * creatureDirX + dirY * creatureDirY >= 0.5;
+    });
+
+    const results: ActionResult[] = [];
+    for (const target of targets) {
+      const saveRoll = this.rollSave(target, 'will', saveDC);
+      if (saveRoll.result === 'failure') {
+        this.addOrRefreshCondition(target, 'stunned', 1, 1, `color-spray-${actor.id}`);
+      } else if (saveRoll.result === 'critical-failure') {
+        this.addOrRefreshCondition(target, 'stunned', 1, 1, `color-spray-${actor.id}`);
+        this.addOrRefreshCondition(target, 'blinded', 1, 1, `color-spray-${actor.id}`);
+      }
+      results.push({ targetName: target.name, saveResult: saveRoll.result });
+    }
+
+    return {
+      success: true,
+      message: `🌈 ${actor.name} casts Color Spray! ${results.length > 0 ? results.map((result) => `${result.targetName}: ${String(result.saveResult).toUpperCase()}`).join('; ') : 'No targets in the cone.'}`,
+      results,
+      heightenedRank,
+    };
+  }
+
+  private resolveSleep(actor: Creature, gameState: GameState, targetPosition?: Position, heightenedRank: number = 1): ActionResult {
+    if (!targetPosition) {
+      return { success: false, message: 'Invalid target location specified for Sleep!' };
+    }
+
+    const saveDC = calculateSpellDC(actor);
+    const targets = gameState.creatures.filter((creature) => {
+      if (creature.id === actor.id) return false;
+      const dx = creature.positions.x - targetPosition.x;
+      const dy = creature.positions.y - targetPosition.y;
+      return Math.sqrt(dx * dx + dy * dy) <= 1;
+    });
+
+    const results: ActionResult[] = [];
+    for (const target of targets) {
+      const saveRoll = this.rollSave(target, 'will', saveDC);
+      const source = `sleep-${actor.id}`;
+      if (saveRoll.result === 'success') {
+        this.addOrRefreshCondition(target, 'drowsy', 1, 1, source);
+      } else if (saveRoll.result === 'failure') {
+        const duration = heightenedRank >= 4 ? 1 : 10;
+        this.addOrRefreshCondition(target, 'unconscious', duration, 1, source);
+        if (heightenedRank >= 4) {
+          this.addOrRefreshCondition(target, 'prone', duration, 1, source);
+        }
+      } else if (saveRoll.result === 'critical-failure') {
+        const duration = heightenedRank >= 4 ? 10 : 600;
+        this.addOrRefreshCondition(target, 'unconscious', duration, 1, source);
+        if (heightenedRank >= 4) {
+          this.addOrRefreshCondition(target, 'prone', duration, 1, source);
+        }
+      }
+      results.push({ targetName: target.name, saveResult: saveRoll.result });
+    }
+
+    return {
+      success: true,
+      message: `😴 ${actor.name} casts Sleep! ${results.length > 0 ? results.map((result) => `${result.targetName}: ${String(result.saveResult).toUpperCase()}`).join('; ') : 'No targets in the burst.'}`,
+      results,
+      heightenedRank,
+    };
+  }
+
+  private resolveHaste(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): ActionResult {
     if (!targetId) {
       return { success: false, message: 'No target specified for Haste!' };
     }
@@ -10558,7 +11031,114 @@ export class RulesEngine {
     };
   }
 
-  private resolveSlow(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): any {
+  private resolveEarthbind(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 3): ActionResult {
+    if (!targetId) return { success: false, message: 'No target specified for Earthbind!' };
+    const target = gameState.creatures.find((c) => c.id === targetId);
+    if (!target) return { success: false, message: 'Target not found!' };
+
+    const saveDC = calculateSpellDC(actor);
+    const saveRoll = this.rollSave(target, 'fortitude', saveDC);
+    let message = `⬇️ ${actor.name} casts Earthbind on ${target.name}! ${saveRoll.result.toUpperCase()} on Fortitude save.`;
+
+    if (saveRoll.result === 'failure' || saveRoll.result === 'critical-failure') {
+      target.conditions = (target.conditions || []).filter((condition) => condition.name !== 'fly');
+      this.addOrRefreshCondition(target, 'earthbound', 10, 1, `earthbind-${actor.id}`);
+      if (saveRoll.result === 'critical-failure') {
+        this.addOrRefreshCondition(target, 'immobilized', 1, 1, `earthbind-${actor.id}`);
+      }
+      message += ` ${target.name} loses any fly speed and is dragged toward the ground.`;
+    }
+
+    return { success: true, message, saveResult: saveRoll.result, heightenedRank };
+  }
+
+  private resolveEnthrall(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 3): ActionResult {
+    const saveDC = calculateSpellDC(actor);
+    const targets = gameState.creatures.filter((creature) => {
+      if (creature.id === actor.id) return false;
+      const dx = creature.positions.x - actor.positions.x;
+      const dy = creature.positions.y - actor.positions.y;
+      return Math.sqrt(dx * dx + dy * dy) <= 24;
+    });
+
+    const results: ActionResult[] = [];
+    for (const target of targets) {
+      const saveRoll = this.rollSave(target, 'will', saveDC);
+      if (saveRoll.result === 'failure' || saveRoll.result === 'critical-failure') {
+        this.addOrRefreshCondition(target, 'fascinated', 1, 1, `enthrall-${actor.id}`);
+        if (saveRoll.result === 'critical-failure') {
+          this.addOrRefreshCondition(target, 'enthrall-fixed-attention', 1, 1, `enthrall-${actor.id}`);
+        }
+      }
+      results.push({ targetName: target.name, saveResult: saveRoll.result });
+    }
+
+    return {
+      success: true,
+      message: `🎶 ${actor.name} casts Enthrall! ${results.length > 0 ? results.map((result) => `${result.targetName}: ${String(result.saveResult).toUpperCase()}`).join('; ') : 'No creatures are close enough to hear the performance.'}`,
+      results,
+      heightenedRank,
+    };
+  }
+
+  private resolveBlur(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 2): ActionResult {
+    const target = targetId ? gameState.creatures.find((c) => c.id === targetId) : actor;
+    if (!target) return { success: false, message: 'Target not found!' };
+
+    this.addOrRefreshCondition(target, 'concealed', 10, 1, `blur-${actor.id}`);
+
+    return {
+      success: true,
+      message: `🌫️ ${actor.name} casts Blur${target.id !== actor.id ? ` on ${target.name}` : ''}! ${target.name} becomes concealed for 1 minute.`,
+      heightenedRank,
+    };
+  }
+
+  private resolveBlindness(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 3): ActionResult {
+    if (!targetId) return { success: false, message: 'No target specified for Blindness!' };
+    const target = gameState.creatures.find((c) => c.id === targetId);
+    if (!target) return { success: false, message: 'Target not found!' };
+
+    const saveDC = calculateSpellDC(actor);
+    const saveRoll = this.rollSave(target, 'fortitude', saveDC);
+    if (saveRoll.result === 'critical-failure') {
+      this.addOrRefreshCondition(target, 'blinded', 'permanent', 1, `blindness-${actor.id}`);
+    } else if (saveRoll.result === 'failure') {
+      this.addOrRefreshCondition(target, 'blinded', 10, 1, `blindness-${actor.id}`);
+    } else if (saveRoll.result === 'success') {
+      this.addOrRefreshCondition(target, 'blinded', 1, 1, `blindness-${actor.id}`);
+    }
+
+    return {
+      success: true,
+      message: `🙈 ${actor.name} casts Blindness on ${target.name}! ${saveRoll.result.toUpperCase()} on Fortitude save.`,
+      saveResult: saveRoll.result,
+      heightenedRank,
+    };
+  }
+
+  private resolveParalyze(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 3): ActionResult {
+    if (!targetId) return { success: false, message: 'No target specified for Paralyze!' };
+    const target = gameState.creatures.find((c) => c.id === targetId);
+    if (!target) return { success: false, message: 'Target not found!' };
+
+    const saveDC = calculateSpellDC(actor);
+    const saveRoll = this.rollSave(target, 'will', saveDC);
+    if (saveRoll.result === 'failure') {
+      this.addOrRefreshCondition(target, 'paralyzed', 1, 1, `paralyze-${actor.id}`);
+    } else if (saveRoll.result === 'critical-failure') {
+      this.addOrRefreshCondition(target, 'paralyzed', 4, 1, `paralyze-${actor.id}`);
+    }
+
+    return {
+      success: true,
+      message: `🧊 ${actor.name} casts Paralyze on ${target.name}! ${saveRoll.result.toUpperCase()} on Will save.`,
+      saveResult: saveRoll.result,
+      heightenedRank,
+    };
+  }
+
+  private resolveSlow(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): ActionResult {
     if (!targetId) {
       return { success: false, message: 'No target specified for Slow!' };
     }
@@ -10616,7 +11196,251 @@ export class RulesEngine {
     };
   }
 
-  private resolveLightningBolt(actor: Creature, gameState: GameState, targetPosition?: Position, heightenedRank: number = 3): any {
+  private resolveDeafness(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 2): ActionResult {
+    if (!targetId) return { success: false, message: 'No target specified for Deafness!' };
+    const target = gameState.creatures.find((c) => c.id === targetId);
+    if (!target) return { success: false, message: 'Target not found!' };
+
+    const saveDC = calculateSpellDC(actor);
+    const saveRoll = this.rollSave(target, 'fortitude', saveDC);
+    if (saveRoll.result === 'critical-failure') {
+      this.addOrRefreshCondition(target, 'deafened', 'permanent', 1, `deafness-${actor.id}`);
+    } else if (saveRoll.result === 'failure') {
+      this.addOrRefreshCondition(target, 'deafened', 10, 1, `deafness-${actor.id}`);
+    } else if (saveRoll.result === 'success') {
+      this.addOrRefreshCondition(target, 'deafened', 1, 1, `deafness-${actor.id}`);
+    }
+
+    return {
+      success: true,
+      message: `🔇 ${actor.name} casts Deafness on ${target.name}! ${saveRoll.result.toUpperCase()} on Fortitude save.`,
+      saveResult: saveRoll.result,
+      heightenedRank,
+    };
+  }
+
+  private resolveFalseVitality(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 2): ActionResult {
+    const target = targetId ? gameState.creatures.find((c) => c.id === targetId) : actor;
+    if (!target) return { success: false, message: 'Target not found!' };
+
+    const tempHP = 6 + Math.max(0, heightenedRank - 2) * 3;
+    const totalTempHP = this.applyTemporaryHealth(target, tempHP);
+    this.addOrRefreshCondition(target, 'false-vitality', 80, totalTempHP, `false-vitality-${actor.id}`);
+
+    return {
+      success: true,
+      message: `💛 ${actor.name} casts False Vitality${target.id !== actor.id ? ` on ${target.name}` : ''}! ${target.name} gains ${tempHP} temporary HP.`,
+      temporaryHealth: totalTempHP,
+      heightenedRank,
+    };
+  }
+
+  private resolveInvisibility(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 2): ActionResult {
+    const target = targetId ? gameState.creatures.find((c) => c.id === targetId) : actor;
+    if (!target) return { success: false, message: 'Target not found!' };
+
+    const duration = heightenedRank >= 4 ? 10 : 100;
+    this.addOrRefreshCondition(target, 'invisible', duration, 1, `invisibility-${actor.id}`);
+    if (heightenedRank < 4) {
+      this.addOrRefreshCondition(target, 'invisibility-breaks-on-hostile-action', duration, 1, `invisibility-${actor.id}`);
+    }
+
+    return {
+      success: true,
+      message: `👻 ${actor.name} casts Invisibility${target.id !== actor.id ? ` on ${target.name}` : ''}! ${target.name} becomes invisible${heightenedRank >= 4 ? ' for 1 minute even after hostile actions.' : ' until they take a hostile action or the spell expires.'}`,
+      heightenedRank,
+    };
+  }
+
+  private resolveDarkness(actor: Creature, gameState: GameState, targetPosition?: Position, heightenedRank: number = 2): ActionResult {
+    if (!targetPosition) return { success: false, message: 'No target position specified for Darkness!' };
+    const area = this.createSpellArea(gameState, 'darkness', 'Darkness', targetPosition, 4, 10, actor.id, heightenedRank);
+    this.applySpellAreaOnCreation(area, gameState);
+    return { success: true, message: `🌑 ${actor.name} casts Darkness at (${targetPosition.x}, ${targetPosition.y})! The area is shrouded in magical darkness.`, heightenedRank };
+  }
+
+  private resolveWeb(actor: Creature, gameState: GameState, targetPosition?: Position, heightenedRank: number = 2): ActionResult {
+    if (!targetPosition) return { success: false, message: 'No target position specified for Web!' };
+    const area = this.createSpellArea(gameState, 'web', 'Web', targetPosition, 2, 10, actor.id, heightenedRank, calculateSpellDC(actor));
+    const affected = this.applySpellAreaOnCreation(area, gameState, { excludeSourceActor: true }).map((entry) => entry.message);
+
+    return {
+      success: true,
+      message: `🕸️ ${actor.name} casts Web at (${targetPosition.x}, ${targetPosition.y})! The area becomes difficult terrain and can immobilize creatures.${affected.length > 0 ? ` ${affected.join(' ')}` : ''}`,
+      heightenedRank,
+    };
+  }
+
+  private resolveStinkingCloud(actor: Creature, gameState: GameState, targetPosition?: Position, heightenedRank: number = 3): ActionResult {
+    if (!targetPosition) return { success: false, message: 'No target position specified for Stinking Cloud!' };
+    const area = this.createSpellArea(gameState, 'stinking-cloud', 'Stinking Cloud', targetPosition, 4, 10, actor.id, heightenedRank, calculateSpellDC(actor));
+    const affected = this.applySpellAreaOnCreation(area, gameState, { excludeSourceActor: true }).map((entry) => entry.message);
+
+    return {
+      success: true,
+      message: `☁️ ${actor.name} casts Stinking Cloud at (${targetPosition.x}, ${targetPosition.y})! Creatures in the cloud are concealed and must save against the fumes.${affected.length > 0 ? ` ${affected.join(' ')}` : ''}`,
+      heightenedRank,
+    };
+  }
+
+  private resolveHarm(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): ActionResult {
+    if (!targetId) return { success: false, message: 'No target specified for Harm!' };
+    const target = gameState.creatures.find((c) => c.id === targetId);
+    if (!target) return { success: false, message: 'Target not found!' };
+
+    const formula = `${heightenedRank}d8`;
+    const roll = rollDamageFormula(formula);
+    const isUndead = target.traits?.includes('undead');
+
+    if (isUndead) {
+      const previous = target.currentHealth;
+      target.currentHealth = Math.min(target.maxHealth, target.currentHealth + roll.total);
+      return {
+        success: true,
+        message: `💀 ${actor.name} casts Harm on ${target.name}, restoring ${target.currentHealth - previous} HP to the undead creature!`,
+        healing: target.currentHealth - previous,
+        heightenedRank,
+      };
+    }
+
+    const saveDC = calculateSpellDC(actor);
+    const saveRoll = this.rollSave(target, 'fortitude', saveDC);
+    let damage = roll.total;
+    if (saveRoll.result === 'critical-success') damage = 0;
+    else if (saveRoll.result === 'success') damage = Math.floor(damage / 2);
+    else if (saveRoll.result === 'critical-failure') damage *= 2;
+
+    const damageCalc = calculateFinalDamage(damage, 'void', target);
+    target.currentHealth -= damageCalc.finalDamage;
+    let message = `💀 ${actor.name} casts Harm on ${target.name}! Fortitude Save: ${saveRoll.total} vs DC ${saveDC} → ${saveRoll.result.toUpperCase()}. ${damageCalc.finalDamage} void damage.`;
+    if (target.currentHealth <= 0 && !target.dying) message += initDying(target);
+    return { success: true, message, damage: damageCalc.finalDamage, saveResult: saveRoll.result, heightenedRank };
+  }
+
+  private resolvePhantomPain(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): ActionResult {
+    if (!targetId) return { success: false, message: 'No target specified for Phantom Pain!' };
+    const target = gameState.creatures.find((c) => c.id === targetId);
+    if (!target) return { success: false, message: 'Target not found!' };
+
+    const saveDC = calculateSpellDC(actor);
+    const saveRoll = this.rollSave(target, 'will', saveDC);
+    const formula = `${2 + 2 * Math.max(0, heightenedRank - 1)}d4`;
+    const roll = rollDamageFormula(formula);
+    let damage = 0;
+    if (saveRoll.result === 'failure') damage = roll.total;
+    else if (saveRoll.result === 'critical-failure') damage = roll.total * 2;
+
+    if (damage > 0) {
+      const damageCalc = calculateFinalDamage(damage, 'mental', target);
+      target.currentHealth -= damageCalc.finalDamage;
+      this.addOrRefreshCondition(target, 'sickened', 3, saveRoll.result === 'critical-failure' ? 2 : 1, `phantom-pain-${actor.id}`);
+      let message = `😖 ${actor.name} casts Phantom Pain on ${target.name}! ${damageCalc.finalDamage} mental damage and sickened ${saveRoll.result === 'critical-failure' ? 2 : 1}.`;
+      if (target.currentHealth <= 0 && !target.dying) message += initDying(target);
+      return { success: true, message, damage: damageCalc.finalDamage, saveResult: saveRoll.result, heightenedRank };
+    }
+
+    return { success: true, message: `😖 ${actor.name} casts Phantom Pain on ${target.name}, but they resist the illusion.`, saveResult: saveRoll.result, heightenedRank };
+  }
+
+  private resolveHydraulicPush(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 1): ActionResult {
+    if (!targetId) return { success: false, message: 'No target specified for Hydraulic Push!' };
+    const target = gameState.creatures.find((c) => c.id === targetId);
+    if (!target) return { success: false, message: 'Target not found!' };
+
+    const spellAttackBonus = calculateSpellAttack(actor);
+    const d20 = rollD20();
+    const total = d20 + spellAttackBonus;
+    const targetAC = calculateAC(target, actor.id, 'ranged');
+    const visibilityFailure = this.resolveVisibilityFlatCheck(actor, target, gameState, { d20, spellAttackBonus, total, targetAC }, 'spell attack missed');
+    if (visibilityFailure) return visibilityFailure;
+    const result = getAttackResult(d20, total, targetAC);
+
+    if (result === 'failure' || result === 'critical-failure') {
+      return { success: true, message: `💦 ${actor.name} casts Hydraulic Push at ${target.name} but misses!`, result, heightenedRank };
+    }
+
+    const roll = rollDamageFormula(`${3 + 2 * Math.max(0, heightenedRank - 1)}d6`);
+    let damage = roll.total;
+    if (result === 'critical-success') damage *= 2;
+    const damageCalc = calculateFinalDamage(damage, 'bludgeoning', target);
+    target.currentHealth -= damageCalc.finalDamage;
+
+    const dx = target.positions.x - actor.positions.x;
+    const dy = target.positions.y - actor.positions.y;
+    const length = Math.sqrt(dx * dx + dy * dy) || 1;
+    const pushSquares = result === 'critical-success' ? 2 : 1;
+    target.positions.x += Math.round((dx / length) * pushSquares);
+    target.positions.y += Math.round((dy / length) * pushSquares);
+    if (result === 'critical-success') {
+      this.addOrRefreshCondition(target, 'prone', 1, 1, `hydraulic-push-${actor.id}`);
+    }
+
+    let message = `💦 ${actor.name} casts Hydraulic Push on ${target.name}! ${damageCalc.finalDamage} bludgeoning damage and pushed ${pushSquares * 5} feet.`;
+    if (result === 'critical-success') message += ` ${target.name} is also prone.`;
+    if (target.currentHealth <= 0 && !target.dying) message += initDying(target);
+    return { success: true, message, damage: damageCalc.finalDamage, result, heightenedRank };
+  }
+
+  private resolveGrimTendrils(actor: Creature, gameState: GameState, targetPosition?: Position, heightenedRank: number = 1): ActionResult {
+    if (!targetPosition) return { success: false, message: 'No target position specified for Grim Tendrils!' };
+
+    const lineRange = 6;
+    const saveDC = calculateSpellDC(actor);
+    const dx = targetPosition.x - actor.positions.x;
+    const dy = targetPosition.y - actor.positions.y;
+    const lineDistance = Math.sqrt(dx * dx + dy * dy);
+    const dirX = lineDistance > 0 ? dx / lineDistance : 1;
+    const dirY = lineDistance > 0 ? dy / lineDistance : 0;
+
+    const targets = gameState.creatures.filter((creature) => {
+      if (creature.id === actor.id) return false;
+      const cdx = creature.positions.x - actor.positions.x;
+      const cdy = creature.positions.y - actor.positions.y;
+      const creatureDistance = Math.sqrt(cdx * cdx + cdy * cdy);
+      if (creatureDistance > lineRange) return false;
+      const projection = cdx * dirX + cdy * dirY;
+      if (projection < 0) return false;
+      const perpX = cdx - projection * dirX;
+      const perpY = cdy - projection * dirY;
+      return Math.sqrt(perpX * perpX + perpY * perpY) <= 0.5;
+    });
+
+    const baseRoll = rollDamageFormula(`${2 + 2 * Math.max(0, heightenedRank - 1)}d4`);
+    let tempHPGain = 0;
+    const results: ActionResult[] = [];
+
+    for (const target of targets) {
+      const saveRoll = this.rollSave(target, 'fortitude', saveDC);
+      let damage = baseRoll.total;
+      if (saveRoll.result === 'critical-success') damage = 0;
+      else if (saveRoll.result === 'success') damage = Math.floor(damage / 2);
+      else if (saveRoll.result === 'critical-failure') damage *= 2;
+
+      const damageCalc = calculateFinalDamage(damage, 'void', target);
+      target.currentHealth -= damageCalc.finalDamage;
+      if (saveRoll.result === 'failure' || saveRoll.result === 'critical-failure') {
+        tempHPGain += Math.floor(damageCalc.finalDamage / 2);
+      }
+      if (target.currentHealth <= 0 && !target.dying) {
+        initDying(target);
+      }
+      results.push({ targetName: target.name, saveResult: saveRoll.result, damage: damageCalc.finalDamage });
+    }
+
+    if (tempHPGain > 0) {
+      const totalTemp = this.applyTemporaryHealth(actor, tempHPGain);
+      this.addOrRefreshCondition(actor, 'grim-tendrils-temp-hp', 1, totalTemp, `grim-tendrils-${actor.id}`);
+    }
+
+    return {
+      success: true,
+      message: `🖤 ${actor.name} casts Grim Tendrils! ${results.length > 0 ? results.map((result) => `${result.targetName}: ${String(result.saveResult).toUpperCase()} for ${result.damage}`).join('; ') : 'No targets in the line.'}${tempHPGain > 0 ? ` ${actor.name} gains ${tempHPGain} temporary HP.` : ''}`,
+      results,
+      heightenedRank,
+    };
+  }
+
+  private resolveLightningBolt(actor: Creature, gameState: GameState, targetPosition?: Position, heightenedRank: number = 3): ActionResult {
     if (!targetPosition || typeof targetPosition !== 'object' || !('x' in targetPosition) || !('y' in targetPosition)) {
       return { success: false, message: 'Invalid target location specified for Lightning Bolt!' };
     }
@@ -10678,7 +11502,7 @@ export class RulesEngine {
     }
 
     const baseDamageRoll = rollDamageFormula(damageFormula);
-    const results: any[] = [];
+    const results: ActionResult[] = [];
 
     targetsInLine.forEach((target) => {
       const saveRoll = this.rollSave(target, 'reflex', saveDC);
@@ -10725,7 +11549,7 @@ export class RulesEngine {
     };
   }
 
-  private resolveHeroism(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 3): any {
+  private resolveHeroism(actor: Creature, gameState: GameState, targetId?: string, heightenedRank: number = 3): ActionResult {
     if (!targetId) {
       return { success: false, message: 'No target specified for Heroism!' };
     }
@@ -10760,7 +11584,7 @@ export class RulesEngine {
     };
   }
 
-  private resolveTrueStrike(actor: Creature, gameState: GameState, heightenedRank: number = 1): any {
+  private resolveTrueStrike(actor: Creature, gameState: GameState, heightenedRank: number = 1): ActionResult {
     // PF2e Remaster "Sure Strike": Roll next attack twice, take the better result (fortune effect)
     // Also ignores circumstance penalties to attack and flat checks for concealed/hidden
     if (!actor.conditions) actor.conditions = [];
@@ -10801,7 +11625,7 @@ export class RulesEngine {
     heightenedRank: number = 1,
     targetPosition?: Position,
     amped: boolean = false
-  ): any {
+  ): ActionResult {
     if (!actor.conditions) actor.conditions = [];
 
     // ── Determine speed bonus ──────────────────────────────
@@ -10967,7 +11791,7 @@ export class RulesEngine {
     speedBonusFeet: number,
     heightenedRank: number,
     targetPosition: Position
-  ): any {
+  ): ActionResult {
     // ── Immobilization check ──────────────────────────────
     const immobilized = actor.conditions?.find(c =>
       ['immobilized', 'grabbed', 'restrained', 'paralyzed'].includes(c.name)
@@ -11045,7 +11869,7 @@ export class RulesEngine {
     };
   }
 
-  private resolveRaiseShield(actor: Creature): any {
+  private resolveRaiseShield(actor: Creature): ActionResult {
     // Check if actor has an equipped shield
     if (!actor.equippedShield) {
       return {
@@ -11072,7 +11896,7 @@ export class RulesEngine {
     };
   }
 
-  private resolveLowerShield(actor: Creature): any {
+  private resolveLowerShield(actor: Creature): ActionResult {
     // Check if shield is raised
     if (!actor.shieldRaised) {
       return {
@@ -11094,7 +11918,7 @@ export class RulesEngine {
   /**
    * Reactive Strike - Make a Strike as a reaction
    */
-  private resolveReactiveStrike(actor: Creature, gameState: GameState, targetId?: string): any {
+  private resolveReactiveStrike(actor: Creature, gameState: GameState, targetId?: string): ActionResult {
     if (actor.reactionUsed) {
       return { success: false, message: `${actor.name} has already used their reaction this round!` };
     }
@@ -11105,9 +11929,9 @@ export class RulesEngine {
       return name.includes('reactive strike') || name.includes('attack of opportunity');
     }) ?? false;
 
-    const specials = (actor as any).specials;
+    const specials = actor.specials;
     const specialsMatch = Array.isArray(specials)
-      ? specials.some((entry: any) => typeof entry === 'string' && entry.toLowerCase().includes('reactive strike'))
+      ? specials.some((entry: string) => typeof entry === 'string' && entry.toLowerCase().includes('reactive strike'))
       : false;
 
     const hasReactiveStrike = featMatch || specialsMatch;
@@ -11131,7 +11955,7 @@ export class RulesEngine {
   /**
    * Shield Block - Use a reaction to reduce incoming damage with a raised shield
    */
-  private resolveShieldBlock(actor: Creature): any {
+  private resolveShieldBlock(actor: Creature): ActionResult {
     if (actor.reactionUsed) {
       return { success: false, message: `${actor.name} has already used their reaction this round!` };
     }
@@ -11201,7 +12025,7 @@ export class RulesEngine {
   /**
    * Resolve pending damage without Shield Block
    */
-  private resolvePendingDamage(actor: Creature): any {
+  private resolvePendingDamage(actor: Creature): ActionResult {
     const pending = actor.conditions?.find((c) => c.name === 'pending-damage' && typeof c.value === 'number');
     if (!pending || typeof pending.value !== 'number') {
       return { success: false, message: `${actor.name} has no pending damage to resolve.` };
@@ -11235,7 +12059,7 @@ export class RulesEngine {
   /**
    * Stand - Remove prone condition
    */
-  private resolveStand(actor: Creature): any {
+  private resolveStand(actor: Creature): ActionResult {
     // Check if actor is prone
     const proneCondition = actor.conditions?.find((c) => c.name === 'prone');
     
@@ -11260,7 +12084,7 @@ export class RulesEngine {
    * If prone: Hunker down for +4 AC vs ranged (but still off-guard)
    * If not prone: Gain +2 AC with cover (requires cover nearby, simplified to always succeed)
    */
-  private resolveTakeCover(actor: Creature): any {
+  private resolveTakeCover(actor: Creature): ActionResult {
     const isProne = actor.conditions?.some((c) => c.name === 'prone') || false;
 
     if (isProne) {
@@ -11310,15 +12134,15 @@ export class RulesEngine {
 
   /**
    * Feint - Make a Deception check against the target's Perception DC
-   * Success: Target is flat-footed (off-guard) against your melee attacks until end of your next turn
-   * Critical Success: Target is flat-footed against all your attacks until end of your next turn
+   * Success: Target is off-guard against your melee attacks until end of your next turn
+   * Critical Success: Target is off-guard against all your attacks until end of your next turn
    */
   private resolveFeint(
     actor: Creature,
     gameState: GameState,
     targetId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     if (!targetId) {
       return { success: false, message: 'No target specified for Feint!' };
     }
@@ -11526,7 +12350,7 @@ export class RulesEngine {
     gameState: GameState,
     targetId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     if (!targetId) {
       return { success: false, message: 'No target specified for Demoralize!' };
     }
@@ -11636,7 +12460,7 @@ export class RulesEngine {
     gameState: GameState,
     targetId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     if (!targetId) {
       return { success: false, message: 'No target specified for Shove!' };
     }
@@ -11754,7 +12578,7 @@ export class RulesEngine {
     gameState: GameState,
     targetId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     if (!targetId) {
       return { success: false, message: 'No target specified for Trip!' };
     }
@@ -11889,7 +12713,7 @@ export class RulesEngine {
   // ─── Sickened Condition: Retching Action ─────────────────────────────────
   // PF2e Remaster: Spend 1 action to make a Fortitude save against the effect DC
   // Success: Reduce sickened by 1. Crit success: Reduce by 2
-  private resolveRetching(actor: Creature, heroPointsSpent?: number): any {
+  private resolveRetching(actor: Creature, heroPointsSpent?: number): ActionResult {
     // Check if actor is Sickened
     const sickenedCondition = actor.conditions?.find(c => c.name === 'sickened');
     if (!sickenedCondition) {
@@ -12102,7 +12926,7 @@ export class RulesEngine {
     targetId?: string,
     weaponId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // Check for Power Attack feat
     const hasFeature = this.hasFighterFeat(actor, 'power attack');
     if (!hasFeature) {
@@ -12136,7 +12960,7 @@ export class RulesEngine {
       strikeResult.details.damage.appliedDamage += extraDamage;
       
       // Recalculate final damage
-      const damageCalc = calculateFinalDamage(strikeResult.details.damage.appliedDamage, 'bludgeoning', gameState.creatures.find(c => c.id === targetId) || {} as any);
+      const damageCalc = calculateFinalDamage(strikeResult.details.damage.appliedDamage, 'bludgeoning', gameState.creatures.find(c => c.id === targetId) || {} as unknown as Creature);
       const finalDamage = damageCalc.finalDamage;
       strikeResult.targetHealth = (gameState.creatures.find(c => c.id === targetId)?.currentHealth || 0) - finalDamage;
       strikeResult.message = `🔨 POWER ATTACK! ${strikeResult.message} (+${extraDamage} extra die)`;
@@ -12156,7 +12980,7 @@ export class RulesEngine {
     weaponId?: string,
     targetPosition?: Position,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // Check for Sudden Charge feat
     const hasFeature = this.hasFighterFeat(actor, 'sudden charge');
     if (!hasFeature) {
@@ -12211,7 +13035,7 @@ export class RulesEngine {
     gameState: GameState,
     targetId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // Check for Double Slice feat
     const hasFeature = this.hasFighterFeat(actor, 'double slice');
     if (!hasFeature) {
@@ -12263,7 +13087,7 @@ export class RulesEngine {
     targetId?: string,
     weaponId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // Check for Intimidating Strike feat
     const hasFeature = this.hasFighterFeat(actor, 'intimidating strike');
     if (!hasFeature) {
@@ -12315,7 +13139,7 @@ export class RulesEngine {
     targetId?: string,
     weaponId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // Check for Exacting Strike feat
     const hasFeature = this.hasFighterFeat(actor, 'exacting strike');
     if (!hasFeature) {
@@ -12352,7 +13176,7 @@ export class RulesEngine {
     targetId?: string,
     weaponId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // Check for Snagging Strike feat
     const hasFeature = this.hasFighterFeat(actor, 'snagging strike');
     if (!hasFeature) {
@@ -12393,7 +13217,7 @@ export class RulesEngine {
     targetId?: string,
     weaponId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // Check for Knockdown feat
     const hasFeature = this.hasFighterFeat(actor, 'knockdown');
     if (!hasFeature) {
@@ -12432,7 +13256,7 @@ export class RulesEngine {
     gameState: GameState,
     targetId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // Check for Brutish Shove feat
     const hasFeature = this.hasFighterFeat(actor, 'brutish shove');
     if (!hasFeature) {
@@ -12467,7 +13291,7 @@ export class RulesEngine {
    * Dueling Parry (Level 2)
    * 1-action. +2 circumstance AC while wielding 1-handed weapon with free hand.
    */
-  private resolveDuelingParry(actor: Creature): any {
+  private resolveDuelingParry(actor: Creature): ActionResult {
     // Check for Dueling Parry feat
     const hasFeature = this.hasFighterFeat(actor, 'dueling parry');
     if (!hasFeature) {
@@ -12516,7 +13340,7 @@ export class RulesEngine {
     targetId?: string,
     weaponId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // Check for Lunge feat
     const hasFeature = this.hasFighterFeat(actor, 'lunge');
     if (!hasFeature) {
@@ -12545,7 +13369,7 @@ export class RulesEngine {
    * Twin Parry (Level 4)
    * 1-action. +1 circumstance AC while dual wielding (or +2 if parry trait).
    */
-  private resolveTwinParry(actor: Creature): any {
+  private resolveTwinParry(actor: Creature): ActionResult {
     // Check for Twin Parry feat
     const hasFeature = this.hasFighterFeat(actor, 'twin parry');
     if (!hasFeature) {
@@ -12596,7 +13420,7 @@ export class RulesEngine {
     targetId?: string,
     weaponId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // Check for Shatter Defenses feat
     const hasFeature = this.hasFighterFeat(actor, 'shatter defenses');
     if (!hasFeature) {
@@ -12659,13 +13483,13 @@ export class RulesEngine {
     const lowerFeatName = featName.toLowerCase().trim();
     
     // Check feats array (exact match on feat name)
-    const hasFeat = creature.feats?.some((f: any) => {
+    const hasFeat = creature.feats?.some((f: { name: string; type: string; level: number }) => {
       const name = typeof f === 'string' ? f : f?.name;
       return typeof name === 'string' && name.toLowerCase().trim() === lowerFeatName;
     });
     
     // Check specials array (exact match)
-    const hasSpecial = (creature as any).specials?.some((s: any) => 
+    const hasSpecial = creature.specials?.some((s: string) => 
       typeof s === 'string' && s.toLowerCase().trim() === lowerFeatName
     );
     
@@ -12746,7 +13570,7 @@ export class RulesEngine {
    * Receive damage reduction equal to the armor's hardness while wearing armor.
    * Activates as a passive bonus (no action required).
    */
-  private resolveArmorSpecialization(actor: Creature): any {
+  private resolveArmorSpecialization(actor: Creature): ActionResult {
     // Check for Armor Specialization feat
     const hasFeature = this.hasFighterFeat(actor, 'armor specialization');
     if (!hasFeature) {
@@ -12772,7 +13596,7 @@ export class RulesEngine {
    * Reduce frightened condition value by 1 if already frightened.
    * PF2e Remaster: This is the Fighter's Bravery class feature.
    */
-  private resolveFearless(actor: Creature): any {
+  private resolveFearless(actor: Creature): ActionResult {
     // Check for Fearless/Bravery feat or class feature
     const hasFeature = this.hasFighterFeat(actor, 'fearless') || this.hasFighterFeat(actor, 'bravery');
     if (!hasFeature) {
@@ -12820,7 +13644,7 @@ export class RulesEngine {
    * Unlock critical specialization effects for all weapons. 
    * This is a passive ability that modifies weapon behavior on critical hits.
    */
-  private resolveWeaponMastery(actor: Creature): any {
+  private resolveWeaponMastery(actor: Creature): ActionResult {
     // Check for Weapon Mastery feat
     const hasFeature = this.hasFighterFeat(actor, 'weapon mastery');
     if (!hasFeature) {
@@ -12859,7 +13683,7 @@ export class RulesEngine {
    * You can use multiple different weapons in a single turn without MAP penalties accumulating.
    * Each weapon type (or weapon group) resets the MAP counter for that weapon.
    */
-  private resolveFlexibleFlurry(actor: Creature): any {
+  private resolveFlexibleFlurry(actor: Creature): ActionResult {
     // Check for Flexible Flurry feat
     const hasFeature = this.hasFighterFeat(actor, 'flexible flurry');
     if (!hasFeature) {
@@ -12869,11 +13693,11 @@ export class RulesEngine {
     // Track which weapons have been used this turn for MAP purposes
     const mapByWeapon = new Map<string, number>();
     
-    actor.feats?.forEach((f: any) => {
+    actor.feats?.forEach((f: { name: string; type: string; level: number }) => {
       const name = typeof f === 'string' ? f : f?.name;
       if (typeof name === 'string' && name.toLowerCase().includes('flexible flurry')) {
         // Store reference to weapon-specific MAP tracking
-        (actor as any).mapByWeapon = mapByWeapon;
+        (actor as Creature & { mapByWeapon: Map<string, number> }).mapByWeapon = mapByWeapon;
       }
     });
 
@@ -12890,7 +13714,7 @@ export class RulesEngine {
    * PF2e Remaster: This is a class feature granting expert Will saves, not a feat. 
    * Implemented as +2 status bonus to Will saves for simplicity.
    */
-  private resolveIronWill(actor: Creature, heroPointsSpent?: number): any {
+  private resolveIronWill(actor: Creature, heroPointsSpent?: number): ActionResult {
     // Check for Iron Will class feature
     const hasFeature = this.hasFighterFeat(actor, 'iron will');
     if (!hasFeature) {
@@ -12945,7 +13769,7 @@ export class RulesEngine {
    * You can raise your shield as a free action when you are targeted by an attack.
    * This must happen before the attack roll.
    */
-  private resolveReflexiveShield(actor: Creature): any {
+  private resolveReflexiveShield(actor: Creature): ActionResult {
     // Check for Reflexive Shield feat
     const hasFeature = this.hasFighterFeat(actor, 'reflexive shield');
     if (!hasFeature) {
@@ -12978,7 +13802,7 @@ export class RulesEngine {
    * Improved Reflexes (Level 12)
    * Gain an extra reaction each round. Can be used for Reactive Strike or Shield Block.
    */
-  private resolveImprovedReflexes(actor: Creature): any {
+  private resolveImprovedReflexes(actor: Creature): ActionResult {
     // Check for Improved Reflexes feat
     const hasFeature = this.hasFighterFeat(actor, 'improved reflexes');
     if (!hasFeature) {
@@ -13003,7 +13827,7 @@ export class RulesEngine {
     });
 
     // Mark that the fighter has an extra reaction this round
-    (actor as any).extraReactionsAvailable = 1;
+    (actor as Creature & { extraReactionsAvailable: number }).extraReactionsAvailable = 1;
 
     return {
       success: true,
@@ -13017,7 +13841,7 @@ export class RulesEngine {
    * Enhances reaction abilities with bonuses.
    * Requires the 'reaction enhancement' feat/feature specifically.
    */
-  private resolveReactionEnhancement(actor: Creature): any {
+  private resolveReactionEnhancement(actor: Creature): ActionResult {
     // Check for Reaction Enhancement - must exactly match
     const hasFeature = this.hasFighterFeat(actor, 'reaction enhancement');
     if (!hasFeature) {
@@ -13045,7 +13869,7 @@ export class RulesEngine {
    * Reactive Shield (Level 1)
    * Reaction. Raise your shield as a reaction when you're targeted by an attack.
    */
-  private resolveReactiveShield(actor: Creature): any {
+  private resolveReactiveShield(actor: Creature): ActionResult {
     // Check for Reactive Shield feat
     const hasFeature = this.hasFighterFeat(actor, 'reactive shield');
     if (!hasFeature) {
@@ -13083,7 +13907,7 @@ export class RulesEngine {
     targetId?: string,
     weaponId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // Check for Cleaving Finish feat
     const hasFeature = this.hasFighterFeat(actor, 'cleaving finish');
     if (!hasFeature) {
@@ -13122,7 +13946,7 @@ export class RulesEngine {
     gameState: GameState,
     targetId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // Check for Intimidating Prowess feat
     const hasFeature = this.hasFighterFeat(actor, 'intimidating prowess');
     if (!hasFeature) {
@@ -13157,7 +13981,7 @@ export class RulesEngine {
     actor: Creature,
     gameState: GameState,
     targetId?: string
-  ): any {
+  ): ActionResult {
     // Check for Shield Warden feat
     const hasFeature = this.hasFighterFeat(actor, 'shield warden');
     if (!hasFeature) {
@@ -13201,7 +14025,7 @@ export class RulesEngine {
    * Weapon Supremacy (Level 10)
    * Unlock the full potential of your weapons with enhanced critical strengths.
    */
-  private resolveWeaponSupremacy(actor: Creature): any {
+  private resolveWeaponSupremacy(actor: Creature): ActionResult {
     // Check for Weapon Supremacy feat
     const hasFeature = this.hasFighterFeat(actor, 'weapon supremacy');
     if (!hasFeature) {
@@ -13235,7 +14059,7 @@ export class RulesEngine {
    * Legendary Weapon (Level 10)
    * You become legendary with one weapon group. Strikes with that group ignore resistances of up to 5.
    */
-  private resolveLegendaryWeapon(actor: Creature): any {
+  private resolveLegendaryWeapon(actor: Creature): ActionResult {
     // Check for Legendary Weapon feat
     const hasFeature = this.hasFighterFeat(actor, 'legendary weapon');
     if (!hasFeature) {
@@ -13268,7 +14092,7 @@ export class RulesEngine {
   private resolveBerserkStrike(
     actor: Creature,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // Check for Berserk Striker feat
     const hasFeature = this.hasFighterFeat(actor, 'berserk striker');
     if (!hasFeature) {
@@ -13300,7 +14124,7 @@ export class RulesEngine {
     targetId?: string,
     weaponId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // Check for Reactive Assault feat
     const hasFeature = this.hasFighterFeat(actor, 'reactive assault');
     if (!hasFeature) {
@@ -13342,7 +14166,7 @@ export class RulesEngine {
     targetId?: string,
     weaponId?: string,
     heroPointsSpent?: number
-  ): any {
+  ): ActionResult {
     // Check for Close Quarters Shot feat
     const hasFeature = this.hasFighterFeat(actor, 'close quarters shot');
     if (!hasFeature) {
@@ -13370,7 +14194,7 @@ export class RulesEngine {
    * You have an weapon ally that provides bonuses to combat.
    * +1 item bonus to attacks with that weapon, or +2 if 2d6 or larger and wielded two-handed.
    */
-  private resolveBladeAlly(actor: Creature): any {
+  private resolveBladeAlly(actor: Creature): ActionResult {
     // Check for Blade Ally feat
     const hasFeature = this.hasFighterFeat(actor, 'blade ally');
     if (!hasFeature) {
@@ -13419,7 +14243,7 @@ export class RulesEngine {
    * You've trained your body and mind to move fluidly through battle.
    * +1 circumstance AC when you're not restrained and not in heavy armor.
    */
-  private resolveVersatileHeritage(actor: Creature, weaponId?: string): any {
+  private resolveVersatileHeritage(actor: Creature, weaponId?: string): ActionResult {
     // Check for Versatile Heritage feat
     const hasFeature = this.hasFighterFeat(actor, 'versatile heritage');
     if (!hasFeature) {
@@ -13454,7 +14278,7 @@ export class RulesEngine {
    * +1 circumstance AC when wielding and using a one-handed weapon without a shield.
    * +1 circumstance bonus to Riposte counterattacks.
    */
-  private resolveDuelistsExpertise(actor: Creature): any {
+  private resolveDuelistsExpertise(actor: Creature): ActionResult {
     // Check for Duelist's Expertise feat
     const hasFeature = this.hasFighterFeat(actor, "duelist's expertise");
     if (!hasFeature) {
@@ -13493,5 +14317,577 @@ export class RulesEngine {
    * Pushing Strike (Level 1) — PLACEHOLDER
    * NOT YET IMPLEMENTED: Attack action that pushes enemy back 5 feet on hit.
    */
+
+  // ═══════════════════════════════════════════════════════════
+  // CORE CLASS MECHANICS IMPLEMENTATIONS
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Barbarian Rage (1 action, Concentrate)
+   * PF2e Remaster Player Core 2:
+   * - Gain temporary HP = level + CON modifier
+   * - +2 status bonus to melee damage (instinct may modify)
+   * - -1 penalty to AC
+   * - Can't use Concentrate actions (except Seek and rage-related)
+   * - Lasts until end of combat, you fall unconscious, or you voluntarily end it
+   * - After rage ends, can't Rage again for 1 minute
+   */
+  private resolveRage(actor: Creature, gameState: GameState): ActionResult {
+    // Already raging
+    if (actor.rageActive) {
+      return { success: false, message: `${actor.name} is already raging!` };
+    }
+
+    // Cooldown check
+    if (actor.rageUsedThisEncounter && !actor.secondWindUsed) {
+      return { success: false, message: `${actor.name} can't Rage again this encounter (1-minute cooldown).` };
+    }
+
+    // Activate rage
+    actor.rageActive = true;
+    actor.rageRoundsLeft = 10; // 1 minute = 10 rounds
+
+    // Calculate temp HP: level + CON modifier
+    const level = actor.level ?? 1;
+    const conMod = actor.abilities ? Math.floor((actor.abilities.constitution - 10) / 2) : 0;
+    const tempHP = level + conMod;
+
+    // Grant temp HP (don't stack, replace if higher)
+    const rageActor = actor as Creature & { temporaryHP?: number };
+    const currentTemp = rageActor.temporaryHP ?? 0;
+    if (tempHP > currentTemp) {
+      rageActor.temporaryHP = tempHP;
+    }
+
+    // Add rage condition for tracking
+    actor.conditions = actor.conditions || [];
+    actor.conditions.push({ name: 'rage', duration: 'permanent', value: undefined });
+
+    // Apply AC penalty via bonuses
+    if (!actor.bonuses) actor.bonuses = [];
+    actor.bonuses.push({
+      source: 'rage',
+      value: -1,
+      type: 'status',
+      applyTo: 'ac',
+    });
+
+    // Apply damage bonus
+    actor.bonuses.push({
+      source: 'rage',
+      value: 2,
+      type: 'status',
+      applyTo: 'melee-damage',
+    });
+
+    return {
+      success: true,
+      message: `🔥 ${actor.name} flies into a RAGE! (+${tempHP} temp HP, +2 melee damage, -1 AC)`,
+      tempHP,
+      damageBonus: 2,
+      acPenalty: -1,
+    };
+  }
+
+  /**
+   * Monk Flurry of Blows (1 action, Flourish)
+   * PF2e Remaster: Make two unarmed Strikes. Both use your current MAP,
+   * and then your MAP increases as if you'd made two attacks.
+   */
+  private resolveFlurryOfBlows(
+    actor: Creature,
+    gameState: GameState,
+    targetId?: string,
+    heroPointsSpent?: number
+  ): ActionResult {
+    if (!targetId) {
+      return { success: false, message: 'No target specified for Flurry of Blows.' };
+    }
+
+    const target = gameState.creatures.find(c => c.id === targetId);
+    if (!target || target.currentHealth <= 0) {
+      return { success: false, message: 'Target not found or already defeated.' };
+    }
+
+    // Flourish check
+    if (actor.flourishUsedThisTurn) {
+      return { success: false, message: `${actor.name} has already used a Flourish action this turn.` };
+    }
+    actor.flourishUsedThisTurn = true;
+
+    // Find an unarmed strike weapon
+    const unarmedWeapon = actor.weapons?.find(w =>
+      w.weaponType === 'unarmed' || w.name?.toLowerCase().includes('fist')
+    ) || actor.weapons?.[0];
+
+    // Save current MAP — both strikes use same MAP
+    const savedMAP = actor.attacksMadeThisTurn ?? 0;
+
+    // First strike
+    const strike1 = this.resolveAttackAction(actor, gameState, targetId, unarmedWeapon?.id, { isVicious: false }, heroPointsSpent);
+
+    // Reset MAP to what it was (both attacks use the same MAP)
+    actor.attacksMadeThisTurn = savedMAP;
+
+    // Second strike
+    const strike2 = this.resolveAttackAction(actor, gameState, targetId, unarmedWeapon?.id, { isVicious: false });
+
+    // Now increase MAP by 2 total
+    actor.attacksMadeThisTurn = savedMAP + 2;
+
+    const messages: string[] = [];
+    messages.push(`👊 ${actor.name} unleashes a Flurry of Blows!`);
+    messages.push(`  Strike 1: ${strike1.message}`);
+    messages.push(`  Strike 2: ${strike2.message}`);
+
+    const totalDamage = (strike1.damage ?? 0) + (strike2.damage ?? 0);
+
+    return {
+      success: true,
+      message: messages.join('\n'),
+      damage: totalDamage,
+      strikes: [strike1, strike2],
+    };
+  }
+
+  /**
+   * Ranger Hunt Prey (1 action, Concentrate)
+   * PF2e Remaster: Designate a creature as your prey. You gain advantages
+   * against that creature based on your Hunter's Edge.
+   * - Flurry: Reduced MAP (-3/-6 instead of -5/-10 with agile, -4/-8 otherwise)
+   * - Precision: +1d8 damage on first hit per round (scales with level)
+   * - Outwit: +2 circumstance to Deception, Intimidation, Stealth, Recall Knowledge vs prey
+   */
+  private resolveHuntPrey(actor: Creature, gameState: GameState, targetId?: string): ActionResult {
+    if (!targetId) {
+      return { success: false, message: 'You must designate a creature as your hunted prey.' };
+    }
+
+    const target = gameState.creatures.find(c => c.id === targetId);
+    if (!target) {
+      return { success: false, message: 'Target creature not found.' };
+    }
+
+    if (target.currentHealth <= 0) {
+      return { success: false, message: `${target.name} is already defeated.` };
+    }
+
+    // Designate prey
+    actor.huntedPreyId = targetId;
+
+    const edge = actor.huntersEdge ?? 'precision';
+    let edgeMessage = '';
+
+    switch (edge) {
+      case 'flurry':
+        edgeMessage = ' (Flurry: reduced MAP against prey)';
+        break;
+      case 'precision':
+        edgeMessage = ' (Precision: bonus damage on first hit each round)';
+        break;
+      case 'outwit':
+        edgeMessage = ' (Outwit: +2 to Deception, Intimidation, Stealth vs prey)';
+        break;
+    }
+
+    return {
+      success: true,
+      message: `🎯 ${actor.name} designates ${target.name} as their hunted prey!${edgeMessage}`,
+      huntedPrey: targetId,
+      huntersEdge: edge,
+    };
+  }
+
+  /**
+   * Investigator Devise a Stratagem (1 action, Concentrate, Fortune)
+   * PF2e Remaster: Roll a d20 in advance. When you Strike your target
+   * before end of your turn, you can use that roll instead of rolling.
+   * On a hit, you also deal Strategic Strike damage.
+   */
+  private resolveDeviseAStratagem(actor: Creature, gameState: GameState, targetId?: string): ActionResult {
+    if (!targetId) {
+      return { success: false, message: 'You must choose a target for Devise a Stratagem.' };
+    }
+
+    const target = gameState.creatures.find(c => c.id === targetId);
+    if (!target) {
+      return { success: false, message: 'Target creature not found.' };
+    }
+
+    // Pre-roll the d20
+    const stratagemRoll = rollD20();
+
+    // Store on creature state
+    if (!actor.classSpecific) actor.classSpecific = {};
+    actor.classSpecific.hasStratagem = true;
+    actor.classSpecific.strategemTargetId = targetId;
+    actor.classSpecific.strategemRoll = stratagemRoll;
+
+    // Also set top-level for backward compat
+    return {
+      success: true,
+      message: `🔍 ${actor.name} devises a stratagem against ${target.name}! (Pre-rolled: ${stratagemRoll}). Use Strike this turn to apply the stratagem.`,
+      stratagemRoll,
+      targetId,
+    };
+  }
+
+  /**
+   * Magus Spellstrike (2 actions)
+   * PF2e Secrets of Magic: Channel a spell through your weapon Strike.
+   * Make a melee Strike; if it hits, the spell also affects the target.
+   * One-action spells that require a spell attack roll or save can be used.
+   * After Spellstriking, your weapon is spent (must Recharge).
+   */
+  private resolveSpellstrike(
+    actor: Creature,
+    gameState: GameState,
+    targetId?: string,
+    spellId?: string,
+    weaponId?: string,
+    heroPointsSpent?: number
+  ): ActionResult {
+    if (!targetId) {
+      return { success: false, message: 'No target specified for Spellstrike.' };
+    }
+    if (!spellId) {
+      return { success: false, message: 'No spell specified for Spellstrike. Choose a spell to channel.' };
+    }
+
+    const target = gameState.creatures.find(c => c.id === targetId);
+    if (!target || target.currentHealth <= 0) {
+      return { success: false, message: 'Target not found or already defeated.' };
+    }
+
+    // Look up the spell
+    const spell = getSpell(spellId);
+    if (!spell) {
+      return { success: false, message: `Spell "${spellId}" not found.` };
+    }
+
+    // Check if spellstrike is spent (needs recharge)
+    if (actor.classSpecific?.spellstrikeSpent) {
+      return { success: false, message: `${actor.name}'s Spellstrike is spent — use Recharge Spellstrike first (1 action).` };
+    }
+
+    // Check spell slot availability
+    const slotCheck = this.canCastAndConsumeSlot(actor, spell);
+    if (!slotCheck.canCast) {
+      return { success: false, message: slotCheck.message || 'Cannot cast spell for Spellstrike.' };
+    }
+
+    // Make the melee Strike (this is the attack roll for both weapon AND spell)
+    const strikeResult = this.resolveAttackAction(actor, gameState, targetId, weaponId, { isVicious: false }, heroPointsSpent);
+
+    // Mark spellstrike as spent regardless of hit
+    actor.classSpecific = actor.classSpecific ?? {};
+    actor.classSpecific.spellstrikeSpent = true;
+
+    if (!strikeResult.success && !strikeResult.damage) {
+      return {
+        success: false,
+        message: `⚔️🔮 ${actor.name} attempts Spellstrike with ${spell.name} — Strike missed! Spell is wasted. Spellstrike is now spent.`,
+        spellConsumed: true,
+        spellstrikeSpent: true,
+      };
+    }
+
+    // On hit, apply spell damage on top of weapon damage
+    const spellDamage = spell.damage ? rollDamageFormula(spell.damage) : 0;
+    const combinedDamage = (strikeResult.damage ?? 0) + spellDamage;
+
+    // Apply spell damage to target
+    if (spellDamage > 0 && target.currentHealth > 0) {
+      target.currentHealth = Math.max(0, target.currentHealth - spellDamage);
+    }
+
+    const messages: string[] = [];
+    messages.push(`⚔️🔮 ${actor.name} channels ${spell.name} through their weapon!`);
+    messages.push(`  Weapon: ${strikeResult.message}`);
+    if (spellDamage > 0) {
+      messages.push(`  Spell damage: ${spellDamage} ${spell.damageType ?? 'untyped'} (total: ${combinedDamage})`);
+    }
+    messages.push(`  Spellstrike is now SPENT — Recharge before using again.`);
+
+    let dyingMsg = '';
+    if (target.currentHealth <= 0 && !target.dying) {
+      dyingMsg = initDying(target);
+    }
+    if (dyingMsg) messages.push(dyingMsg);
+
+    return {
+      success: true,
+      message: messages.join('\n'),
+      damage: combinedDamage,
+      spellDamage,
+      weaponDamage: strikeResult.damage ?? 0,
+      spellstrikeSpent: true,
+    };
+  }
+
+  /**
+   * Thaumaturge Exploit Vulnerability (1 action, Concentrate, Manipulate)
+   * PF2e Dark Archive: Choose a creature and attempt to find its weakness.
+   * Roll Esoteric Lore (CHA-based) vs target's standard DC for its level.
+   * Success: Apply personal antithesis (+2 damage, +4 at level 9+, +6 at 15+)
+   *          or mortal weakness (apply a specific weakness to the target)
+   * Critical Success: Also learn resistances and immunities
+   */
+  private resolveExploitVulnerability(actor: Creature, gameState: GameState, targetId?: string): ActionResult {
+    if (!targetId) {
+      return { success: false, message: 'You must designate a target for Exploit Vulnerability.' };
+    }
+
+    const target = gameState.creatures.find(c => c.id === targetId);
+    if (!target) {
+      return { success: false, message: 'Target creature not found.' };
+    }
+
+    // Roll Esoteric Lore (CHA-based class DC)
+    const roll = rollD20();
+    const chaMod = actor.abilities ? Math.floor((actor.abilities.charisma - 10) / 2) : 0;
+    const level = actor.level ?? 1;
+    const profBonus = getProficiencyBonus(level, 'trained');
+    const total = roll + chaMod + profBonus;
+
+    // Target DC: 14 + level (standard DC by level from GMG)
+    const targetDC = 14 + (target.level ?? 1);
+
+    const degree = getDegreeOfSuccess(total, targetDC, roll);
+
+    // Calculate personal antithesis damage bonus
+    let damageBonus = 2;
+    if (level >= 15) damageBonus = 6;
+    else if (level >= 9) damageBonus = 4;
+
+    if (!actor.classSpecific) actor.classSpecific = {};
+
+    if (degree === 'critical-success' || degree === 'success') {
+      actor.classSpecific.exploitVulnerabilityTargetId = targetId;
+      actor.classSpecific.exploitVulnerabilityType = 'personal-antithesis';
+
+      // Also set top-level for backward compat
+      actor.exploitVulnerabilityTargetId = targetId;
+      actor.exploitVulnerabilityType = 'personal-antithesis';
+
+      if (!actor.bonuses) actor.bonuses = [];
+      // Remove old exploit bonus if any
+      actor.bonuses = actor.bonuses.filter(b => b.source !== 'exploit-vulnerability');
+      actor.bonuses.push({
+        source: 'exploit-vulnerability',
+        value: damageBonus,
+        type: 'status',
+        applyTo: 'damage',
+      });
+
+      const extraInfo = degree === 'critical-success'
+        ? ` Critical! Also learns ${target.name}'s resistances and immunities.`
+        : '';
+
+      return {
+        success: true,
+        message: `🔮 ${actor.name} exploits ${target.name}'s vulnerability! (${roll} + ${chaMod + profBonus} = ${total} vs DC ${targetDC}: ${degree}).\nPersonal Antithesis: +${damageBonus} damage against ${target.name}.${extraInfo}`,
+        degree,
+        damageBonus,
+      };
+    } else {
+      return {
+        success: false,
+        message: `🔮 ${actor.name} fails to exploit ${target.name}'s vulnerability. (${roll} + ${chaMod + profBonus} = ${total} vs DC ${targetDC}: ${degree})`,
+        degree,
+      };
+    }
+  }
+
+  /**
+   * Grapple (1 action, Attack)
+   * PF2e: Make an Athletics check vs target's Fortitude DC.
+   * Crit Success: Target is restrained (grabbed + immobilized)
+   * Success: Target is grabbed until end of your next turn
+   * Failure: Nothing
+   * Crit Failure: You become off-guard until start of your next turn
+   */
+  private resolveGrapple(actor: Creature, gameState: GameState, targetId?: string, heroPointsSpent?: number): ActionResult {
+    if (!targetId) return { success: false, message: 'No target specified for Grapple.' };
+
+    const target = gameState.creatures.find(c => c.id === targetId);
+    if (!target) return { success: false, message: 'Target not found.' };
+
+    // Range check — must be adjacent (reach = 1 square typically)
+    const dist = distanceBetweenCreatures(actor, target);
+    const reach = getEffectiveReach(actor) / 5;
+    if (dist > reach) {
+      return { success: false, message: `${target.name} is out of reach for Grapple.` };
+    }
+
+    // Roll Athletics
+    const roll = rollD20();
+    const strMod = actor.abilities ? Math.floor((actor.abilities.strength - 10) / 2) : 0;
+    const profBonus = getProficiencyBonus(actor.level ?? 1, 'trained');
+    const total = roll + strMod + profBonus;
+
+    // Target Fortitude DC (10 + fort save bonus)
+    const targetFortMod = calculateSaveBonus(target, 'fortitude');
+    const targetDC = 10 + targetFortMod;
+
+    // Apply MAP
+    const mapPenalty = (actor.attacksMadeThisTurn ?? 0) * -5;
+    const adjustedTotal = total + mapPenalty;
+
+    // Increment MAP
+    actor.attacksMadeThisTurn = (actor.attacksMadeThisTurn ?? 0) + 1;
+
+    const degree = getDegreeOfSuccess(adjustedTotal, targetDC, roll);
+
+    target.conditions = target.conditions || [];
+    actor.conditions = actor.conditions || [];
+
+    switch (degree) {
+      case 'critical-success':
+        target.conditions.push({ name: 'restrained', duration: 2, value: undefined });
+        target.conditions.push({ name: 'grabbed', duration: 2, value: undefined });
+        return {
+          success: true,
+          message: `💪 Critical Grapple! ${actor.name} restrains ${target.name}! (${roll}${mapPenalty ? ` MAP ${mapPenalty}` : ''} + ${strMod + profBonus} = ${adjustedTotal} vs DC ${targetDC})`,
+          degree: 'critical-success',
+        };
+      case 'success':
+        target.conditions.push({ name: 'grabbed', duration: 2, value: undefined });
+        return {
+          success: true,
+          message: `💪 ${actor.name} grabs ${target.name}! Grabbed until end of your next turn. (${roll}${mapPenalty ? ` MAP ${mapPenalty}` : ''} + ${strMod + profBonus} = ${adjustedTotal} vs DC ${targetDC})`,
+          degree: 'success',
+        };
+      case 'critical-failure':
+        actor.conditions.push({ name: 'off-guard', duration: 1, value: undefined });
+        return {
+          success: false,
+          message: `💪 Critical failure! ${actor.name} becomes off-guard! (${roll}${mapPenalty ? ` MAP ${mapPenalty}` : ''} + ${strMod + profBonus} = ${adjustedTotal} vs DC ${targetDC})`,
+          degree: 'critical-failure',
+        };
+      default:
+        return {
+          success: false,
+          message: `💪 ${actor.name} fails to grapple ${target.name}. (${roll}${mapPenalty ? ` MAP ${mapPenalty}` : ''} + ${strMod + profBonus} = ${adjustedTotal} vs DC ${targetDC})`,
+          degree: 'failure',
+        };
+    }
+  }
+
+  /**
+   * Escape (1 action, Attack)
+   * PF2e: Attempt to break free from grabbed, restrained, or immobilized.
+   * Use unarmed attack modifier, Acrobatics, or Athletics (your choice, best is used).
+   * vs DC = Athletics DC of the creature grabbing you, or relevant DC.
+   */
+  private resolveEscape(actor: Creature, gameState: GameState, heroPointsSpent?: number): ActionResult {
+    const grippingConditions = ['grabbed', 'restrained', 'immobilized'];
+    const hasGrip = actor.conditions?.some(c => grippingConditions.includes(c.name));
+
+    if (!hasGrip) {
+      return { success: false, message: `${actor.name} isn't grabbed, restrained, or immobilized.` };
+    }
+
+    // Roll best of Athletics/Acrobatics/unarmed
+    const roll = rollD20();
+    const strMod = actor.abilities ? Math.floor((actor.abilities.strength - 10) / 2) : 0;
+    const dexMod = actor.abilities ? Math.floor((actor.abilities.dexterity - 10) / 2) : 0;
+    const profBonus = getProficiencyBonus(actor.level ?? 1, 'trained');
+    const bestMod = Math.max(strMod, dexMod) + profBonus;
+    const total = roll + bestMod;
+
+    // Default DC for most grab effects
+    const escapeDC = 15 + ((actor.level ?? 1) - 1); // Approximate; real DC depends on source
+
+    // Apply MAP
+    const mapPenalty = (actor.attacksMadeThisTurn ?? 0) * -5;
+    const adjustedTotal = total + mapPenalty;
+    actor.attacksMadeThisTurn = (actor.attacksMadeThisTurn ?? 0) + 1;
+
+    const degree = getDegreeOfSuccess(adjustedTotal, escapeDC, roll);
+
+    if (degree === 'critical-success' || degree === 'success') {
+      // Remove grip conditions
+      actor.conditions = (actor.conditions ?? []).filter(c => !grippingConditions.includes(c.name));
+      const bonus = degree === 'critical-success' ? ' and can Stride 5 feet!' : '';
+
+      return {
+        success: true,
+        message: `🔓 ${actor.name} breaks free!${bonus} (${roll + mapPenalty} + ${bestMod} = ${adjustedTotal} vs DC ${escapeDC}: ${degree})`,
+        degree,
+      };
+    } else {
+      return {
+        success: false,
+        message: `🔒 ${actor.name} fails to escape! (${roll + mapPenalty} + ${bestMod} = ${adjustedTotal} vs DC ${escapeDC}: ${degree})`,
+        degree,
+      };
+    }
+  }
+
+  /**
+   * Recall Knowledge (1 action, Concentrate, Secret)
+   * PF2e: Make a skill check to identify a creature.
+   * On success, learn one true piece of information about the creature (weakness, resistance, ability, etc.)
+   * The GM determines the appropriate skill (Nature for beasts, Religion for undead, etc.)
+   */
+  private resolveRecallKnowledge(actor: Creature, gameState: GameState, targetId?: string): ActionResult {
+    if (!targetId) {
+      return { success: false, message: 'You must specify a creature to Recall Knowledge about.' };
+    }
+
+    const target = gameState.creatures.find(c => c.id === targetId);
+    if (!target) {
+      return { success: false, message: 'Target creature not found.' };
+    }
+
+    // Roll Intelligence-based check
+    const roll = rollD20();
+    const intMod = actor.abilities ? Math.floor((actor.abilities.intelligence - 10) / 2) : 0;
+    const profBonus = getProficiencyBonus(actor.level ?? 1, 'trained');
+    const total = roll + intMod + profBonus;
+
+    // DC based on creature level
+    const dc = 14 + (target.level ?? 1);
+
+    const degree = getDegreeOfSuccess(total, dc, roll);
+
+    if (degree === 'critical-success') {
+      // Reveal weaknesses, resistances, and one special ability
+      const weaknessInfo = target.weaknesses?.length ? `Weaknesses: ${target.weaknesses.map(w => `${w.type} ${w.value}`).join(', ')}` : 'No weaknesses';
+      const resistInfo = target.resistances?.length ? `Resistances: ${target.resistances.map(r => `${r.type} ${r.value}`).join(', ')}` : 'No resistances';
+      return {
+        success: true,
+        message: `📖 Critical! ${actor.name} recalls detailed knowledge about ${target.name}! (${roll} + ${intMod + profBonus} = ${total} vs DC ${dc})\n  ${weaknessInfo}\n  ${resistInfo}\n  HP: approximately ${Math.round(target.currentHealth / 10) * 10}`,
+        degree: 'critical-success',
+      };
+    } else if (degree === 'success') {
+      // Reveal one piece of info  
+      const info = target.weaknesses?.length
+        ? `Weakness: ${target.weaknesses[0].type} ${target.weaknesses[0].value}`
+        : target.resistances?.length
+          ? `Resistance: ${target.resistances[0].type} ${target.resistances[0].value}`
+          : `AC approximately ${target.armorClass ?? '?'}`;
+
+      return {
+        success: true,
+        message: `📖 ${actor.name} recalls something about ${target.name}! (${roll} + ${intMod + profBonus} = ${total} vs DC ${dc})\n  ${info}`,
+        degree: 'success',
+      };
+    } else if (degree === 'critical-failure') {
+      return {
+        success: false,
+        message: `📖 ${actor.name} misremembers! Gains false information about ${target.name}. (${roll} + ${intMod + profBonus} = ${total} vs DC ${dc})`,
+        degree: 'critical-failure',
+      };
+    } else {
+      return {
+        success: false,
+        message: `📖 ${actor.name} can't recall anything useful about ${target.name}. (${roll} + ${intMod + profBonus} = ${total} vs DC ${dc})`,
+        degree: 'failure',
+      };
+    }
+  }
+
 }
 

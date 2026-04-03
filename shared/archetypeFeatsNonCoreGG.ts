@@ -134,7 +134,7 @@ export const BEAST_GUNNER_FEATS: FeatEntry[] = [
     source: 'Beast Gunner (Archetype)',
     category: 'archetype',
     level: 8,
-    description: 'You\'ve unlocked the first secrets of beast guns, granting you the power of their synergistic magic. You gain the basic spellcasting benefits. Each time you gain a spell slot of a new level from this archetype, add a spell of the appropriate spell level to your repertoire, either a common spell of your chosen tradition or another spell of that tradition you\'ve learned or discovered.',
+    description: 'You\'ve unlocked the first secrets of beast guns, granting you the power of their synergistic magic. You gain the basic spellcasting benefits. Each time you gain a spell slot of a new rank from this archetype, add a spell of the appropriate spell rank to your repertoire, either a common spell of your chosen tradition or another spell of that tradition you\'ve learned or discovered.',
     implemented: 'full',
     traits: ['Archetype'],
     actionCost: 'passive',

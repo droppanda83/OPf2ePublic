@@ -1,4 +1,4 @@
-import type { FeatEntry } from './featTypes';
+﻿import type { FeatEntry } from './featTypes';
 import { createClassFeature, WEAPON_SPECIALIZATION, GREATER_WEAPON_SPECIALIZATION, ALERTNESS, RESOLVE, JUGGERNAUT } from './sharedFeats';
 
 // ──────────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ export const MAGUS_CLASS_FEATURES: FeatEntry[] = [
     source: 'Secrets of Magic',
     category: 'class_feature',
     level: 1,
-    description: 'You study spells so you can combine them with your attacks or solve problems that strength of arms alone can\'t handle. You can cast arcane spells using the Cast a Spell activity, and you can supply material, somatic, and verbal components when casting spells. Because you\'re a magus, you can draw replacement sigils with the tip of your weapon or your free hand for spells requiring material components, replacing them with somatic components instead of needing a material component pouch.\n\nAt 1st level, you can prepare one 1st-level spell and five cantrips each morning from the spells in your spellbook. Prepared spells remain available to you until you cast them or until you prepare your spells again. As you increase in level, your number of spell slots and the highest level of spells you can cast increase. Because you split your focus between physical training and magical scholarship, you have no more than two spell slots of your highest level and two spell slots of 1 level lower than your highest spell level.\n\nSome of your spells require you to attempt a spell attack roll to see how effective they are, or have your enemies roll against your spell DC. Your spell attack rolls and spell DCs use your Intelligence modifier.\n\nYou start with a spellbook containing your choice of eight arcane cantrips and four 1st-level arcane spells. Each time you gain a level, you add two more arcane spells to your spellbook, of any level of spell you can cast.',
+    description: 'You study spells so you can combine them with your attacks or solve problems that strength of arms alone can\'t handle. You can cast arcane spells using the Cast a Spell activity, and you can supply material, somatic, and verbal components when casting spells. Because you\'re a magus, you can draw replacement sigils with the tip of your weapon or your free hand for spells requiring material components, replacing them with somatic components instead of needing a material component pouch.\n\nAt 1st level, you can prepare one 1st-level spell and five cantrips each morning from the spells in your spellbook. Prepared spells remain available to you until you cast them or until you prepare your spells again. As you increase in level, your number of spell slots and the highest rank of spells you can cast increase. Because you split your focus between physical training and magical scholarship, you have no more than two spell slots of your highest rank and two spell slots of 1 rank lower than your highest spell rank.\n\nSome of your spells require you to attempt a spell attack roll to see how effective they are, or have your enemies roll against your spell DC. Your spell attack rolls and spell DCs use your Intelligence modifier.\n\nYou start with a spellbook containing your choice of eight arcane cantrips and four 1st-level arcane spells. Each time you gain a level, you add two more arcane spells to your spellbook, of any rank you can cast.',
     implemented: 'full',
     traits: ['Magus'],
     actionCost: 'passive',
@@ -670,12 +670,12 @@ export const MAGUS_CLASS_FEATS: FeatEntry[] = [
     source: 'Secrets of Magic',
     category: 'class',
     level: 10,
-    description: 'Magical energy spills out to extend beyond the creature you struck. The flowing energy forms a ray with a range of 60 feet from the creature you damaged. You can\'t target any of the creatures you damaged with your Spellstrike with the ray. Make a spell attack roll against the new target\'s AC, at the same multiple attack penalty as the Strike. On a hit, the target of the ray takes 1d4 damage per spell level of the same type of energy damage the spell deals (double damage on a critical hit). If you cast the spell in your Spellstrike from a spell slot, the damage from Cascading Ray increases to 1d8 damage per spell level. If the spell deals more than one type of energy damage, you choose only one for the ray.',
+    description: 'Magical energy spills out to extend beyond the creature you struck. The flowing energy forms a ray with a range of 60 feet from the creature you damaged. You can\'t target any of the creatures you damaged with your Spellstrike with the ray. Make a spell attack roll against the new target\'s AC, at the same multiple attack penalty as the Strike. On a hit, the target of the ray takes 1d4 damage per spell rank of the same type of energy damage the spell deals (double damage on a critical hit). If you cast the spell in your Spellstrike from a spell slot, the damage from Cascading Ray increases to 1d8 damage per spell rank. If the spell deals more than one type of energy damage, you choose only one for the ray.',
     implemented: 'full',
     traits: ['Attack', 'Magus'],
     actionCost: 1,
     prerequisites: ['Spellstrike'],
-    mechanics: 'Requires: last action was successful Spellstrike dealing energy damage. 60-ft ray from target. Spell attack at same MAP. 1d4/spell level (1d8 if from slot). Energy type matches spell.',
+    mechanics: 'Requires: last action was successful Spellstrike dealing energy damage. 60-ft ray from target. Spell attack at same MAP. 1d4/spell rank (1d8 if from slot). Energy type matches spell.',
   },
   {
     id: 'magus-dazzling-block',
@@ -709,12 +709,12 @@ export const MAGUS_CLASS_FEATS: FeatEntry[] = [
     source: 'Secrets of Magic',
     category: 'class',
     level: 10,
-    description: 'Your spell unwinds the structure of your staff to make it exceptionally long, or even separate it into shards held together by magical power. Make a Spellstrike with a staff, with a spell that isn\'t a cantrip or focus spell. Increase the staff\'s reach by 5 feet × the spell\'s level.',
+    description: 'Your spell unwinds the structure of your staff to make it exceptionally long, or even separate it into shards held together by magical power. Make a Spellstrike with a staff, with a spell that isn\'t a cantrip or focus spell. Increase the staff\'s reach by 5 feet × the spell\'s rank.',
     implemented: 'full',
     traits: ['Arcane', 'Magus', 'Transmutation'],
     actionCost: 2,
     prerequisites: ['Spellstrike', 'twisting tree hybrid study'],
-    mechanics: 'Spellstrike with staff (non-cantrip/non-focus). Staff reach +5 ft × spell level. Requires wielding a staff.',
+    mechanics: 'Spellstrike with staff (non-cantrip/non-focus). Staff reach +5 ft × spell rank. Requires wielding a staff.',
   },
   {
     id: 'magus-maelstrom-flow',
@@ -735,12 +735,12 @@ export const MAGUS_CLASS_FEATS: FeatEntry[] = [
     source: 'Secrets of Magic',
     category: 'class',
     level: 10,
-    description: 'A trail of energy flows from your target back to you. Make a Spellstrike with a ranged weapon or ranged unarmed attack against a target within the first range increment. The spell you cast for the Spellstrike can\'t be a cantrip or focus spell. Each creature in a line between you and the target, excluding you and the target, takes damage equal to double the spell\'s level. Determine the damage type as described in Arcane Cascade.',
+    description: 'A trail of energy flows from your target back to you. Make a Spellstrike with a ranged weapon or ranged unarmed attack against a target within the first range increment. The spell you cast for the Spellstrike can\'t be a cantrip or focus spell. Each creature in a line between you and the target, excluding you and the target, takes damage equal to double the spell\'s rank. Determine the damage type as described in Arcane Cascade.',
     implemented: 'full',
     traits: ['Arcane', 'Evocation', 'Magus'],
     actionCost: 2,
     prerequisites: ['Spellstrike', 'starlit span hybrid study'],
-    mechanics: 'Ranged Spellstrike (non-cantrip/non-focus). Line between you and target: 2×spell level damage (Arcane Cascade type).',
+    mechanics: 'Ranged Spellstrike (non-cantrip/non-focus). Line between you and target: 2×spell rank damage (Arcane Cascade type).',
   },
   {
     id: 'magus-rapid-recharge',
@@ -761,12 +761,12 @@ export const MAGUS_CLASS_FEATS: FeatEntry[] = [
     source: 'Secrets of Magic',
     category: 'class',
     level: 10,
-    description: 'You pull magic into your weapon, using its substance to transform the magic into restorative energy. You regain Hit Points equal to double the spell\'s level and roll to end any persistent negative damage you have. If the spell was of the necromancy school, any persistent negative damage you have ends automatically, and you can change the damage type from Arcane Cascade to positive if you wish.',
+    description: 'You pull magic into your weapon, using its substance to transform the magic into restorative energy. You regain Hit Points equal to double the spell\'s rank and roll to end any persistent negative damage you have. If the spell has the void trait, any persistent negative damage you have ends automatically, and you can change the damage type from Arcane Cascade to vitality if you wish.',
     implemented: 'full',
     traits: ['Arcane', 'Healing', 'Magus', 'Necromancy', 'Positive', 'Vitality'],
     actionCost: 'free',
     prerequisites: ['Arcane Cascade', 'inexorable iron hybrid study'],
-    mechanics: 'Trigger: Cast a Spell using a spell slot while in Arcane Cascade. Heal 2×spell level HP. Roll to end persistent negative damage (auto-end if necromancy spell).',
+    mechanics: 'Trigger: Cast a Spell using a spell slot while in Arcane Cascade. Heal 2×spell rank HP. Roll to end persistent negative damage (auto-end if necromancy spell).',
   },
   {
     id: 'magus-unsheathing-the-sword-light',

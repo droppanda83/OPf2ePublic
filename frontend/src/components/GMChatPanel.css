@@ -14,7 +14,7 @@
   display: flex;
   gap: 0;
   flex-shrink: 0;
-  border-bottom: 2px solid #333;
+  border-bottom: 2px solid var(--pf2e-border-subtle);
   background: rgba(0, 0, 0, 0.4);
   border-radius: 8px 8px 0 0;
 }
@@ -24,13 +24,13 @@
   padding: 8px 6px;
   border: none;
   background: transparent;
-  color: #888;
+  color: var(--pf2e-text-muted);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--pf2e-transition-base);
   border-bottom: 2px solid transparent;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--pf2e-font-body);
   text-align: center;
 }
 
@@ -40,8 +40,8 @@
 }
 
 .gm-tab.active {
-  color: #d4af37;
-  border-bottom-color: #d4af37;
+  color: var(--pf2e-gold);
+  border-bottom-color: var(--pf2e-gold);
   background: rgba(212, 175, 55, 0.08);
 }
 
@@ -96,7 +96,7 @@
 .gm-scene-caption {
   padding: 6px 8px;
   font-size: 10px;
-  color: #d7cdb2;
+  color: var(--pf2e-text-primary);
   border-top: 1px solid #2f2f45;
 }
 
@@ -234,14 +234,14 @@
 .gm-chat-input {
   flex: 1;
   padding: 7px 10px;
-  border: 1px solid #444;
+  border: 1px solid var(--pf2e-border-inactive);
   border-radius: 16px;
   background: rgba(0, 0, 0, 0.4);
   color: #ddd;
   font-size: 11px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--pf2e-font-body);
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color var(--pf2e-transition-base);
   resize: none;
   min-height: 28px;
   max-height: 80px;
@@ -306,9 +306,9 @@
 }
 
 .gm-control-section {
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid #333;
-  border-radius: 6px;
+  background: var(--pf2e-bg-card);
+  border: 1px solid var(--pf2e-border-subtle);
+  border-radius: var(--pf2e-radius-md);
   padding: 8px;
 }
 

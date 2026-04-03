@@ -51,7 +51,7 @@
   transform: translateX(-50%);
   font-size: 11px;
   font-weight: 700;
-  color: #ead8be;
+  color: var(--pf2e-text-heading);
   opacity: 0.75;
   transition: opacity 200ms ease;
   white-space: nowrap;
@@ -86,10 +86,10 @@
 
 .dqr-header {
   text-align: center;
-  color: #ead8be;
+  color: var(--pf2e-text-heading);
   font-weight: 800;
   font-size: 14px;
-  font-family: 'Cinzel', 'Times New Roman', serif;
+  font-family: var(--pf2e-font-display);
   margin-bottom: 12px;
   letter-spacing: 0.5px;
 }
@@ -212,4 +212,39 @@
 .dqr-roll-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Theme selector */
+.dqr-theme-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.dqr-theme-options {
+  display: flex;
+  gap: 6px;
+}
+
+.dqr-theme-btn {
+  flex: 1;
+  padding: 5px 2px;
+  border: 2px solid #3f2626;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 160ms ease;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.dqr-theme-btn:hover {
+  border-color: #7a4a4a;
+  transform: translateY(-1px);
+}
+
+.dqr-theme-btn.selected {
+  border-color: #ead8be;
+  box-shadow: 0 0 8px rgba(234,216,190,0.3);
 }

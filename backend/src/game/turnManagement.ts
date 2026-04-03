@@ -3,16 +3,30 @@
 // Phase 14 refactor: initiative, persistent damage, delay, ready actions
 // 
 
-import { Creature, GameState, rollD20, rollDamageFormula, calculateFinalDamage, getProficiencyBonus } from 'pf2e-shared';
+import { Creature, GameState, ActionResult, rollD20, rollDamageFormula, calculateFinalDamage, getProficiencyBonus } from 'pf2e-shared';
 import { initDying } from './helpers';
 
 export interface TurnManagementContext {
   hasFeat: (creature: Creature, featName: string) => boolean;
-  resolveStrike: (actor: Creature, gameState: GameState, targetId?: string, weaponId?: string, heroPointsSpent?: number) => any;
-  resolveRaiseShield: (actor: Creature) => any;
-  resolveShieldBlock: (actor: Creature) => any;
-  resolveHide: (actor: Creature, gameState: GameState, heroPointsSpent?: number) => any;
-  resolveSeek: (actor: Creature, gameState: GameState, heroPointsSpent?: number) => any;
+  resolveStrike: (actor: Creature, gameState: GameState, targetId?: string, weaponId?: string, heroPointsSpent?: number) => ActionResult;
+  resolveRaiseShield: (actor: Creature) => ActionResult;
+  resolveShieldBlock: (actor: Creature) => ActionResult;
+  resolveHide: (actor: Creature, gameState: GameState, heroPointsSpent?: number) => ActionResult;
+  resolveSeek: (actor: Creature, gameState: GameState, heroPointsSpent?: number) => ActionResult;
+}
+
+interface PersistentDamageLogEntry {
+  type: 'persistent-damage';
+  source: string;
+  conditionName: string;
+  damageType?: string;
+  baseDamage: number;
+  damageModifier: string;
+  modifierValue: number;
+  finalDamage: number;
+  rollResults: number[];
+  durationRemaining: number;
+  message: string;
 }
 
 export function rollInitiative(ctx: TurnManagementContext, creatures: Creature[]): string[] {
@@ -48,8 +62,8 @@ export function rollInitiative(ctx: TurnManagementContext, creatures: Creature[]
  * Process persistent damage (fire burns, bleed, etc.) at the start of a creature's turn
  * Returns array of log entries for this creature's persistent damage
  */
-export function processPersistentDamage(creature: Creature): any[] {
-  const entries: any[] = [];
+export function processPersistentDamage(creature: Creature): PersistentDamageLogEntry[] {
+  const entries: PersistentDamageLogEntry[] = [];
 
   if (!creature.conditions || creature.conditions.length === 0) {
     return entries;
@@ -136,7 +150,7 @@ export function processPersistentDamage(creature: Creature): any[] {
  * Implementation: Mark creature as delaying. They skip their turn and can 
  * choose when to re-enter the initiative order.
  */
-export function resolveDelay(actor: Creature): any {
+export function resolveDelay(actor: Creature): ActionResult {
   // Mark creature as delaying
   actor.isDelaying = true;
   
@@ -154,7 +168,7 @@ export function resolveDelay(actor: Creature): any {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // PHASE 8.1: Resume Delay (re-enter initiative)
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export function resolveResumeDelay(actor: Creature, gameState: GameState): any {
+export function resolveResumeDelay(actor: Creature, gameState: GameState): ActionResult {
   if (!actor.isDelaying) {
     return { success: false, message: `${actor.name} is not delaying.` };
   }
@@ -205,7 +219,7 @@ export function resolveReady(
   actor: Creature, 
   actionId?: string,
   targetId?: string
-): any {
+): ActionResult {
   // Ready requires specifying an action
   if (!actionId) {
     return { 
@@ -252,7 +266,7 @@ export function resolveExecuteReady(ctx: TurnManagementContext,
   actor: Creature,
   gameState: GameState,
   heroPointsSpent?: number
-): any {
+): ActionResult {
   const ready = actor.readyAction;
   if (!ready) {
     return { success: false, message: `${actor.name} has no readied action.` };

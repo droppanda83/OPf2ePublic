@@ -3,18 +3,23 @@
 // Phase 14 refactor: Psychic, Magus class features + archetype helpers
 // 
 
-import { Creature, GameState, CreatureWeapon, getSpell } from 'pf2e-shared';
+import { Creature, GameState, CreatureWeapon, getSpell, ActionResult } from 'pf2e-shared';
 import { applyBattleForm, revertBattleForm, BattleFormStats } from './subsystems';
+
+type StrikeActionResult = ActionResult & {
+  hit?: boolean;
+  damage?: number;
+};
 
 export interface ClassActionContext {
   resolveSelectedWeapon: (actor: Creature, weaponId?: string) => CreatureWeapon | null;
-  resolveStrike: (actor: Creature, gameState: GameState, targetId?: string, weaponId?: string, heroPointsSpent?: number) => any;
+  resolveStrike: (actor: Creature, gameState: GameState, targetId?: string, weaponId?: string, heroPointsSpent?: number) => StrikeActionResult;
   hasFeat: (creature: Creature, featName: string) => boolean;
 }
 
 function hasNamedFeat(creature: Creature, needle: string): boolean {
   const lowerNeedle = needle.toLowerCase().trim();
-  return (creature.feats ?? []).some((feat: any) => {
+  return (creature.feats ?? []).some((feat: { name: string; type: string; level: number }) => {
     if (typeof feat === 'string') {
       return feat.toLowerCase().trim().includes(lowerNeedle);
     }
@@ -24,7 +29,7 @@ function hasNamedFeat(creature: Creature, needle: string): boolean {
   });
 }
 
-export function resolveUnleashPsyche(actor: Creature, gameState: any): any {
+export function resolveUnleashPsyche(actor: Creature, gameState: GameState): ActionResult {
   if (actor.unleashPsycheUsedThisEncounter) {
     return { success: false, message: `${actor.name} has already Unleashed their Psyche this encounter.` , errorCode: 'VALIDATION_FAILED' };
   }
@@ -60,12 +65,12 @@ export function resolveUnleashPsyche(actor: Creature, gameState: any): any {
 export function resolveSpellstrike(
   ctx: ClassActionContext,
   actor: Creature,
-  gameState: any,
+  gameState: GameState,
   targetId?: string,
   weaponId?: string,
   spellId?: string,
   heroPointsSpent: number = 0
-): any {
+): ActionResult {
   const hasSpellstrike = actor.characterClass === 'Magus' || hasNamedFeat(actor, 'spellstrike');
   if (!hasSpellstrike) {
     return { success: false, message: `${actor.name} does not have access to Spellstrike.` , errorCode: 'FEAT_NOT_AVAILABLE' };
@@ -88,7 +93,7 @@ export function resolveSpellstrike(
   if (!target) return { success: false, message: 'Target not found.' , errorCode: 'TARGET_NOT_FOUND' };
 
   const actorSpellIds = (actor.spells ?? [])
-    .map((s: any) => {
+    .map((s: string) => {
       if (typeof s === 'string') return s;
       if (s && typeof s.id === 'string') return s.id;
       return null;
@@ -158,7 +163,7 @@ export function resolveSpellstrike(
   };
 }
 
-export function resolveRechargeSpellstrike(actor: Creature): any {
+export function resolveRechargeSpellstrike(actor: Creature): ActionResult {
   const hasSpellstrike = actor.characterClass === 'Magus' || hasNamedFeat(actor, 'spellstrike');
   if (!hasSpellstrike) {
     return { success: false, message: `${actor.name} does not have access to Spellstrike.` , errorCode: 'FEAT_NOT_AVAILABLE' };
@@ -182,7 +187,7 @@ export function resolveRechargeSpellstrike(actor: Creature): any {
   };
 }
 
-export function resolveArcaneCascade(actor: Creature): any {
+export function resolveArcaneCascade(actor: Creature): ActionResult {
   const hasArcaneCascade = actor.characterClass === 'Magus' || hasNamedFeat(actor, 'arcane cascade');
   if (!hasArcaneCascade) {
     return { success: false, message: `${actor.name} does not have access to Arcane Cascade.` , errorCode: 'FEAT_NOT_AVAILABLE' };
@@ -254,7 +259,7 @@ export function consumeFocusPointForAmp(creature: Creature): boolean {
 // BARBARIAN: RAGE
 // ──────────────────────────────────────────────────────────
 
-export function resolveRage(actor: Creature): any {
+export function resolveRage(actor: Creature): ActionResult {
   if (actor.characterClass !== 'Barbarian' && !hasNamedFeat(actor, 'rage')) {
     return { success: false, message: `${actor.name} does not have the Rage ability.` , errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -307,7 +312,7 @@ export function resolveRage(actor: Creature): any {
   };
 }
 
-export function resolveEndRage(actor: Creature): any {
+export function resolveEndRage(actor: Creature): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} is not raging.` , errorCode: 'NOT_IN_STATE' };
   }
@@ -352,10 +357,10 @@ export function resolveEndRage(actor: Creature): any {
 export function resolveFlurryOfBlows(
   ctx: ClassActionContext,
   actor: Creature,
-  gameState: any,
+  gameState: GameState,
   targetId?: string,
   heroPointsSpent: number = 0
-): any {
+): ActionResult {
   const hasFlurry = actor.characterClass === 'Monk' || hasNamedFeat(actor, 'flurry of blows');
   if (!hasFlurry) {
     return { success: false, message: `${actor.name} does not have Flurry of Blows.` , errorCode: 'FEAT_NOT_AVAILABLE' };
@@ -407,7 +412,7 @@ export function resolveFlurryOfBlows(
 // RANGER: HUNT PREY
 // ──────────────────────────────────────────────────────────
 
-export function resolveHuntPrey(actor: Creature, gameState: any, targetId?: string): any {
+export function resolveHuntPrey(actor: Creature, gameState: GameState, targetId?: string): ActionResult {
   const hasHuntPrey = actor.characterClass === 'Ranger' || hasNamedFeat(actor, 'hunt prey');
   if (!hasHuntPrey) {
     return { success: false, message: `${actor.name} does not have Hunt Prey.` , errorCode: 'FEAT_NOT_AVAILABLE' };
@@ -453,9 +458,9 @@ export function resolveHuntPrey(actor: Creature, gameState: any, targetId?: stri
 
 export function resolveChampionReaction(
   actor: Creature,
-  gameState: any,
+  gameState: GameState,
   targetId?: string
-): any {
+): ActionResult {
   if (actor.characterClass !== 'Champion') {
     return { success: false, message: `${actor.name} is not a Champion.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -508,7 +513,7 @@ export function resolveChampionReaction(
 // MONK: STUNNING FIST (free action on crit with Flurry)
 // ──────────────────────────────────────────────────────────
 
-export function resolveStunningFist(actor: Creature, gameState: any, targetId?: string): any {
+export function resolveStunningFist(actor: Creature, gameState: GameState, targetId?: string): ActionResult {
   // PF2e Remaster: Stunning Fist is a Level 4 Monk feat, not a default class feature
   if (!hasNamedFeat(actor, 'stunning fist')) {
     return { success: false, message: `${actor.name} does not have the Stunning Fist feat.` , errorCode: 'FEAT_NOT_AVAILABLE' };
@@ -543,7 +548,7 @@ export function resolveStunningFist(actor: Creature, gameState: any, targetId?: 
 // CHAMPION: LAY ON HANDS (focus spell)
 // ──────────────────────────────────────────────────────────
 
-export function resolveLayOnHands(actor: Creature, gameState: any, targetId?: string): any {
+export function resolveLayOnHands(actor: Creature, gameState: GameState, targetId?: string): ActionResult {
   if (actor.characterClass !== 'Champion' && !hasNamedFeat(actor, 'lay on hands')) {
     return { success: false, message: `${actor.name} does not have Lay on Hands.` , errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -570,7 +575,7 @@ export function resolveLayOnHands(actor: Creature, gameState: any, targetId?: st
 
   // Check if target is undead (would take damage instead)
   const isUndead = target.damageImmunities?.includes('positive') ||
-    (target as any).traits?.includes('undead');
+    target.traits?.includes('undead');
 
   if (isUndead) {
     // Deal vitality (positive) damage to undead
@@ -608,7 +613,7 @@ export function resolveLayOnHands(actor: Creature, gameState: any, targetId?: st
  * Activates the kineticist's kinetic aura (10-foot emanation).
  * Resets the overflow state. Can optionally include a 1-action Elemental Blast.
  */
-export function resolveChannelElements(actor: Creature): any {
+export function resolveChannelElements(actor: Creature): ActionResult {
   if (actor.characterClass !== 'Kineticist') {
     return { success: false, message: `${actor.name} is not a Kineticist.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -633,7 +638,7 @@ export function resolveChannelElements(actor: Creature): any {
 /**
  * Dismiss Kinetic Aura (free action or overflow consequence)
  */
-export function resolveDismissAura(actor: Creature): any {
+export function resolveDismissAura(actor: Creature): ActionResult {
   if (actor.characterClass !== 'Kineticist') {
     return { success: false, message: `${actor.name} is not a Kineticist.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -661,11 +666,11 @@ export function resolveDismissAura(actor: Creature): any {
 export function resolveElementalBlast(
   ctx: ClassActionContext,
   actor: Creature,
-  gameState: any,
+  gameState: GameState,
   targetId?: string,
   twoAction: boolean = false,
   heroPointsSpent: number = 0
-): any {
+): ActionResult {
   if (actor.characterClass !== 'Kineticist') {
     return { success: false, message: `${actor.name} is not a Kineticist.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -882,14 +887,14 @@ const WILD_SHAPE_FORMS: Record<string, BattleFormStats & { description: string }
  * Transform into a battle form using the polymorph subsystem.
  * Requires Untamed Order or Wild Shape feat, plus an appropriate spell slot.
  */
-export function resolveWildShape(actor: Creature, formName?: string): any {
+export function resolveWildShape(actor: Creature, formName?: string): ActionResult {
   if (actor.characterClass !== 'Druid') {
     return { success: false, message: `${actor.name} is not a Druid.` , errorCode: 'CLASS_MISMATCH' };
   }
 
   // Check for Untamed Order or Wild Shape feat
   const hasWildShapeFeat = actor.druidOrder === 'untamed' ||
-    (actor.feats ?? []).some((f: any) => {
+    (actor.feats ?? []).some((f: { name: string; type: string; level: number }) => {
       const name = typeof f === 'string' ? f : (f?.name ?? f?.id ?? '');
       return name.toLowerCase().includes('wild shape') || name.toLowerCase().includes('untamed form');
     });
@@ -931,7 +936,7 @@ export function resolveWildShape(actor: Creature, formName?: string): any {
  * Revert Form (1 action or free with Dismiss)
  * Return from Wild Shape to original form using the polymorph subsystem.
  */
-export function resolveRevertForm(actor: Creature): any {
+export function resolveRevertForm(actor: Creature): ActionResult {
   if (!actor.polymorphForm && !actor.wildShapeActive) {
     return { success: false, message: `${actor.name} is not in a wild shape form.` , errorCode: 'NOT_IN_STATE' };
   }
@@ -964,7 +969,7 @@ export function resolveRevertForm(actor: Creature): any {
  * and saves vs fear for all allies in a 60-foot emanation.
  * Reference: https://2e.aonprd.com/Spells.aspx?ID=386
  */
-export function resolveCourageousAnthem(actor: Creature): any {
+export function resolveCourageousAnthem(actor: Creature): ActionResult {
   // Must be a bard (or have courageous anthem)
   const className = (actor.characterClass ?? '').toLowerCase();
   if (!className.includes('bard')) {
@@ -997,7 +1002,7 @@ export function resolveCourageousAnthem(actor: Creature): any {
  * End Courageous Anthem (free action)
  * End the active Courageous Anthem composition.
  */
-export function resolveEndCourageousAnthem(actor: Creature): any {
+export function resolveEndCourageousAnthem(actor: Creature): ActionResult {
   if (!actor.courageousAnthemActive) {
     return { success: false, message: `${actor.name} doesn't have Courageous Anthem active.` , errorCode: 'NOT_IN_STATE' };
   }
@@ -1019,7 +1024,7 @@ export function resolveEndCourageousAnthem(actor: Creature): any {
  * the bard can use their Performance check as the ally's saving throw.
  * Reference: https://2e.aonprd.com/Spells.aspx?ID=381
  */
-export function resolveCounterPerformance(actor: Creature): any {
+export function resolveCounterPerformance(actor: Creature): ActionResult {
   const className = (actor.characterClass ?? '').toLowerCase();
   if (!className.includes('bard')) {
     return { success: false, message: `${actor.name} doesn't know Counter Performance.` , errorCode: 'FEAT_NOT_AVAILABLE' };
@@ -1046,7 +1051,7 @@ export function resolveCounterPerformance(actor: Creature): any {
 // GUARDIAN ACTIONS
 // ═══════════════════════════════════════════════════════════
 
-export function resolveTaunt(actor: Creature, gameState: any, targetId?: string): any {
+export function resolveTaunt(actor: Creature, gameState: GameState, targetId?: string): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'guardian') {
     return { success: false, message: `${actor.name} is not a Guardian.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -1073,7 +1078,7 @@ export function resolveTaunt(actor: Creature, gameState: any, targetId?: string)
   };
 }
 
-export function resolveInterceptStrike(actor: Creature, gameState: any, targetId?: string): any {
+export function resolveInterceptStrike(actor: Creature, gameState: GameState, targetId?: string): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'guardian') {
     return { success: false, message: `${actor.name} is not a Guardian.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -1095,7 +1100,7 @@ export function resolveInterceptStrike(actor: Creature, gameState: any, targetId
 // SWASHBUCKLER ACTIONS
 // ═══════════════════════════════════════════════════════════
 
-export function resolveGainPanache(actor: Creature): any {
+export function resolveGainPanache(actor: Creature): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'swashbuckler') {
     return { success: false, message: `${actor.name} is not a Swashbuckler.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -1126,10 +1131,10 @@ export function resolveGainPanache(actor: Creature): any {
 export function resolveFinisher(
   ctx: ClassActionContext,
   actor: Creature,
-  gameState: any,
+  gameState: GameState,
   targetId?: string,
   weaponId?: string,
-): any {
+): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'swashbuckler') {
     return { success: false, message: `${actor.name} is not a Swashbuckler.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -1144,7 +1149,7 @@ export function resolveFinisher(
   // Consume panache regardless of hit/miss
   actor.classSpecific.hasPanache = false;
   // Remove panache speed bonus
-  actor.bonuses = (actor.bonuses ?? []).filter((b: any) => b.source !== 'Panache');
+  actor.bonuses = (actor.bonuses ?? []).filter((b) => b.source !== 'Panache');
 
   // Add Precise Strike damage on hit
   if (strikeResult.hit) {
@@ -1169,7 +1174,7 @@ export function resolveFinisher(
 // INVESTIGATOR ACTIONS
 // ═══════════════════════════════════════════════════════════
 
-export function resolveDeviseAStratagem(actor: Creature, gameState: any, targetId?: string): any {
+export function resolveDeviseAStratagem(actor: Creature, gameState: GameState, targetId?: string): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'investigator') {
     return { success: false, message: `${actor.name} is not an Investigator.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -1201,7 +1206,7 @@ export function resolveDeviseAStratagem(actor: Creature, gameState: any, targetI
 // THAUMATURGE ACTIONS
 // ═══════════════════════════════════════════════════════════
 
-export function resolveExploitVulnerability(actor: Creature, gameState: any, targetId?: string): any {
+export function resolveExploitVulnerability(actor: Creature, gameState: GameState, targetId?: string): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'thaumaturge') {
     return { success: false, message: `${actor.name} is not a Thaumaturge.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -1247,7 +1252,7 @@ export function resolveExploitVulnerability(actor: Creature, gameState: any, tar
 // COMMANDER ACTIONS
 // ═══════════════════════════════════════════════════════════
 
-export function resolveCommandersOrder(actor: Creature, gameState: any, targetId?: string): any {
+export function resolveCommandersOrder(actor: Creature, gameState: GameState, targetId?: string): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'commander') {
     return { success: false, message: `${actor.name} is not a Commander.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -1273,7 +1278,7 @@ export function resolveCommandersOrder(actor: Creature, gameState: any, targetId
 
 export function resolveSlingersReload(
   actor: Creature,
-): any {
+): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'gunslinger') {
     return { success: false, message: `${actor.name} is not a Gunslinger.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -1305,7 +1310,7 @@ export function resolveSlingersReload(
 // INVENTOR ACTIONS
 // ═══════════════════════════════════════════════════════════
 
-export function resolveOverdrive(actor: Creature): any {
+export function resolveOverdrive(actor: Creature): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'inventor') {
     return { success: false, message: `${actor.name} is not an Inventor.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -1362,7 +1367,7 @@ export function resolveOverdrive(actor: Creature): any {
   };
 }
 
-export function resolveExplode(actor: Creature, gameState: any): any {
+export function resolveExplode(actor: Creature, gameState: GameState): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'inventor') {
     return { success: false, message: `${actor.name} is not an Inventor.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -1398,7 +1403,7 @@ export function resolveExplode(actor: Creature, gameState: any): any {
 // ORACLE ACTIONS
 // ═══════════════════════════════════════════════════════════
 
-export function resolveRevelationSpell(actor: Creature): any {
+export function resolveRevelationSpell(actor: Creature): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'oracle') {
     return { success: false, message: `${actor.name} is not an Oracle.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -1413,13 +1418,13 @@ export function resolveRevelationSpell(actor: Creature): any {
 
   actor.classSpecific = actor.classSpecific ?? {};
   const currentCurse = actor.classSpecific.curseLevel ?? 'minor';
-  const curseProgression: Record<string, string> = {
+  const curseProgression: Record<'minor' | 'moderate' | 'major' | 'extreme', 'minor' | 'moderate' | 'major' | 'extreme'> = {
     'minor': 'moderate',
     'moderate': 'major',
     'major': 'extreme',
     'extreme': 'extreme',
   };
-  actor.classSpecific.curseLevel = curseProgression[currentCurse] as any;
+  actor.classSpecific.curseLevel = curseProgression[currentCurse];
 
   const mystery = actor.classSpecific.oracleMystery ?? 'unknown';
   return {
@@ -1433,7 +1438,7 @@ export function resolveRevelationSpell(actor: Creature): any {
 // ALCHEMIST ACTIONS
 // ═══════════════════════════════════════════════════════════
 
-export function resolveQuickAlchemy(actor: Creature): any {
+export function resolveQuickAlchemy(actor: Creature): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'alchemist') {
     return { success: false, message: `${actor.name} is not an Alchemist.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -1457,7 +1462,7 @@ export function resolveQuickAlchemy(actor: Creature): any {
 // EXEMPLAR ACTIONS
 // ═══════════════════════════════════════════════════════════
 
-export function resolveShiftImmanence(actor: Creature): any {
+export function resolveShiftImmanence(actor: Creature): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'exemplar') {
     return { success: false, message: `${actor.name} is not an Exemplar.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -1482,7 +1487,7 @@ export function resolveShiftImmanence(actor: Creature): any {
   };
 }
 
-export function resolveSparkTranscendence(actor: Creature): any {
+export function resolveSparkTranscendence(actor: Creature): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'exemplar') {
     return { success: false, message: `${actor.name} is not an Exemplar.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -1509,7 +1514,7 @@ export function resolveSparkTranscendence(actor: Creature): any {
 // SUMMONER ACTIONS
 // ═══════════════════════════════════════════════════════════
 
-export function resolveActTogether(actor: Creature): any {
+export function resolveActTogether(actor: Creature): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'summoner') {
     return { success: false, message: `${actor.name} is not a Summoner.` , errorCode: 'CLASS_MISMATCH' };
   }
@@ -1528,7 +1533,7 @@ export function resolveActTogether(actor: Creature): any {
   };
 }
 
-export function resolveManifestEidolon(actor: Creature): any {
+export function resolveManifestEidolon(actor: Creature): ActionResult {
   if ((actor.characterClass ?? '').toLowerCase() !== 'summoner') {
     return { success: false, message: `${actor.name} is not a Summoner.` , errorCode: 'CLASS_MISMATCH' };
   }

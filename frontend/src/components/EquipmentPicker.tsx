@@ -38,19 +38,34 @@ interface EquipmentPickerProps {
   selected?: string[];
   /** Allow picking the same item multiple times */
   allowDuplicates?: boolean;
+  /** Controlled open state for embedded picker usage */
+  open?: boolean;
+  /** Controlled open-state callback */
+  onOpenChange?: (open: boolean) => void;
+  /** Hide the trigger button when controlled externally */
+  hideTrigger?: boolean;
 }
 
 export const EquipmentPicker: React.FC<EquipmentPickerProps> = ({
   label, items, categoryLabel, categories: catsProp, showLevelFilter = false,
   maxLevel = 20, onPick, formatGp, selected = [], allowDuplicates = false,
+  open: controlledOpen, onOpenChange, hideTrigger = false,
 }) => {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
   const [maxLevelFilter, setMaxLevelFilter] = useState(maxLevel);
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'level'>('name');
   const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const open = controlledOpen ?? internalOpen;
+
+  const setOpen = (nextOpen: boolean) => {
+    if (controlledOpen === undefined) {
+      setInternalOpen(nextOpen);
+    }
+    onOpenChange?.(nextOpen);
+  };
 
   // Detect categories
   const categories = useMemo(() => {
@@ -120,6 +135,10 @@ export const EquipmentPicker: React.FC<EquipmentPickerProps> = ({
   };
 
   if (!open) {
+    if (hideTrigger) {
+      return null;
+    }
+
     return (
       <button className="eq-picker-trigger" onClick={() => setOpen(true)}>
         {label}

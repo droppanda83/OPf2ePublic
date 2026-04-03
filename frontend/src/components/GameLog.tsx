@@ -5,7 +5,7 @@ interface LogEntry {
   timestamp: number;
   type: string;
   message: string;
-  details?: any;
+  details?: Record<string, unknown>;
   narrative?: string;
 }
 
@@ -14,7 +14,7 @@ interface GameLogProps {
 }
 
 /** Build a human-readable breakdown from a log entry's details */
-const buildTooltipLines = (details: any): string[] => {
+const buildTooltipLines = (details: Record<string, unknown> | undefined): string[] => {
   if (!details) return [];
   const lines: string[] = [];
 
@@ -87,7 +87,7 @@ const buildTooltipLines = (details: any): string[] => {
     lines.push(`Targets hit: ${details.targetCount}`);
     if (details.results.length > 0) {
       lines.push(`── Per-Target ──`);
-      details.results.forEach((r: any) => {
+      details.results.forEach((r: { targetName: string; saveRoll: number; saveBonus: number; saveTotal: number; saveResult: string; damage: number; targetHealth: number; status?: string }) => {
         lines.push(`${r.targetName}: Save d20 ${r.saveRoll} +${r.saveBonus} = ${r.saveTotal} → ${formatResult(r.saveResult)}`);
         lines.push(`  Damage: ${r.damage}  HP: ${r.targetHealth}${r.status || ''}`);
       });

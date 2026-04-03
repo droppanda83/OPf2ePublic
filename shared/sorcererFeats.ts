@@ -1,4 +1,4 @@
-import type { FeatEntry } from './featTypes';
+﻿import type { FeatEntry } from './featTypes';
 import { SKILL_OPTIONS } from './subChoiceOptions';
 import { createClassFeature, WEAPON_SPECIALIZATION } from './sharedFeats';
 
@@ -908,7 +908,7 @@ const RAW_SORCERER_CLASS_FEATS: FeatEntry[] = [
     actionCost: 1,
     prerequisites: ['ability to cast focus spells, divine spells'],
     mechanics:
-      'Uncommon (Knights of Lastwall access). Spellshape. Next single-target spell vs undead → expend 1 Focus Point → +spirit or vitality damage = focus spell level. Doubled on crit.',
+      'Uncommon (Knights of Lastwall access). Spellshape. Next single-target spell vs undead → expend 1 Focus Point → +spirit or vitality damage = focus spell rank. Doubled on crit.',
   },
 
   // —— Level 12 —————————————————————————————————————————————

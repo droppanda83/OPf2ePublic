@@ -2,9 +2,9 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--pf2e-bg-overlay);
   border: 1px solid #555;
-  border-radius: 8px;
+  border-radius: var(--pf2e-radius-lg);
   padding: 6px;
   flex-shrink: 0;
 }
@@ -12,8 +12,8 @@
 .creature-panel h3 {
   margin: 0;
   font-size: 12px;
-  color: #0dd;
-  border-bottom: 1px solid #0dd;
+  color: var(--pf2e-player);
+  border-bottom: 1px solid var(--pf2e-player);
   padding-bottom: 4px;
 }
 
@@ -34,15 +34,15 @@
 }
 
 .creature-item.player {
-  border-left-color: #0dd;
+  border-left-color: var(--pf2e-player);
 }
 
 .creature-item.creature {
-  border-left-color: #ff6666;
+  border-left-color: var(--pf2e-enemy);
 }
 
 .creature-item.npc {
-  border-left-color: #ffcc66;
+  border-left-color: var(--pf2e-npc);
 }
 
 .creature-header {
@@ -73,17 +73,17 @@
 
 .creature-type.player {
   background: rgba(0, 221, 221, 0.2);
-  color: #0dd;
+  color: var(--pf2e-player);
 }
 
 .creature-type.creature {
   background: rgba(255, 102, 102, 0.2);
-  color: #ff6666;
+  color: var(--pf2e-enemy);
 }
 
 .creature-type.npc {
   background: rgba(255, 204, 102, 0.2);
-  color: #ffcc66;
+  color: var(--pf2e-npc);
 }
 
 .creature-stats {
@@ -134,15 +134,15 @@
 .conditions-list > strong {
   display: block;
   margin-bottom: 5px;
-  color: #FFC107;
+  color: var(--pf2e-condition);
   font-size: 11px;
 }
 
 .condition-tag {
   display: inline-block;
-  background: rgba(255, 193, 7, 0.2);
-  border: 1px solid #FFC107;
-  color: #FFC107;
+  background: var(--pf2e-condition-bg);
+  border: 1px solid var(--pf2e-condition);
+  color: var(--pf2e-condition);
   padding: 2px 6px;
   border-radius: 3px;
   margin-right: 4px;

@@ -127,8 +127,39 @@ function renderCreature(c) {
   lines.push(`      maxHealth: ${c.hp},`);
   lines.push(`      armorClass: ${c.ac},`);
   lines.push(`      speed: ${c.speed},`);
+
+  // Size & Rarity
+  if (c.size && c.size !== 'medium') {
+    lines.push(`      size: '${c.size}',`);
+  }
+
   lines.push(`      abilities: abs({ str: ${c.abilities.str}, dex: ${c.abilities.dex}, con: ${c.abilities.con}, int: ${c.abilities.int}, wis: ${c.abilities.wis}, cha: ${c.abilities.cha} }),`);
   lines.push(`      pbAttackBonus: ${c.attackBonus},`);
+
+  // Perception, Saves, Senses, Languages, Rarity
+  if (typeof c.perception === 'number') {
+    lines.push(`      perception: ${c.perception},`);
+  }
+  if (typeof c.fortitudeSave === 'number') {
+    lines.push(`      fortitudeSave: ${c.fortitudeSave},`);
+  }
+  if (typeof c.reflexSave === 'number') {
+    lines.push(`      reflexSave: ${c.reflexSave},`);
+  }
+  if (typeof c.willSave === 'number') {
+    lines.push(`      willSave: ${c.willSave},`);
+  }
+  if (c.senses && c.senses.length > 0) {
+    const sensesStr = c.senses.map((s) => `'${esc(s)}'`).join(', ');
+    lines.push(`      senses: [${sensesStr}],`);
+  }
+  if (c.languages && c.languages.length > 0) {
+    const langsStr = c.languages.map((l) => `'${esc(l)}'`).join(', ');
+    lines.push(`      languages: [${langsStr}],`);
+  }
+  if (c.rarity && c.rarity !== 'common') {
+    lines.push(`      rarity: '${c.rarity}',`);
+  }
 
   // Legacy weapon fields (first attack)
   const primary = c.attacks[0];
@@ -213,6 +244,9 @@ function renderCreature(c) {
   lines.push(`    description: '${esc(c.description)}',`);
   const tags = c.tags.map((t) => `'${esc(t)}'`).join(', ');
   lines.push(`    tags: [${tags}],`);
+  if (c.rarity && c.rarity !== 'common') {
+    lines.push(`    rarity: '${c.rarity}',`);
+  }
   lines.push('  },');
 
   return lines.join('\n');
@@ -235,7 +269,7 @@ function renderBestiaryTs(creatures) {
  *   - weaponDisplay: attack name shown in UI
  */
 
-import { Creature, CreatureWeapon, WeaponSlot } from './types';
+import { Creature, CreatureWeapon, WeaponSlot, DamageType } from './types';
 import { AbilityScores } from './bonuses';
 
 // ─── Bestiary Entry ──────────────────────────────────
@@ -247,6 +281,8 @@ export interface BestiaryEntry {
   description: string;
   /** Creature tags for filtering (e.g., 'undead', 'beast', 'humanoid') */
   tags: string[];
+  /** Rarity: common, uncommon, rare, or unique */
+  rarity?: 'common' | 'uncommon' | 'rare' | 'unique';
 }
 
 // ─── Helper ──────────────────────────────────────────
@@ -272,13 +308,14 @@ function stowed(w: CreatureWeapon): WeaponSlot { return { weapon: w, state: 'sto
 /** Helper: create a natural attack (always held, 0 hands) */
 function natural(id: string, display: string, dice: string, bonus: number, dmgType: string, traits?: string[]): WeaponSlot {
   return held({
-    id, display, attackType: 'melee', damageDice: dice, damageBonus: bonus,
-    damageType: dmgType, hands: 0, isNatural: true, traits,
+    id, display, attackType: 'melee' as const, damageDice: dice, damageBonus: bonus,
+    damageType: dmgType as DamageType, hands: 0, isNatural: true, traits,
   });
 }
 
 // ─── Bestiary Data ───────────────────────────────────
 
+// @ts-ignore — union too complex for 1600+ entries; runtime types are correct
 export const BESTIARY: BestiaryEntry[] = [
 `;
 
@@ -320,6 +357,12 @@ export function getCreaturesInRange(minLevel: number, maxLevel: number): Bestiar
 /** Get all creatures matching any of the given tags */
 export function getCreaturesByTag(tags: string[]): BestiaryEntry[] {
   return BESTIARY.filter((b) => b.tags.some((t) => tags.includes(t)));
+}
+
+/** Find a creature by exact name (case-insensitive) */
+export function getCreatureByName(name: string): BestiaryEntry | undefined {
+  const lower = name.toLowerCase();
+  return BESTIARY.find((b) => (b.creature.name ?? '').toLowerCase() === lower);
 }
 
 /** Pick a random creature from a list */

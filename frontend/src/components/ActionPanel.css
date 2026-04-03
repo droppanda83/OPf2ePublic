@@ -2,10 +2,10 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--pf2e-bg-overlay);
   padding: 6px;
-  border-radius: 8px;
-  border-left: 3px solid #666;
+  border-radius: var(--pf2e-radius-lg);
+  border-left: 3px solid var(--pf2e-text-dim);
   overflow: visible;
   max-height: 100%;
   position: relative;
@@ -130,8 +130,8 @@
 }
 
 .pf2e-action-diamonds {
-  color: #d4af37;
-  filter: drop-shadow(0 0 5px rgba(212, 175, 55, 0.5));
+  color: var(--pf2e-gold);
+  filter: drop-shadow(0 0 5px var(--pf2e-gold-glow));
 }
 
 .pf2e-reaction-diamond {
@@ -181,8 +181,8 @@
 
 .menu-toggle:hover {
   background: rgba(80, 80, 80, 0.9);
-  border-color: #d4af37;
-  color: #d4af37;
+  border-color: var(--pf2e-gold);
+  color: var(--pf2e-gold);
 }
 
 .toggle-icon {
@@ -245,9 +245,9 @@
 }
 
 .action-item.selected {
-  background: rgba(212, 175, 55, 0.15);
-  color: #d4af37;
-  border-left: 2px solid #d4af37;
+  background: var(--pf2e-gold-dim);
+  color: var(--pf2e-gold);
+  border-left: 2px solid var(--pf2e-gold);
 }
 
 /* Tabbed Actions */
@@ -282,8 +282,8 @@
 
 .action-tab-btn.active {
   background: rgba(212, 175, 55, 0.2);
-  color: #d4af37;
-  border-color: #d4af37;
+  color: var(--pf2e-gold);
+  border-color: var(--pf2e-gold);
 }
 
 .action-list {
@@ -344,13 +344,13 @@
 
 .action-row:hover:not(:disabled) {
   background: rgba(212, 175, 55, 0.08);
-  border-color: #d4af37;
+  border-color: var(--pf2e-gold);
 }
 
 .action-row.selected {
-  background: rgba(212, 175, 55, 0.15);
-  color: #d4af37;
-  border-left: 2px solid #d4af37;
+  background: var(--pf2e-gold-dim);
+  color: var(--pf2e-gold);
+  border-left: 2px solid var(--pf2e-gold);
 }
 
 .action-row.disabled {
@@ -484,12 +484,12 @@
 
 .loading-indicator {
   padding: 8px;
-  background: rgba(212, 175, 55, 0.1);
-  border: 1px solid #d4af37;
-  border-radius: 4px;
+  background: var(--pf2e-gold-dim);
+  border: 1px solid var(--pf2e-gold);
+  border-radius: var(--pf2e-radius-sm);
   text-align: center;
   font-size: 12px;
-  color: #d4af37;
+  color: var(--pf2e-gold);
   animation: pulse 1.5s infinite;
 }
 
@@ -506,15 +506,15 @@
 
 .end-turn-btn {
   padding: 5px 14px;
-  background: #4CAF50;
+  background: var(--pf2e-success);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--pf2e-radius-sm);
   cursor: pointer;
   font-weight: 600;
   font-size: 11px;
   white-space: nowrap;
-  transition: all 0.2s ease;
+  transition: all var(--pf2e-transition-base);
 }
 
 .end-turn-btn:hover:not(:disabled) {
@@ -625,4 +625,70 @@
   font-size: 12px;
   border-top: 1px solid #444;
   padding-top: 12px;
+}
+
+@media (max-width: 1366px) {
+  .action-panel {
+    padding: 4px;
+    gap: 3px;
+  }
+
+  .action-panel h3,
+  .action-panel h4,
+  .action-row-main,
+  .action-row-meta,
+  .action-section-title,
+  .action-cost,
+  .action-name {
+    display: none;
+  }
+
+  .creature-action-info {
+    gap: 4px;
+  }
+
+  .action-icons-container {
+    padding: 4px 8px;
+    gap: 4px;
+  }
+
+  .action-menu-toggle {
+    padding: 3px 6px;
+    font-size: 9px;
+  }
+
+  .action-item,
+  .spell-item,
+  .action-row {
+    justify-content: center;
+    min-height: 30px;
+    padding: 4px 6px;
+  }
+
+  .action-icon {
+    font-size: 16px;
+  }
+
+  .action-menu {
+    width: 250px;
+    max-width: 250px;
+  }
+
+  .end-turn-btn {
+    padding: 4px 10px;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .action-panel {
+    border-left: 0;
+    border-top: 2px solid var(--pf2e-border);
+    width: 100%;
+  }
+
+  .action-menu {
+    width: 100%;
+    max-width: min(320px, calc(100vw - 24px));
+  }
 }

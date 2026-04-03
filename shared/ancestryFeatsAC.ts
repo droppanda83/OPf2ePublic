@@ -502,7 +502,7 @@ export const ANCESTRY_FEATS_AC: FeatEntry[] = [
     source: 'Aphorite',
     category: 'ancestry',
     level: 5,
-    description: 'You bring structure to combat. When you critically succeed at an attack roll, the target is flat-footed until the start of your next turn.',
+    description: 'You bring structure to combat. When you critically succeed at an attack roll, the target is off-guard until the start of your next turn.',
     implemented: 'full',
     traits: ['Aphorite'],
     actionCost: 'passive',

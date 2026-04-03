@@ -3,7 +3,7 @@
  * All axios calls go through typed methods with consistent error handling.
  */
 import axios, { AxiosError } from 'axios';
-import type { Creature, GameState, GMSession, CampaignPreferences } from '../../../shared/types';
+import type { Creature, GameLog, GameState, GMSession, CampaignPreferences } from '../../../shared/types';
 
 const API_BASE = '/api';
 
@@ -11,12 +11,14 @@ const API_BASE = '/api';
 
 export interface CreateGameParams {
   players: Creature[];
-  creatures: any[];
+  creatures: Creature[];
   mapSize?: number;
   mapTheme?: string;
   mapSubTheme?: string | string[];
   aiModel?: string;
 }
+
+type DetailsMap = Record<string, unknown>;
 
 export interface ActionPayload {
   creatureId: string;
@@ -36,21 +38,21 @@ export interface ActionResponse {
     success: boolean;
     message: string;
     errorCode?: string;
-    details?: any;
+    details?: DetailsMap;
     path?: { x: number; y: number }[];
-    reactionOpportunities?: any[];
-    pendingDamage?: any;
+    reactionOpportunities?: DetailsMap[];
+    pendingDamage?: DetailsMap;
   };
   gameState: GameState;
-  reactionOpportunities?: any[];
+  reactionOpportunities?: DetailsMap[];
 }
 
 export interface AITurnResponse {
   gameState: GameState;
   executionResults: {
     planned?: { action?: { actionId: string; targetId?: string } };
-    result?: { success: boolean; message: string; details?: any };
-    stateSnapshot?: { creatures: any[]; log?: any[] };
+    result?: { success: boolean; message: string; details?: DetailsMap };
+    stateSnapshot?: { creatures: Creature[]; log?: GameLog[] };
   }[];
 }
 
@@ -62,11 +64,11 @@ export interface TokenUsage {
 }
 
 export interface SaveGameResponse {
-  metadata: any;
+  metadata: Record<string, unknown>;
 }
 
 export interface EncounterResponse {
-  creatures: any[];
+  creatures: Creature[];
   description: string;
 }
 
@@ -178,7 +180,7 @@ export async function updateDefaultAIModel(aiModel: string): Promise<{ ok: boole
 }
 
 /** Update AI model preference */
-export async function updateAIModel(gameId: string, aiModel: string): Promise<{ preferences?: any }> {
+export async function updateAIModel(gameId: string, aiModel: string): Promise<{ preferences?: Record<string, unknown> }> {
   const response = await axios.put(`${API_BASE}/game/${gameId}/gm/preferences`, { aiModel });
   return response.data;
 }
@@ -187,6 +189,87 @@ export async function updateAIModel(gameId: string, aiModel: string): Promise<{ 
 export async function fetchTokenUsage(): Promise<TokenUsage> {
   const response = await axios.get(`${API_BASE}/ai/token-usage`);
   return response.data;
+}
+
+// ─── Phase 9: GM Interface API Methods ─────────────────
+
+/** Session Zero: generate campaign framework from player input */
+export async function runSessionZero(gameId: string, input: {
+  campaignName: string;
+  tone: string;
+  themes: string[];
+  pacing: string;
+  encounterBalance: string;
+  lootLevel: string;
+  companionAI: string;
+  narrationVerbosity: string;
+  customNotes: string;
+  ruleCitations: boolean;
+  playerCount: number;
+  averageLevel: number;
+}): Promise<{ gmSession?: GMSession; gameState?: GameState; campaignFramework?: Record<string, unknown> }> {
+  const response = await axios.post(`${API_BASE}/game/${gameId}/gm/session-zero`, input, { timeout: 90000 });
+  return response.data;
+}
+
+/** Fetch world state summary (quests, calendar, etc.) */
+export async function fetchWorldState(gameId: string): Promise<{
+  quests: { id: string; title: string; status: string; description: string }[];
+  calendar: { day: number; season: string; timeOfDay: string };
+}> {
+  const response = await axios.get(`${API_BASE}/game/${gameId}/gm/world-state`);
+  return response.data;
+}
+
+/** Encounter preview: get a proposed encounter before committing */
+export async function previewEncounter(gameId: string, difficulty: string): Promise<{
+  difficulty: string;
+  enemies: { name: string; level: number; hp: number; description?: string }[];
+  mapName?: string;
+  narrativeHook?: string;
+  xpReward?: number;
+}> {
+  const response = await axios.post(`${API_BASE}/game/${gameId}/gm/encounter/preview`, { difficulty }, { timeout: 30000 });
+  return response.data;
+}
+
+/** Downtime: fetch available activities */
+export async function fetchDowntimeActivities(gameId: string): Promise<{
+  activities: { id: string; name: string; icon: string; description: string; daysRequired: number }[];
+}> {
+  const response = await axios.get(`${API_BASE}/game/${gameId}/gm/downtime/activities`);
+  return response.data;
+}
+
+/** Downtime: perform an activity */
+export async function performDowntimeActivity(gameId: string, activityId: string, days: number): Promise<{
+  narrative: string;
+  gmSession?: GMSession;
+  gameState?: GameState;
+}> {
+  const response = await axios.post(`${API_BASE}/game/${gameId}/gm/downtime/perform`, { activityId, days }, { timeout: 45000 });
+  return response.data;
+}
+
+/** Update runtime GM settings (mode toggle, verbosity, citations, loot) */
+export async function updateGMSettings(gameId: string, settings: {
+  companionAI?: string;
+  narrationVerbosity?: string;
+  ruleCitations?: boolean;
+  lootLevel?: string;
+}): Promise<{
+  companionAI?: string;
+  narrationVerbosity?: string;
+  ruleCitations?: boolean;
+  lootLevel?: string;
+}> {
+  const response = await axios.put(`${API_BASE}/game/${gameId}/gm/settings`, settings);
+  return response.data;
+}
+
+/** Subscribe to live game events via SSE */
+export function subscribeToGameEvents(gameId: string): EventSource {
+  return new EventSource(`${API_BASE}/game/${gameId}/events`);
 }
 
 export { extractErrorMessage };

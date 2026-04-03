@@ -1,21 +1,103 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import * as THREE from 'three';
-import type { DiceRollRequest, DieType } from './DiceRollerContext';
+import * as CANNON from 'cannon-es';
+import type { DiceRollRequest } from './DiceRollerContext';
 import './DiceRoller3D.css';
 
-// ─── Constants ──────────────────────────────────────────
+// ─── Physics Configuration ──────────────────────────────
+// Physics engine: cannon-es
+// Chosen for: lightweight pure-JS (~40KB gzip), good rigid body simulation,
+// box/sphere colliders, straightforward Three.js sync. Alternatives considered:
+// - Rapier (WASM, faster but heavier, async init complexity)
+// - Ammo.js (Bullet port, very heavy for dice use case)
 
-const TOTAL_ROLL_DURATION = 3200;  // full physics sim until dice are at rest
-const RESULT_HOLD = 1400;
+const GRAVITY = -9.82 * 4;           // scaled up for snappy dice feel
+const FLOOR_Y = -1.2;
+const WALL_DISTANCE = 4.5;           // invisible wall distance from center
+const SETTLE_VEL = 0.15;             // linear velocity threshold for "settled"
+const SETTLE_ANGVEL = 0.3;           // angular velocity threshold for "settled"
+const SETTLE_FRAMES = 15;            // consecutive calm frames to confirm settled
+const MAX_PHYSICS_MS = 4500;         // hard cap on physics simulation (ms)
+const SLERP_BLEND = 0.12;            // per-frame slerp blend toward target quaternion
+const RESULT_HOLD_MS = 1400;         // how long to show result before dismissing
 
-const DIE_COLORS: Record<string, string> = {
-  d4:  '#c0392b',
-  d6:  '#2980b9',
-  d8:  '#27ae60',
-  d10: '#8e44ad',
-  d12: '#d35400',
-  d20: '#2c3e50',
+const FLOOR_FRICTION = 0.5;
+const FLOOR_RESTITUTION = 0.3;
+const DICE_FRICTION = 0.4;
+const DICE_RESTITUTION = 0.35;
+const DICE_MASS = 1;
+
+// Fallback spring animation duration (used when physics init fails)
+const FALLBACK_ROLL_MS = 2400;
+
+let physicsAvailable = true;          // flipped to false if CANNON init fails
+
+// ─── Dice Themes ────────────────────────────────────────
+
+export type DiceTheme = 'classic' | 'metallic' | 'obsidian' | 'stone';
+
+interface ThemeConfig {
+  label: string;
+  bgColors: Record<string, string>;
+  numberColor: string;
+  metalness: number;
+  roughness: number;
+  emissive?: string;
+  emissiveIntensity?: number;
+  noiseOverlay?: boolean;
+}
+
+export const DICE_THEMES: Record<DiceTheme, ThemeConfig> = {
+  classic: {
+    label: 'Classic',
+    bgColors: { d4: '#c0392b', d6: '#2980b9', d8: '#27ae60', d10: '#8e44ad', d12: '#d35400', d20: '#2c3e50' },
+    numberColor: '#FFFFFF',
+    metalness: 0.2,
+    roughness: 0.5,
+  },
+  metallic: {
+    label: 'Metallic Gold',
+    bgColors: { d4: '#b8860b', d6: '#c0a040', d8: '#d4af37', d10: '#aa8822', d12: '#daa520', d20: '#b8960b' },
+    numberColor: '#1a1000',
+    metalness: 0.75,
+    roughness: 0.18,
+  },
+  obsidian: {
+    label: 'Obsidian',
+    bgColors: { d4: '#1a1a2e', d6: '#16213e', d8: '#0f0f23', d10: '#1a1a2e', d12: '#12122a', d20: '#0d0d1a' },
+    numberColor: '#d4af37',
+    metalness: 0.35,
+    roughness: 0.35,
+    emissive: '#331100',
+    emissiveIntensity: 0.15,
+  },
+  stone: {
+    label: 'Carved Stone',
+    bgColors: { d4: '#6b6b6b', d6: '#7a7a7a', d8: '#5e5e5e', d10: '#696969', d12: '#757575', d20: '#636363' },
+    numberColor: '#e0e0e0',
+    metalness: 0.05,
+    roughness: 0.85,
+    noiseOverlay: true,
+  },
 };
+
+const THEME_STORAGE_KEY = 'pf2e-dice-theme';
+
+export function getStoredTheme(): DiceTheme {
+  try {
+    const v = localStorage.getItem(THEME_STORAGE_KEY);
+    if (v && v in DICE_THEMES) return v as DiceTheme;
+  } catch { /* ignore */ }
+  return 'classic';
+}
+
+export function setStoredTheme(theme: DiceTheme): void {
+  try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* ignore */ }
+}
+
+function getCurrentTheme(): ThemeConfig {
+  return DICE_THEMES[getStoredTheme()];
+}
 
 const RESULT_COLORS: Record<string, string> = {
   'critical-success': '#FFD700',
@@ -26,35 +108,51 @@ const RESULT_COLORS: Record<string, string> = {
 
 // ─── Texture helpers ────────────────────────────────────
 
-/** Canvas texture with a number on a solid coloured background.
- *  @param scale 0-1, shrinks the number (use ~0.7 for triangular faces). */
-function createFaceTexture(value: number, bgColor: string, scale = 1.0): THREE.CanvasTexture {
+function createFaceTexture(value: number, bgColor: string, theme: ThemeConfig, scale = 1.0): THREE.CanvasTexture {
   const size = 256;
   const c = document.createElement('canvas');
   c.width = size; c.height = size;
   const ctx = c.getContext('2d')!;
+
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, size, size);
+
+  if (theme.noiseOverlay) {
+    const imageData = ctx.getImageData(0, 0, size, size);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const noise = (Math.random() - 0.5) * 40;
+      data[i] = Math.max(0, Math.min(255, data[i] + noise));
+      data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise));
+      data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise));
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
   const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size * 0.6);
   g.addColorStop(0, 'rgba(255,255,255,0.18)');
   g.addColorStop(1, 'rgba(0,0,0,0.25)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
+
   const baseFs = value >= 10 ? size * 0.32 : size * 0.42;
   const fs = baseFs * scale;
-  ctx.fillStyle = '#FFF';
+  ctx.fillStyle = theme.numberColor;
   ctx.font = `bold ${fs}px 'Segoe UI', sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.shadowColor = 'rgba(0,0,0,0.6)';
   ctx.shadowBlur = 5;
   ctx.fillText(String(value), size / 2, size / 2);
+
   if (value === 6 || value === 9) {
-    ctx.shadowBlur = 0; ctx.fillStyle = '#FFF';
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = theme.numberColor;
     const uw = size * 0.2 * scale;
     const uh = size * 0.025 * scale;
     ctx.fillRect(size / 2 - uw / 2, size * 0.5 + fs * 0.55, uw, uh);
   }
+
   const tex = new THREE.CanvasTexture(c);
   tex.needsUpdate = true;
   return tex;
@@ -73,8 +171,6 @@ function createRawGeometry(type: string): THREE.BufferGeometry {
     case 'd20': geo = new THREE.IcosahedronGeometry(0.85); break;
     default:    geo = new THREE.IcosahedronGeometry(0.75); break;
   }
-  // Polyhedron geometries are indexed by default — we need non-indexed
-  // so each face gets its own unique vertices for per-face UVs/materials
   if (geo.index) {
     const nonIndexed = geo.toNonIndexed();
     geo.dispose();
@@ -83,13 +179,9 @@ function createRawGeometry(type: string): THREE.BufferGeometry {
   return geo;
 }
 
-/**
- * Create a proper d10 (pentagonal trapezohedron) geometry.
- * 10 kite-shaped faces, each split into 2 triangles = 20 triangles total.
- */
 function createD10Geometry(radius: number): THREE.BufferGeometry {
-  const topAngle = Math.atan(0.5);   // angle above equator for top vertices
-  const botAngle = -Math.atan(0.5);  // angle below equator for bottom vertices
+  const topAngle = Math.atan(0.5);
+  const botAngle = -Math.atan(0.5);
   const topY = Math.sin(topAngle) * radius;
   const topR = Math.cos(topAngle) * radius;
   const botY = Math.sin(botAngle) * radius;
@@ -97,7 +189,6 @@ function createD10Geometry(radius: number): THREE.BufferGeometry {
   const tipTop = radius * 1.1;
   const tipBot = -radius * 1.1;
 
-  // 5 top vertices (rotated 0°) and 5 bottom vertices (rotated 36°)
   const topVerts: THREE.Vector3[] = [];
   const botVerts: THREE.Vector3[] = [];
   for (let i = 0; i < 5; i++) {
@@ -108,33 +199,24 @@ function createD10Geometry(radius: number): THREE.BufferGeometry {
   }
 
   const positions: number[] = [];
-  // 10 kite faces — 5 upper kites and 5 lower kites
-  // Upper kite i: tipTop → topVerts[i] → botVerts[i] → topVerts[(i+1)%5]
   for (let i = 0; i < 5; i++) {
     const t0 = topVerts[i];
     const b0 = botVerts[i];
     const t1 = topVerts[(i + 1) % 5];
-    // Triangle 1: tip → t0 → b0
     positions.push(0, tipTop, 0, t0.x, t0.y, t0.z, b0.x, b0.y, b0.z);
-    // Triangle 2: tip → b0 → t1
     positions.push(0, tipTop, 0, b0.x, b0.y, b0.z, t1.x, t1.y, t1.z);
   }
-  // Lower kite i: botVerts[i] → topVerts[(i+1)%5] → tipBot → topVerts[i] — wait, rethink
-  // Lower kite i: tipBot → botVerts[(i+1)%5] → topVerts[(i+1)%5] → botVerts[i]
   for (let i = 0; i < 5; i++) {
     const b0 = botVerts[i];
     const t1 = topVerts[(i + 1) % 5];
     const b1 = botVerts[(i + 1) % 5];
-    // Triangle 1: tipBot → b0 → t1
     positions.push(0, tipBot, 0, b0.x, b0.y, b0.z, t1.x, t1.y, t1.z);
-    // Triangle 2: tipBot → t1 → b1
     positions.push(0, tipBot, 0, t1.x, t1.y, t1.z, b1.x, b1.y, b1.z);
   }
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.computeVertexNormals();
-  // Generate basic UVs (will be overridden by setupFaceGroups)
   const uvs = new Float32Array(positions.length / 3 * 2);
   for (let i = 0; i < uvs.length; i += 6) {
     uvs[i] = 0.5; uvs[i + 1] = 1.0;
@@ -155,31 +237,14 @@ const FACE_CONFIG: Record<string, { faces: number; trisPerFace: number }> = {
   d20: { faces: 20, trisPerFace: 1 },
 };
 
-// Equilateral triangle UVs centered at (0.5, 0.5)
-// side = 0.86, height = 0.86 × √3/2 ≈ 0.745
-// centroid sits at 1/3 height from base → offsets: +2h/3 top, −h/3 bottom
 const TRI_UV: [number, number][] = [
-  [0.50, 0.997],  // top vertex
-  [0.07, 0.252],  // bottom-left
-  [0.93, 0.252],  // bottom-right
+  [0.50, 0.997], [0.07, 0.252], [0.93, 0.252],
 ];
-
-// Regular pentagon UVs centered at (0.5, 0.5), circumscribed radius = 0.42
-// Vertices at angles 90°, 162°, 234°, 306°, 378° (= 18°)
 const PENT_UV: [number, number][] = [
-  [0.500, 0.920],  // v0 — top (fan apex)
-  [0.900, 0.630],  // v1 — upper-right
-  [0.747, 0.160],  // v2 — lower-right
-  [0.253, 0.160],  // v3 — lower-left
-  [0.100, 0.630],  // v4 — upper-left
+  [0.500, 0.920], [0.900, 0.630], [0.747, 0.160], [0.253, 0.160], [0.100, 0.630],
 ];
-
-// Kite UVs for d10 (2-triangle kite face, number centered)
 const KITE_UV: [number, number][] = [
-  [0.50, 0.95],  // top tip
-  [0.10, 0.50],  // left
-  [0.50, 0.10],  // bottom
-  [0.90, 0.50],  // right
+  [0.50, 0.95], [0.10, 0.50], [0.50, 0.10], [0.90, 0.50],
 ];
 
 /**
@@ -250,12 +315,8 @@ interface DieSetup {
   targetQuaternion: THREE.Quaternion;
 }
 
-// Direction from the die (at origin) toward the camera — result face should point this way
 const CAMERA_DIR = new THREE.Vector3(0, 6, 5).normalize();
 
-/**
- * Compute the outward normal of a face from its first triangle's vertices.
- */
 function faceNormal(geo: THREE.BufferGeometry, baseVert: number): THREE.Vector3 {
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   const a = new THREE.Vector3().fromBufferAttribute(pos, baseVert);
@@ -264,14 +325,26 @@ function faceNormal(geo: THREE.BufferGeometry, baseVert: number): THREE.Vector3 
   const n = new THREE.Vector3().crossVectors(
     b.clone().sub(a), c.clone().sub(a),
   ).normalize();
-  // Ensure it points outward (away from origin)
   const centroid = a.clone().add(b).add(c).divideScalar(3);
   if (n.dot(centroid) < 0) n.negate();
   return n;
 }
 
-function prepareDie(type: string, resultValue: number): DieSetup {
-  const bg = DIE_COLORS[type] || '#555555';
+function makeMaterial(theme: ThemeConfig, map: THREE.CanvasTexture): THREE.MeshStandardMaterial {
+  const opts: THREE.MeshStandardMaterialParameters = {
+    map,
+    metalness: theme.metalness,
+    roughness: theme.roughness,
+  };
+  if (theme.emissive) {
+    opts.emissive = new THREE.Color(theme.emissive);
+    opts.emissiveIntensity = theme.emissiveIntensity ?? 0.1;
+  }
+  return new THREE.MeshStandardMaterial(opts);
+}
+
+function prepareDie(type: string, resultValue: number, theme: ThemeConfig): DieSetup {
+  const bg = theme.bgColors[type] || '#555555';
   const geo = createRawGeometry(type);
 
   // ── d6: BoxGeometry has native 6 material groups ──
@@ -282,27 +355,23 @@ function prepareDie(type: string, resultValue: number): DieSetup {
       new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, -1, 0),
       new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1),
     ];
-    const mats = layout.map(n =>
-      new THREE.MeshStandardMaterial({ map: createFaceTexture(n, bg), metalness: 0.2, roughness: 0.5 })
-    );
+    const mats = layout.map(n => makeMaterial(theme, createFaceTexture(n, bg, theme)));
     const idx = layout.indexOf(resultValue);
     const faceIdx = idx >= 0 ? idx : 2;
     const q = new THREE.Quaternion().setFromUnitVectors(normals[faceIdx], CAMERA_DIR);
     return { geometry: geo, materials: mats, targetQuaternion: q };
   }
 
-  // ── d4 / d8 / d12 / d20: per-face numbered textures via material groups ──
+  // ── Polyhedra with per-face textures ──
   const config = FACE_CONFIG[type];
   if (config) {
     try {
       const grouped = setupFaceGroups(geo, type);
       if (grouped) {
-        // Shrink numbers so they fit inside the inscribed circle of the face
         const textScale = type === 'd20' ? 0.6 : type === 'd12' ? 0.75 : type === 'd10' ? 0.65 : 0.7;
         const mats = Array.from({ length: config.faces }, (_, i) =>
-          new THREE.MeshStandardMaterial({ map: createFaceTexture(i + 1, bg, textScale), metalness: 0.2, roughness: 0.5 })
+          makeMaterial(theme, createFaceTexture(i + 1, bg, theme, textScale))
         );
-        // Orient so the result face points toward the camera
         const resultIdx = Math.min(resultValue - 1, config.faces - 1);
         const baseVert = resultIdx * config.trisPerFace * 3;
         const n = faceNormal(geo, baseVert);
@@ -314,18 +383,10 @@ function prepareDie(type: string, resultValue: number): DieSetup {
     }
   }
 
-  // ── Fallback (if grouping failed): single result-number texture ──
-  const mat = new THREE.MeshStandardMaterial({
-    map: createFaceTexture(resultValue, bg),
-    metalness: 0.2,
-    roughness: 0.5,
-  });
+  // ── Fallback: single result-number texture ──
+  const mat = makeMaterial(theme, createFaceTexture(resultValue, bg, theme));
   const q = new THREE.Quaternion().setFromEuler(
-    new THREE.Euler(
-      Math.random() * Math.PI * 2,
-      Math.random() * Math.PI * 2,
-      Math.random() * Math.PI * 2,
-    ),
+    new THREE.Euler(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2),
   );
   return { geometry: geo, materials: mat, targetQuaternion: q };
 }
@@ -339,19 +400,88 @@ function layoutDice(count: number, index: number): THREE.Vector3 {
   return new THREE.Vector3(index * spacing - totalWidth / 2, 0, 0);
 }
 
-// ─── Animation state ────────────────────────────────────
+// ─── Physics world ──────────────────────────────────────
 
-interface DieMeshState {
+function createPhysicsWorld(): CANNON.World | null {
+  try {
+    const world = new CANNON.World({ gravity: new CANNON.Vec3(0, GRAVITY, 0) });
+
+    const floorMat = new CANNON.Material('floor');
+    const diceMat = new CANNON.Material('dice');
+
+    world.addContactMaterial(new CANNON.ContactMaterial(floorMat, diceMat, {
+      friction: FLOOR_FRICTION,
+      restitution: FLOOR_RESTITUTION,
+    }));
+    world.addContactMaterial(new CANNON.ContactMaterial(diceMat, diceMat, {
+      friction: DICE_FRICTION,
+      restitution: DICE_RESTITUTION,
+    }));
+
+    // Floor plane
+    const floorBody = new CANNON.Body({
+      type: CANNON.Body.STATIC,
+      material: floorMat,
+      shape: new CANNON.Plane(),
+    });
+    floorBody.quaternion.setFromEulerAngles(-Math.PI / 2, 0, 0);
+    floorBody.position.set(0, FLOOR_Y, 0);
+    world.addBody(floorBody);
+
+    // Invisible walls
+    const walls: { pos: [number, number, number]; euler: [number, number, number] }[] = [
+      { pos: [WALL_DISTANCE, 0, 0], euler: [0, -Math.PI / 2, 0] },
+      { pos: [-WALL_DISTANCE, 0, 0], euler: [0, Math.PI / 2, 0] },
+      { pos: [0, 0, WALL_DISTANCE], euler: [Math.PI, 0, 0] },
+      { pos: [0, 0, -WALL_DISTANCE], euler: [0, 0, 0] },
+      { pos: [0, 6, 0], euler: [Math.PI / 2, 0, 0] }, // ceiling
+    ];
+    for (const w of walls) {
+      const wall = new CANNON.Body({
+        type: CANNON.Body.STATIC,
+        material: floorMat,
+        shape: new CANNON.Plane(),
+      });
+      wall.position.set(w.pos[0], w.pos[1], w.pos[2]);
+      wall.quaternion.setFromEulerAngles(w.euler[0], w.euler[1], w.euler[2]);
+      world.addBody(wall);
+    }
+
+    return world;
+  } catch (e) {
+    console.warn('🎲 Physics world creation failed:', e);
+    physicsAvailable = false;
+    return null;
+  }
+}
+
+function createPhysicsBody(type: string, diceMat: CANNON.Material): CANNON.Body {
+  let shape: CANNON.Shape;
+  if (type === 'd6') {
+    shape = new CANNON.Box(new CANNON.Vec3(0.5, 0.5, 0.5));
+  } else {
+    // Sphere approximation for polyhedra — standard approach for dice physics.
+    // Visual mesh rotation is decoupled; physics just drives bounce/collision.
+    const radii: Record<string, number> = {
+      d4: 0.65, d8: 0.6, d10: 0.6, d12: 0.55, d20: 0.6,
+    };
+    shape = new CANNON.Sphere(radii[type] || 0.6);
+  }
+  return new CANNON.Body({ mass: DICE_MASS, shape, material: diceMat });
+}
+
+// ─── Die state ──────────────────────────────────────────
+
+interface DieState {
   mesh: THREE.Mesh;
   targetQuaternion: THREE.Quaternion;
+  landing: THREE.Vector3;
+  body: CANNON.Body | null;
+  // Fallback animation fields
   tumbleAxes: THREE.Vector3[];
   tumbleSpeeds: number[];
   bouncePhase: number;
-  startPos: THREE.Vector3;
-  /** Velocity in units/sec */
   velocity: THREE.Vector3;
-  /** Landing target on the XZ plane */
-  landing: THREE.Vector3;
 }
 
 // ─── Component ──────────────────────────────────────────
@@ -365,7 +495,6 @@ interface Props {
 const DiceRoller3D: React.FC<Props> = ({ request, onComplete, onDismiss }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
-  const startTimeRef = useRef<number>(0);
   const showResultCalledRef = useRef(false);
   const [phase, setPhase] = useState<'rolling' | 'settling' | 'result'>('rolling');
   const [showResult, setShowResult] = useState(false);
@@ -375,7 +504,8 @@ const DiceRoller3D: React.FC<Props> = ({ request, onComplete, onDismiss }) => {
     const container = containerRef.current;
     if (!container) return;
 
-    console.log('🎲 [DiceRoller3D] Mounting —', request.dice.length, 'dice');
+    const theme = getCurrentTheme();
+    console.log('🎲 [DiceRoller3D] Mounting —', request.dice.length, 'dice, theme:', getStoredTheme());
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -401,33 +531,46 @@ const DiceRoller3D: React.FC<Props> = ({ request, onComplete, onDismiss }) => {
     camera.lookAt(0, 0, 0);
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-    const key = new THREE.DirectionalLight(0xffffff, 1.0);
-    key.position.set(3, 8, 4);
-    key.castShadow = true;
-    key.shadow.mapSize.set(512, 512);
-    scene.add(key);
-    const fill = new THREE.PointLight(0x8888ff, 0.4, 20);
-    fill.position.set(-3, 4, -2);
-    scene.add(fill);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    keyLight.position.set(3, 8, 4);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(512, 512);
+    scene.add(keyLight);
+    const fillLight = new THREE.PointLight(0x8888ff, 0.4, 20);
+    fillLight.position.set(-3, 4, -2);
+    scene.add(fillLight);
 
-    const floor = new THREE.Mesh(
+    const floorMesh = new THREE.Mesh(
       new THREE.PlaneGeometry(20, 20),
       new THREE.ShadowMaterial({ opacity: 0.3 }),
     );
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.y = -1.2;
-    floor.receiveShadow = true;
-    scene.add(floor);
+    floorMesh.rotation.x = -Math.PI / 2;
+    floorMesh.position.y = FLOOR_Y;
+    floorMesh.receiveShadow = true;
+    scene.add(floorMesh);
 
     const disposables: THREE.Material[] = [];
     const disposeGeos: THREE.BufferGeometry[] = [];
 
-    // ── Create dice ───────────────────────────────────
-    let diceStates: DieMeshState[];
+    // ── Physics world ──
+    const world = physicsAvailable ? createPhysicsWorld() : null;
+    const usePhysics = world !== null;
+
+    // Get dice material reference for creating bodies
+    let diceMat: CANNON.Material | null = null;
+    if (world) {
+      diceMat = new CANNON.Material('dice');
+    }
+
+    // ── Create dice ──
+    let diceStates: DieState[];
     try {
       diceStates = request.dice.map((die, i) => {
-        const setup = prepareDie(die.type, die.value);
-        const mesh = new THREE.Mesh(setup.geometry, setup.materials as any);
+        const setup = prepareDie(die.type, die.value, theme);
+        const mesh = new THREE.Mesh(
+          setup.geometry,
+          setup.materials as THREE.Material | THREE.Material[],
+        );
         mesh.castShadow = true;
         disposeGeos.push(setup.geometry);
         if (Array.isArray(setup.materials)) {
@@ -436,10 +579,13 @@ const DiceRoller3D: React.FC<Props> = ({ request, onComplete, onDismiss }) => {
           disposables.push(setup.materials);
         }
 
-        // Dice enter from the left and roll across horizontally
-        const sx = -5 - i * 1.0 - Math.random() * 0.8;
-        const sy = 2.0 + Math.random() * 1.5;
-        const sz = -0.5 + Math.random() * 1.0;
+        const landing = layoutDice(request.dice.length, i);
+
+        // Random initial positions above and to the left
+        const sx = -3 - i * 0.8 - Math.random() * 1.5;
+        const sy = 2.5 + Math.random() * 1.5;
+        const sz = (Math.random() - 0.5) * 2.0;
+
         mesh.position.set(sx, sy, sz);
         mesh.rotation.set(
           Math.random() * Math.PI * 2,
@@ -448,35 +594,51 @@ const DiceRoller3D: React.FC<Props> = ({ request, onComplete, onDismiss }) => {
         );
         scene.add(mesh);
 
-        const landing = layoutDice(request.dice.length, i);
+        // Physics body
+        let body: CANNON.Body | null = null;
+        if (world && diceMat) {
+          body = createPhysicsBody(die.type, diceMat);
+          body.position.set(sx, sy, sz);
+          body.quaternion.set(
+            mesh.quaternion.x, mesh.quaternion.y,
+            mesh.quaternion.z, mesh.quaternion.w,
+          );
+          // Initial velocity — throw toward center with scatter
+          const throwVx = (landing.x - sx) * 2.0 + (Math.random() - 0.3) * 3.0;
+          const throwVy = 2.0 + Math.random() * 2.0;
+          const throwVz = (landing.z - sz) * 1.5 + (Math.random() - 0.5) * 2.0;
+          body.velocity.set(throwVx, throwVy, throwVz);
+          // Random angular velocity — this gives realistic tumbling
+          body.angularVelocity.set(
+            (Math.random() - 0.5) * 25,
+            (Math.random() - 0.5) * 25,
+            (Math.random() - 0.5) * 25,
+          );
+          world.addBody(body);
+        }
 
-        // Initial throw velocity — aim generally toward landing with scatter
-        const dx = landing.x - sx;
-        const dz = landing.z - sz;
-        // Overshoot the landing slightly so the spring pulls it back naturally
-        const vx = dx * 1.8 + (Math.random() - 0.3) * 3.0;
-        const vz = dz * 1.5 + (Math.random() - 0.5) * 2.5;
-
-        // Generate well-separated tumble axes for realistic multi-axis spin
-        // Axis 1: predominantly X (forward roll)
-        // Axis 2: predominantly Y (yaw / flat spin)
-        // Axis 3: predominantly Z (sideways tumble)
-        // Random perturbation ensures each die looks unique
+        // Fallback animation fields
         const axes = [
           new THREE.Vector3(1, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.4).normalize(),
           new THREE.Vector3((Math.random() - 0.5) * 0.4, 1, (Math.random() - 0.5) * 0.6).normalize(),
           new THREE.Vector3((Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.3, 1).normalize(),
         ];
+        const dx = landing.x - sx;
+        const dz = landing.z - sz;
 
         return {
           mesh,
           targetQuaternion: setup.targetQuaternion,
+          landing,
+          body,
           tumbleAxes: axes,
           tumbleSpeeds: [14 + Math.random() * 12, 11 + Math.random() * 10, 9 + Math.random() * 8],
           bouncePhase: Math.random() * Math.PI * 2,
-          startPos: new THREE.Vector3(sx, sy, sz),
-          velocity: new THREE.Vector3(vx, 0, vz),
-          landing,
+          velocity: new THREE.Vector3(
+            dx * 1.8 + (Math.random() - 0.3) * 3.0,
+            0,
+            dz * 1.5 + (Math.random() - 0.5) * 2.5,
+          ),
         };
       });
     } catch (e) {
@@ -488,83 +650,154 @@ const DiceRoller3D: React.FC<Props> = ({ request, onComplete, onDismiss }) => {
       return;
     }
 
-    startTimeRef.current = performance.now();
+    const startTime = performance.now();
+    let prevTime = startTime;
+    let settledFrameCount = 0;
+    let settled = false;
+    let settleStartTime = 0;
     setPhase('rolling');
 
-    // ── Animation loop ───────────────────────────────
-    let prevTime = startTimeRef.current;
-
+    // ── Animation loop ──
     const animate = () => {
       try {
         const now = performance.now();
-        const elapsed = now - startTimeRef.current;
-        const dt = Math.min((now - prevTime) / 1000, 0.05); // delta in seconds, capped
+        const elapsed = now - startTime;
+        const dt = Math.min((now - prevTime) / 1000, 0.05);
         prevTime = now;
 
-        if (elapsed < TOTAL_ROLL_DURATION) {
-          // ── Unified physics phase ──
-          const t = elapsed / TOTAL_ROLL_DURATION; // 0 → 1
+        if (usePhysics) {
+          // ═══════════════════════════════════════════
+          // PHYSICS MODE (cannon-es)
+          // ═══════════════════════════════════════════
+          if (!settled) {
+            // Step physics
+            world!.step(1 / 60, dt, 3);
 
-          for (let i = 0; i < diceStates.length; i++) {
-            const ds = diceStates[i];
-
-            // ── Spring force toward landing: starts gentle, ramps up ──
-            // t² ramp means very little pull early, strong pull late
-            const springStrength = 2.0 + t * t * 25.0;
-            const dampening = 3.0 + t * 8.0; // velocity dampening also ramps
-
-            const offsetX = ds.landing.x - ds.mesh.position.x;
-            const offsetZ = ds.landing.z - ds.mesh.position.z;
-
-            // Spring acceleration: F = k * displacement - c * velocity
-            ds.velocity.x += (offsetX * springStrength - ds.velocity.x * dampening) * dt;
-            ds.velocity.z += (offsetZ * springStrength - ds.velocity.z * dampening) * dt;
-
-            // Move by velocity
-            ds.mesh.position.x += ds.velocity.x * dt;
-            ds.mesh.position.z += ds.velocity.z * dt;
-
-            // Bounce height: diminishing bounces, dies out by ~70% through
-            const bounceDecay = Math.pow(Math.max(0, 1 - t * 1.4), 2.5);
-            const bounceCount = 5;
-            const rawBounce = Math.abs(Math.sin(t * Math.PI * bounceCount + ds.bouncePhase));
-            ds.mesh.position.y = rawBounce * bounceDecay * 2.2;
-
-            // Tumble rotation — all 3 axes spin strongly, decaying more gradually
-            // Decay curve: stays strong until ~60%, then fades to 0 by 100%
-            const spinDecay = t < 0.5
-              ? 1.0 - t * 0.3                           // 1.0 → 0.85 (first half: mostly full speed)
-              : Math.pow(Math.max(0, 1 - (t - 0.5) * 2.0), 1.8); // second half: decays to 0
-
-            for (let a = 0; a < ds.tumbleAxes.length; a++) {
-              ds.mesh.rotateOnAxis(ds.tumbleAxes[a], ds.tumbleSpeeds[a] * spinDecay * dt);
+            // Sync Three.js meshes from CANNON bodies
+            for (const ds of diceStates) {
+              if (ds.body) {
+                ds.mesh.position.set(
+                  ds.body.position.x,
+                  ds.body.position.y,
+                  ds.body.position.z,
+                );
+                ds.mesh.quaternion.set(
+                  ds.body.quaternion.x,
+                  ds.body.quaternion.y,
+                  ds.body.quaternion.z,
+                  ds.body.quaternion.w,
+                );
+              }
             }
 
-            // Slerp rotation toward final face — ramps up in the last ~30%
-            const rotBlend = Math.max(0, (t - 0.7) / 0.3); // 0 until t=0.7, then 0→1
-            const rotEase = rotBlend * rotBlend * (3 - 2 * rotBlend); // smoothstep
-            if (rotEase > 0.001) {
-              ds.mesh.quaternion.slerp(ds.targetQuaternion, rotEase * 0.15); // incremental blend each frame
+            // Check if all dice have settled
+            const allCalm = diceStates.every(ds => {
+              if (!ds.body) return true;
+              return ds.body.velocity.length() < SETTLE_VEL
+                  && ds.body.angularVelocity.length() < SETTLE_ANGVEL;
+            });
+
+            if (allCalm) {
+              settledFrameCount++;
+              if (settledFrameCount >= SETTLE_FRAMES) {
+                settled = true;
+                settleStartTime = now;
+                setPhase('settling');
+                // Freeze physics bodies
+                for (const ds of diceStates) {
+                  if (ds.body) {
+                    ds.body.type = CANNON.Body.STATIC;
+                  }
+                }
+              }
+            } else {
+              settledFrameCount = 0;
+            }
+
+            // Hard timeout
+            if (elapsed > MAX_PHYSICS_MS && !settled) {
+              settled = true;
+              settleStartTime = now;
+              setPhase('settling');
+              for (const ds of diceStates) {
+                if (ds.body) ds.body.type = CANNON.Body.STATIC;
+              }
+            }
+
+          } else {
+            // Slerp to target quaternion so the correct face shows
+            const slerpElapsed = now - settleStartTime;
+            const slerpT = Math.min(slerpElapsed / 600, 1.0);
+            const eased = slerpT * slerpT * (3 - 2 * slerpT); // smoothstep
+
+            for (const ds of diceStates) {
+              ds.mesh.quaternion.slerp(ds.targetQuaternion, eased * SLERP_BLEND + eased * 0.85 * Math.min(slerpT * 2, 1));
+              // Gentle floating at rest
+              ds.mesh.position.y += Math.sin(now * 0.002) * 0.001;
+            }
+
+            if (slerpT >= 1.0 && !showResultCalledRef.current) {
+              showResultCalledRef.current = true;
+              setShowResult(true);
+              setPhase('result');
+              console.log('🎲 [DiceRoller3D] Physics animation complete');
+              setTimeout(onComplete, RESULT_HOLD_MS);
             }
           }
-
-          // Phase label update
-          if (t > 0.7) setPhase('settling');
 
         } else {
-          // ── At rest: snap to exact landing (dice are already very close) ──
-          for (let i = 0; i < diceStates.length; i++) {
-            const ds = diceStates[i];
-            ds.mesh.position.set(ds.landing.x, Math.sin(now * 0.002 + i) * 0.04, ds.landing.z);
-            ds.mesh.quaternion.copy(ds.targetQuaternion);
-          }
+          // ═══════════════════════════════════════════
+          // FALLBACK MODE (spring animation)
+          // ═══════════════════════════════════════════
+          if (elapsed < FALLBACK_ROLL_MS) {
+            const t = elapsed / FALLBACK_ROLL_MS;
 
-          if (!showResultCalledRef.current) {
-            showResultCalledRef.current = true;
-            setShowResult(true);
-            setPhase('result');
-            console.log('🎲 [DiceRoller3D] Animation complete');
-            setTimeout(onComplete, RESULT_HOLD);
+            for (const ds of diceStates) {
+              const springStrength = 2.0 + t * t * 25.0;
+              const dampening = 3.0 + t * 8.0;
+              const offsetX = ds.landing.x - ds.mesh.position.x;
+              const offsetZ = ds.landing.z - ds.mesh.position.z;
+
+              ds.velocity.x += (offsetX * springStrength - ds.velocity.x * dampening) * dt;
+              ds.velocity.z += (offsetZ * springStrength - ds.velocity.z * dampening) * dt;
+              ds.mesh.position.x += ds.velocity.x * dt;
+              ds.mesh.position.z += ds.velocity.z * dt;
+
+              const bounceDecay = Math.pow(Math.max(0, 1 - t * 1.4), 2.5);
+              const rawBounce = Math.abs(Math.sin(t * Math.PI * 5 + ds.bouncePhase));
+              ds.mesh.position.y = rawBounce * bounceDecay * 2.2;
+
+              const spinDecay = t < 0.5
+                ? 1.0 - t * 0.3
+                : Math.pow(Math.max(0, 1 - (t - 0.5) * 2.0), 1.8);
+
+              for (let a = 0; a < ds.tumbleAxes.length; a++) {
+                ds.mesh.rotateOnAxis(ds.tumbleAxes[a], ds.tumbleSpeeds[a] * spinDecay * dt);
+              }
+
+              const rotBlend = Math.max(0, (t - 0.7) / 0.3);
+              const rotEase = rotBlend * rotBlend * (3 - 2 * rotBlend);
+              if (rotEase > 0.001) {
+                ds.mesh.quaternion.slerp(ds.targetQuaternion, rotEase * 0.15);
+              }
+            }
+            if (elapsed / FALLBACK_ROLL_MS > 0.7) setPhase('settling');
+          } else {
+            for (const ds of diceStates) {
+              ds.mesh.position.set(
+                ds.landing.x,
+                Math.sin(now * 0.002) * 0.04,
+                ds.landing.z,
+              );
+              ds.mesh.quaternion.copy(ds.targetQuaternion);
+            }
+            if (!showResultCalledRef.current) {
+              showResultCalledRef.current = true;
+              setShowResult(true);
+              setPhase('result');
+              console.log('🎲 [DiceRoller3D] Fallback animation complete');
+              setTimeout(onComplete, RESULT_HOLD_MS);
+            }
           }
         }
 
@@ -579,18 +812,17 @@ const DiceRoller3D: React.FC<Props> = ({ request, onComplete, onDismiss }) => {
 
     return () => {
       cancelAnimationFrame(animFrameRef.current);
-      disposables.forEach(m => { try { m.dispose(); } catch (_) {} });
-      disposeGeos.forEach(g => { try { g.dispose(); } catch (_) {} });
-      try { renderer.dispose(); } catch (_) {}
+      disposables.forEach(m => { try { m.dispose(); } catch (_) { /* noop */ } });
+      disposeGeos.forEach(g => { try { g.dispose(); } catch (_) { /* noop */ } });
+      try { renderer.dispose(); } catch (_) { /* noop */ }
       if (container.contains(renderer.domElement)) {
-        try { container.removeChild(renderer.domElement); } catch (_) {}
+        try { container.removeChild(renderer.domElement); } catch (_) { /* noop */ }
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Build result display ───────────────────────────────
-
+  // ── Build result display ──
   const resultDisplay = useMemo(() => {
     if (!showResult) return null;
     const diceStr = request.dice.map((d) => `${d.value}`).join(' + ');
@@ -599,8 +831,8 @@ const DiceRoller3D: React.FC<Props> = ({ request, onComplete, onDismiss }) => {
     return { diceStr, modStr, totalStr };
   }, [showResult, request]);
 
+  const theme = getCurrentTheme();
   const resultColor = request.result ? RESULT_COLORS[request.result] : '#FFD700';
-
   const resultLabel = request.result
     ? request.result.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
     : '';
@@ -621,7 +853,11 @@ const DiceRoller3D: React.FC<Props> = ({ request, onComplete, onDismiss }) => {
 
         <div className="dice-overlay__notation">
           {request.dice.map((d, i) => (
-            <span key={i} className="dice-overlay__die-badge" style={{ background: DIE_COLORS[d.type] || '#555' }}>
+            <span
+              key={i}
+              className="dice-overlay__die-badge"
+              style={{ background: theme.bgColors[d.type] || '#555' }}
+            >
               {d.type}
             </span>
           ))}

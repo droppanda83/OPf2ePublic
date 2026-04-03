@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Oracle Class Features & Feats — PF2e Remastered (Player Core 2)
  * Source: https://2e.aonprd.com/Classes.aspx?ID=14
  *
@@ -610,7 +610,7 @@ export const ORACLE_CLASS_FEATS: FeatEntry[] = [
     traits: ['Cleric', 'Concentrate', 'Oracle', 'Sorcerer', 'Uncommon', 'Witch', 'Wizard', 'Spellshape'],
     actionCost: 1,
     prerequisites: ['Access: Knights of Lastwall'],
-    mechanics: 'Spellshape. Single-target damage spell gains splash damage = spell level to adjacent creatures (same damage type).',
+    mechanics: 'Spellshape. Single-target damage spell gains splash damage = spell rank to adjacent creatures (same damage type).',
   },
   {
     id: 'oracle-gifted-power',
@@ -721,7 +721,7 @@ export const ORACLE_CLASS_FEATS: FeatEntry[] = [
     traits: ['Cleric', 'Concentrate', 'Oracle', 'Sorcerer', 'Uncommon', 'Spellshape'],
     actionCost: 1,
     prerequisites: ['ability to cast focus spells', 'divine spells', 'Access: Knights of Lastwall'],
-    mechanics: 'Spellshape. Expend 1 Focus Point when casting single-target spell vs undead. +vitality damage = focus spell level. Doubled on crit.',
+    mechanics: 'Spellshape. Expend 1 Focus Point when casting single-target spell vs undead. +vitality damage = focus spell rank. Doubled on crit.',
   },
   {
     id: 'oracle-on-borrowed-time',

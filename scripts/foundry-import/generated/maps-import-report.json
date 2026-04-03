@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-19T23:19:13.995Z",
+  "generatedAt": "2026-03-30T09:45:32.271Z",
   "sourceFile": "scripts/foundry-import/source/maps.source.json",
   "outputFile": "shared/foundryEncounterMaps.ts",
   "mapCount": 14,

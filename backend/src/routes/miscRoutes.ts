@@ -9,10 +9,57 @@ import fs from 'fs';
 import { AppContext } from '../appContext';
 import { getCreatureXP, XP_PER_LEVEL } from '../routeHelpers';
 import type { Creature } from '../routeHelpers';
-import type { GMChatMessage } from 'pf2e-shared';
+import type { GMChatMessage, GameEventStreamMessage } from 'pf2e-shared';
 
 export function createMiscRoutes(ctx: AppContext): Router {
   const router = Router();
+
+  // ─── SSE: Live game events ─────────────────────────────────
+  router.get('/api/game/:gameId/events', (req: Request, res: Response) => {
+    const { gameId } = req.params;
+    const gameState = ctx.gameEngine.getGameState(gameId);
+    if (!gameState) {
+      res.status(404).json({ error: 'Game not found' });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    const writeMessage = (payload: GameEventStreamMessage) => {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    writeMessage({
+      kind: 'connected',
+      gameId,
+      timestamp: Date.now(),
+      message: 'Event stream connected',
+    });
+
+    const unsubscribe = ctx.eventBus.onAny((event) => {
+      if (event.gameId !== gameId) return;
+      writeMessage({
+        kind: 'game-event',
+        gameId,
+        timestamp: Date.now(),
+        event,
+      });
+    });
+
+    const heartbeat = setInterval(() => {
+      res.write(': keepalive\n\n');
+    }, 25000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+      res.end();
+    });
+  });
 
   // ─── Health check ──────────────────────────────────────────
   router.get('/health', (_req: Request, res: Response) => {
@@ -246,7 +293,7 @@ export function createMiscRoutes(ctx: AppContext): Router {
 
   router.get('/api/bugs', (req: Request, res: Response) => {
     try {
-      const filters: any = {};
+      const filters: Record<string, string> = {};
       if (req.query.status) filters.status = req.query.status as string;
       if (req.query.category) filters.category = req.query.category as string;
       if (req.query.severity) filters.severity = req.query.severity as string;

@@ -4,11 +4,11 @@
  */
 
 .character-tracker {
-  background: linear-gradient(135deg, #1a1210 0%, #140e0b 100%);
+  background: linear-gradient(135deg, var(--pf2e-bg-base) 0%, #140e0b 100%);
   color: #ddd;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  border: 2px solid #d4af37;
-  border-radius: 8px;
+  font-family: var(--pf2e-font-body);
+  border: 2px solid var(--pf2e-gold);
+  border-radius: var(--pf2e-radius-lg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -33,12 +33,12 @@
 .tracker-header {
   padding: 12px 15px;
   background: rgba(0, 0, 0, 0.3);
-  border-bottom: 1px solid #d4af37;
+  border-bottom: 1px solid var(--pf2e-gold);
 }
 
 .tracker-header h3 {
   margin: 0;
-  color: #d4af37;
+  color: var(--pf2e-gold);
   font-size: 16px;
 }
 
@@ -61,12 +61,12 @@
 }
 
 .character-list::-webkit-scrollbar-thumb {
-  background: #d4af37;
+  background: var(--pf2e-gold);
   border-radius: 4px;
 }
 
 .character-list::-webkit-scrollbar-thumb:hover {
-  background: #e6c547;
+  background: var(--pf2e-gold-light);
 }
 
 /* ─── CHARACTER CARD ─── */
@@ -80,15 +80,15 @@
 }
 
 .character-card:hover {
-  background: rgba(0, 0, 0, 0.3);
-  border-color: #d4af37;
+  background: var(--pf2e-bg-hover);
+  border-color: var(--pf2e-gold);
   box-shadow: 0 0 8px rgba(212, 175, 55, 0.2);
 }
 
 .character-card.active {
-  background: rgba(212, 175, 55, 0.15);
-  border-color: #d4af37;
-  box-shadow: 0 0 10px rgba(212, 175, 55, 0.3);
+  background: var(--pf2e-gold-dim);
+  border-color: var(--pf2e-gold);
+  box-shadow: var(--pf2e-shadow-gold);
 }
 
 /* ─── CHARACTER HEADER ─── */
@@ -107,7 +107,7 @@
 
 .character-name h4 {
   margin: 0;
-  color: #d4af37;
+  color: var(--pf2e-gold);
   font-size: 14px;
   font-weight: 600;
 }
@@ -186,7 +186,7 @@
 }
 
 .ability-score {
-  color: #d4af37;
+  color: var(--pf2e-gold);
   font-weight: bold;
   font-size: 13px;
 }

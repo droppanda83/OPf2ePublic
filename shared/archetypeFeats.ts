@@ -421,12 +421,12 @@ export const CHAMPION_DEDICATION_FEATS: FeatEntry[] = [
     prerequisites: ['Strength 14', 'Charisma 14'],
     mechanics: 'Grants trained in Religion (or free skill), trained in light/medium/heavy armor, trained in champion class DC. Choose deity and cause. Bound by edicts/anathema. Dedication-lock enforced by validateDedicationTaking().',
     subChoices: { label: 'Choose a cause', options: [
-      { id: 'paladin', name: 'Paladin (Lawful Good)', description: 'Retributive Strike reaction' },
-      { id: 'redeemer', name: 'Redeemer (Neutral Good)', description: 'Glimpse of Redemption reaction' },
-      { id: 'liberator', name: 'Liberator (Chaotic Good)', description: 'Liberating Step reaction' },
-      { id: 'desecrator', name: 'Desecrator (Lawful Evil)', description: 'Selfish Shield reaction' },
-      { id: 'tyrant', name: 'Tyrant (Lawful Evil)', description: 'Iron Command reaction' },
-      { id: 'antipaladin', name: 'Antipaladin (Chaotic Evil)', description: 'Destructive Vengeance reaction' },
+      { id: 'paladin', name: 'Paladin (Holy)', description: 'Retributive Strike reaction' },
+      { id: 'redeemer', name: 'Redeemer (Holy)', description: 'Glimpse of Redemption reaction' },
+      { id: 'liberator', name: 'Liberator (Holy)', description: 'Liberating Step reaction' },
+      { id: 'desecrator', name: 'Desecrator (Unholy)', description: 'Selfish Shield reaction' },
+      { id: 'tyrant', name: 'Tyrant (Unholy)', description: 'Iron Command reaction' },
+      { id: 'antipaladin', name: 'Antipaladin (Unholy)', description: 'Destructive Vengeance reaction' },
     ] },
   },
   {

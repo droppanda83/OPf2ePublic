@@ -2,10 +2,37 @@
 // combatActions.ts  Combat resolution logic extracted from RulesEngine
 // 
 
-import { Creature, GameState, AttackRoll, Position, CreatureWeapon, calculateAC, getAttackResult, getDegreeOfSuccess, calculateAttackBonus, calculateSaveBonus, getConditionModifiers, resolveStacking, rollD20, getWeapon, rollDamageFormula, calculateFinalDamage, applyDamageToShield } from 'pf2e-shared';
+import { Creature, GameState, AttackRoll, Position, CreatureWeapon, ActionResult, calculateAC, getAttackResult, getDegreeOfSuccess, calculateAttackBonus, calculateSaveBonus, getConditionModifiers, resolveStacking, rollD20, getWeapon, rollDamageFormula, calculateFinalDamage, applyDamageToShield } from 'pf2e-shared';
 import { hasTrait, getTraitParam, calculateRangeIncrementPenalty, initDying } from './helpers';
 import { debugLog } from './logger';
 import { getEffectiveReach, threatensPosition, fireReactionTrigger } from './subsystems';
+
+type SpendHeroPointsResult = {
+  success: boolean;
+  newRoll?: { d20: number; total: number };
+  message?: string;
+};
+
+type StrikeResolutionResult = ActionResult & {
+  hit?: boolean;
+  damage?: number;
+  targetHealth?: number;
+  targetDying?: boolean;
+};
+
+interface DamageRollResult {
+  dice: { times: number; sides: number; results: number[]; total: number };
+  weaponName: string;
+  formula: string;
+  abilityMod: number;
+  traitBonuses?: number;
+  weaponSpecializationBonus?: number;
+  arcaneCascadeBonus?: number;
+  sneakAttackDamage?: number;
+  isCriticalHit: boolean;
+  total: number;
+  appliedDamage: number;
+}
 
 /**
  * Standalone creature feat check for use inside rollDamage (which has no ctx).
@@ -13,7 +40,7 @@ import { getEffectiveReach, threatensPosition, fireReactionTrigger } from './sub
  */
 function hasNamedFeatOnCreature(creature: Creature, featName: string): boolean {
   const lower = featName.toLowerCase().trim();
-  const fromFeats = creature.feats?.some((f: any) => {
+  const fromFeats = creature.feats?.some((f) => {
     const n = typeof f === 'string' ? f : f?.name;
     return typeof n === 'string' && n.toLowerCase().trim() === lower;
   });
@@ -29,12 +56,12 @@ function hasNamedFeatOnCreature(creature: Creature, featName: string): boolean {
 
 export interface CombatActionContext {
   hasFeat: (creature: Creature, featName: string) => boolean;
-  spendHeroPoints: (creature: Creature, heroPointsSpent: number, currentRoll: { d20: number; bonus: number; total: number; result: string }) => any;
+  spendHeroPoints: (creature: Creature, heroPointsSpent: number, currentRoll: { d20: number; bonus: number; total: number; result: string }) => SpendHeroPointsResult;
   calculateDistance: (pos1: Position, pos2: Position) => number;
   getPerceptionDC: (creature: Creature) => number;
   getSkillBonus: (creature: Creature, skillName: string) => number;
   resolveSelectedWeapon: (actor: Creature, weaponId?: string) => CreatureWeapon | null;
-  resolveStrike: (actor: Creature, gameState: GameState, targetId?: string) => any;
+  resolveStrike: (actor: Creature, gameState: GameState, targetId?: string) => StrikeResolutionResult;
 }
 
 
@@ -81,7 +108,7 @@ function canDealSneakAttack(attacker: Creature, selectedWeapon: CreatureWeapon |
 
   // Check if character has Sneak Attack ability (Rogue class or Sneak Attacker archetype feat)
   const isRogue = attacker.characterClass === 'Rogue';
-  const hasSneakAttackerArchetype = attacker.feats?.some((f: any) => {
+  const hasSneakAttackerArchetype = attacker.feats?.some((f) => {
     const id = typeof f === 'string' ? f : f?.id;
     const name = typeof f === 'string' ? f : f?.name;
     return (typeof id === 'string' && id.toLowerCase().trim() === 'sneak-attacker') ||
@@ -140,7 +167,7 @@ function canDealSneakAttack(attacker: Creature, selectedWeapon: CreatureWeapon |
  */
 function rollSneakAttack(attacker: Creature): { dice: number; damage: number } {
   // Check if this is archetype sneak attack (1d4 flat) or full class sneak attack
-  const hasSneakAttackerArchetype = attacker.feats?.some((f: any) => {
+  const hasSneakAttackerArchetype = attacker.feats?.some((f) => {
     const id = typeof f === 'string' ? f : f?.id;
     const name = typeof f === 'string' ? f : f?.name;
     return (typeof id === 'string' && id.toLowerCase().trim() === 'sneak-attacker') ||
@@ -169,7 +196,7 @@ function rollSneakAttack(attacker: Creature): { dice: number; damage: number } {
   let totalDamage = roll.total;
 
   // Sly Striker: Add ability modifier to sneak attack damage
-  const hasSlyStriker = attacker.feats?.some((f: any) => {
+  const hasSlyStriker = attacker.feats?.some((f) => {
     const name = typeof f === 'string' ? f : f?.name;
     return typeof name === 'string' && name.toLowerCase().trim() === 'sly striker';
   }) || attacker.specials?.some((s: string) => s.toLowerCase().trim() === 'sly striker');
@@ -191,7 +218,7 @@ export function calculateEffectivePrecisionResistance(attacker: Creature, target
     return originalResistance;
   }
 
-  const hasPowerfulSneak = attacker.feats?.some((f: any) => {
+  const hasPowerfulSneak = attacker.feats?.some((f) => {
     const name = typeof f === 'string' ? f : f?.name;
     return typeof name === 'string' && name.toLowerCase().includes('powerful sneak');
   }) || attacker.specials?.some((s: string) => s.toLowerCase().includes('powerful sneak'));
@@ -276,7 +303,7 @@ export function isTargetFlanked(attacker: Creature, target: Creature, gameState:
   // Prefer weaponInventory (held weapon), fall back to legacy equippedWeapon
   const attackerHeldWeapon = attacker.weaponInventory?.find(ws => ws.state === 'held')?.weapon;
   const attackerWeapon = attackerHeldWeapon ?? (attacker.equippedWeapon ? getWeapon(attacker.equippedWeapon) : null);
-  const attackerWeaponType = attackerWeapon ? ('attackType' in attackerWeapon ? attackerWeapon.attackType : (attackerWeapon as any).type) : null;
+  const attackerWeaponType = attackerWeapon ? ('attackType' in attackerWeapon ? attackerWeapon.attackType : attackerWeapon.type) : null;
   if (attackerWeaponType && attackerWeaponType !== 'melee') return false;
 
   const allies = gameState.creatures.filter(
@@ -295,7 +322,7 @@ export function isTargetFlanked(attacker: Creature, target: Creature, gameState:
       // Prefer weaponInventory (held weapon), fall back to legacy equippedWeapon
       const allyHeldWeapon = c.weaponInventory?.find(ws => ws.state === 'held')?.weapon;
       const allyWeapon = allyHeldWeapon ?? (c.equippedWeapon ? getWeapon(c.equippedWeapon) : null);
-      const allyWeaponType = allyWeapon ? ('attackType' in allyWeapon ? allyWeapon.attackType : (allyWeapon as any).type) : null;
+      const allyWeaponType = allyWeapon ? ('attackType' in allyWeapon ? allyWeapon.attackType : allyWeapon.type) : null;
       if (!allyWeapon || (allyWeaponType !== 'melee')) return false;
       
       // Must be adjacent to target (threatening) — accounts for size/reach/feats
@@ -547,7 +574,7 @@ export function rollAttack(ctx: CombatActionContext,
         message: `Target is beyond maximum range! (${Math.round(distance * 5)}ft away, max 6 range increments = ${rangeIncrementSq * 5 * 6}ft)`,
         details: { distance: Math.round(distance * 5), maxRange: rangeIncrementSq * 5 * 6 },
         errorCode: 'OUT_OF_RANGE',
-      } as any;
+      } as unknown as AttackRoll;
     }
     
     rangeModifier = incrementPenalty;
@@ -610,7 +637,7 @@ export function rollAttack(ctx: CombatActionContext,
         result: 'critical-failure',
         marginOfSuccess: -999,
         heroPointError: spendResult.message,
-      } as any;
+      } as unknown as AttackRoll;
     }
 
     finalD20 = spendResult.newRoll.d20;
@@ -646,7 +673,7 @@ export function rollAttack(ctx: CombatActionContext,
   };
 }
 
-export function rollDamage(attacker: Creature, isCriticalHit: boolean = false, selectedWeapon?: CreatureWeapon | null, targetIsOffGuard: boolean = false): any {
+export function rollDamage(attacker: Creature, isCriticalHit: boolean = false, selectedWeapon?: CreatureWeapon | null, targetIsOffGuard: boolean = false): DamageRollResult {
   // If a specific weapon from inventory is selected, use its stats
   if (selectedWeapon) {
     // PHASE 1.5 FIX: Apply striking runes from creature bonuses
@@ -933,7 +960,7 @@ export function resolveAttackAction(ctx: CombatActionContext,
   weaponId?: string,
   options: { isVicious: boolean } = { isVicious: false },
   heroPointsSpent?: number
-): any {
+): ActionResult {
   const actionName = options.isVicious ? 'Vicious Swing' : 'Strike';
 
   if (!targetId) {
@@ -1208,7 +1235,7 @@ export function resolveAttackAction(ctx: CombatActionContext,
 
   // Apply damage resistances using weapon's damage type
   // PASSIVE ROGUE FEAT: Impossible Striker â€” ignore ALL resistances vs off-guard targets
-  const weaponDamageType: any = selectedWeapon?.damageType
+  const weaponDamageType = selectedWeapon?.damageType
     ?? actor.weaponDamageType
     ?? (actor.equippedWeapon ? getWeapon(actor.equippedWeapon)?.damageType : null)
     ?? 'bludgeoning';
@@ -1526,7 +1553,7 @@ export function resolveAttackAction(ctx: CombatActionContext,
  * Critical Failure: dying increased by 2
  * Dying 4+ = dead
  */
-export function rollDeathSave(ctx: CombatActionContext, creature: Creature, heroPointsSpent?: number): any {
+export function rollDeathSave(ctx: CombatActionContext, creature: Creature, heroPointsSpent?: number): ActionResult {
   // Check if recovery check already made this turn
   if (creature.deathSaveMadeThisTurn) {
     return {
@@ -1677,7 +1704,7 @@ export function rollDeathSave(ctx: CombatActionContext, creature: Creature, hero
 // Shield Actions
 // 
 
-export function resolveRaiseShield(actor: Creature): any {
+export function resolveRaiseShield(actor: Creature): ActionResult {
   // Check if actor has an equipped shield
   if (!actor.equippedShield) {
     return {
@@ -1706,7 +1733,7 @@ export function resolveRaiseShield(actor: Creature): any {
   };
 }
 
-export function resolveLowerShield(actor: Creature): any {
+export function resolveLowerShield(actor: Creature): ActionResult {
   // Check if shield is raised
   if (!actor.shieldRaised) {
     return {
@@ -1729,7 +1756,7 @@ export function resolveLowerShield(actor: Creature): any {
 /**
  * Shield Block - Use a reaction to reduce incoming damage with a raised shield
  */
-export function resolveShieldBlock(actor: Creature): any {
+export function resolveShieldBlock(actor: Creature): ActionResult {
   if (actor.reactionUsed) {
     return { success: false, message: `${actor.name} has already used their reaction this round!` , errorCode: 'REACTION_USED' };
   }
@@ -1794,7 +1821,7 @@ export function resolveShieldBlock(actor: Creature): any {
 /**
  * Resolve pending damage without Shield Block
  */
-export function resolvePendingDamage(actor: Creature): any {
+export function resolvePendingDamage(actor: Creature): ActionResult {
   const pending = actor.conditions?.find((c) => c.name === 'pending-damage' && typeof c.value === 'number');
   if (!pending || typeof pending.value !== 'number') {
     return { success: false, message: `${actor.name} has no pending damage to resolve.` , errorCode: 'VALIDATION_FAILED' };
@@ -1829,10 +1856,10 @@ export function resolvePendingDamage(actor: Creature): any {
  * PASSIVE FIGHTER FEAT: Combat Reflexes â€” gain one extra reaction per round for Reactive Strike only
  * PASSIVE FIGHTER FEAT: Boundless Reprisals â€” gain a reaction at the start of each enemy's turn
  */
-export function resolveReactiveStrike(ctx: CombatActionContext, actor: Creature, gameState: GameState, targetId?: string): any {
+export function resolveReactiveStrike(ctx: CombatActionContext, actor: Creature, gameState: GameState, targetId?: string): ActionResult {
   // Combat Reflexes: Allow a second Reactive Strike if normal reaction is used
   const hasCombatReflexes = ctx.hasFeat(actor, 'Combat Reflexes');
-  const extraRSAvailable = hasCombatReflexes && !(actor as any).combatReflexesUsed;
+  const extraRSAvailable = hasCombatReflexes && !actor.combatReflexesUsed;
   
   if (actor.reactionUsed && !extraRSAvailable) {
     return { success: false, message: `${actor.name} has already used their reaction this round!` , errorCode: 'REACTION_USED' };
@@ -1846,7 +1873,7 @@ export function resolveReactiveStrike(ctx: CombatActionContext, actor: Creature,
 
   const specials = actor.specials;
   const specialsMatch = Array.isArray(specials)
-    ? specials.some((entry: any) => typeof entry === 'string' && entry.toLowerCase().includes('reactive strike'))
+    ? specials.some((entry) => typeof entry === 'string' && entry.toLowerCase().includes('reactive strike'))
     : false;
 
   const hasReactiveStrike = featMatch || specialsMatch;
@@ -1860,7 +1887,7 @@ export function resolveReactiveStrike(ctx: CombatActionContext, actor: Creature,
 
   // Mark reaction as used; if already used and Combat Reflexes, use the extra
   if (actor.reactionUsed && extraRSAvailable) {
-    (actor as any).combatReflexesUsed = true;
+    actor.combatReflexesUsed = true;
   } else {
     actor.reactionUsed = true;
   }
@@ -1901,7 +1928,7 @@ export function resolveReactiveStrike(ctx: CombatActionContext, actor: Creature,
 // Take Cover
 // 
 
-export function resolveTakeCover(actor: Creature): any {
+export function resolveTakeCover(actor: Creature): ActionResult {
   const isProne = actor.conditions?.some((c) => c.name === 'prone') || false;
 
   if (isProne) {
@@ -1965,7 +1992,7 @@ export function resolveFeint(ctx: CombatActionContext,
   gameState: GameState,
   targetId?: string,
   heroPointsSpent?: number
-): any {
+): ActionResult {
   if (!targetId) {
     return { success: false, message: 'No target specified for Feint!' , errorCode: 'NO_TARGET' };
   }
@@ -2219,7 +2246,7 @@ export function rollSave(ctx: CombatActionContext,
 // â”€â”€â”€ Sickened Condition: Retching Action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // PF2e Remaster: Spend 1 action to make a Fortitude save against the effect DC
 // Success: Reduce sickened by 1. Crit success: Reduce by 2
-export function resolveRetching(ctx: CombatActionContext, actor: Creature, heroPointsSpent?: number): any {
+export function resolveRetching(ctx: CombatActionContext, actor: Creature, heroPointsSpent?: number): ActionResult {
   // Check if actor is Sickened
   const sickenedCondition = actor.conditions?.find(c => c.name === 'sickened');
   if (!sickenedCondition) {

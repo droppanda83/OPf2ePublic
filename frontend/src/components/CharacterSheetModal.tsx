@@ -3,6 +3,9 @@ import type { Creature } from '../../../shared/types';
 import { XP_PER_LEVEL } from '../../../shared/types';
 import { SPELL_CATALOG } from '../../../shared/spells';
 import { ARMOR_CATALOG } from '../../../shared/armor';
+import { WEAPON_PROPERTY_RUNES } from '../../../shared/runes';
+import { FEAT_CATALOG_MAP } from '../../../shared/feats';
+import { CharacterInventory } from './CharacterInventory';
 import './CharacterSheetModal.css';
 
 interface CharacterSheetModalProps {
@@ -15,7 +18,7 @@ interface CharacterSheetModalProps {
   onLevelUp?: (creature: Creature) => void;
 }
 
-type TabType = 'main' | 'skills' | 'spells' | 'combat' | 'feats';
+type TabType = 'main' | 'skills' | 'spells' | 'combat' | 'feats' | 'inventory';
 
 export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
   creature,
@@ -26,21 +29,25 @@ export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('main');
   const [editMode, setEditMode] = useState(false);
+  const [featSearch, setFeatSearch] = useState('');
+  const [featTypeFilter, setFeatTypeFilter] = useState<string>('All');
+  const [expandedFeats, setExpandedFeats] = useState<Set<string>>(new Set());
   const tokenInputRef = useRef<HTMLInputElement>(null);
   const portraitInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen || !creature) return null;
 
-  // ─── Edit helpers ────────────────────────────────
+  const isPlayerCharacter = creature.type === 'player';
+  const canEditImages = isPlayerCharacter && !!onCreatureUpdate;
   const canEdit = isPlayerCharacter && !!onCreatureUpdate;
+  const displayedClassDc = creature.classDC ?? creature.spellDC;
+
+  // ─── Edit helpers ────────────────────────────────
   const update = (patch: Partial<Creature>) => {
     if (onCreatureUpdate) onCreatureUpdate({ ...creature, ...patch });
   };
 
   // ─── Image Upload Handlers ───────────────────────
-  const isPlayerCharacter = creature.type === 'player';
-  const canEditImages = isPlayerCharacter && !!onCreatureUpdate;
-
   const handleImageUpload = (file: File, field: 'tokenImageUrl' | 'portraitImageUrl', maxSizeMB: number) => {
     if (file.size > maxSizeMB * 1024 * 1024) {
       alert(`Image must be under ${maxSizeMB}MB`);
@@ -286,6 +293,11 @@ export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
                   {creature.characterClass && ` • ${creature.characterClass}`} • Level {creature.level}
                 </p>
               )}
+              {creature.background && (
+                <p className="sheet-subtitle" style={{ fontSize: '12px', color: '#b8a898', marginTop: '2px' }}>
+                  Background: {creature.background}
+                </p>
+              )}
               {(creature.pronouns || creature.age || creature.height || creature.weight) && (
                 <p className="sheet-subtitle" style={{ fontSize: '12px', color: '#999', marginTop: '2px' }}>
                   {[creature.pronouns, creature.age ? `Age ${creature.age}` : '', creature.height, creature.weight].filter(Boolean).join(' · ')}
@@ -332,6 +344,14 @@ export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
               Feats
             </button>
           )}
+          {creature.type === 'player' && (
+            <button
+              className={`tab-button ${activeTab === 'inventory' ? 'active' : ''}`}
+              onClick={() => setActiveTab('inventory')}
+            >
+              Inventory
+            </button>
+          )}
         </div>
 
         {/* Tab Content */}
@@ -350,10 +370,48 @@ export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
                   <div className="stat-value">{creature.currentHealth}/{creature.maxHealth}</div>
                 </div>
                 <div className="stat-box">
+                  <div className="stat-label">Speed</div>
+                  <div className="stat-value">{creature.speed} ft</div>
+                </div>
+                <div className="stat-box">
+                  <div className="stat-label">Perception</div>
+                  <div className="stat-value">{formatBonus(creature.perception ?? creature.skills?.find(s => s.name === 'Perception')?.bonus ?? 0)}</div>
+                </div>
+                <div className="stat-box">
+                  <div className="stat-label">Class DC</div>
+                  <div className="stat-value">{displayedClassDc ?? '—'}</div>
+                </div>
+                <div className="stat-box">
                   <div className="stat-label">Initiative</div>
                   <div className="stat-value">{formatBonus(creature.initiativeBonus || 0)}</div>
                 </div>
+                {creature.heroPoints != null && (
+                  <div className="stat-box">
+                    <div className="stat-label">Hero Points</div>
+                    <div className="hero-points-display">
+                      {[0, 1, 2].map(i => (
+                        <span key={i} className={`hero-point-circle ${i < (creature.heroPoints ?? 0) ? '' : 'empty'}`}>
+                          {i < (creature.heroPoints ?? 0) ? '★' : '☆'}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {/* Active Conditions */}
+              {creature.conditions && creature.conditions.length > 0 && (
+                <div className="section conditions-overview">
+                  <h3 className="section-title">Active Conditions</h3>
+                  <div className="conditions-badges">
+                    {creature.conditions.map((cond, i) => (
+                      <span key={i} className="condition-badge">
+                        {cond.name}{cond.value ? ` ${cond.value}` : ''}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* XP Progress Bar */}
               {creature.type === 'player' && (
@@ -555,6 +613,39 @@ export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
                               <span className="breakdown-separator">=</span>
                               <span className="breakdown-total">{formatBonus(skill.bonus)}</span>
                             </div>
+                            {/* Conditional modifiers for this skill */}
+                            {(() => {
+                              const skillKey = skill.name.toLowerCase();
+                              const activeBonuses = (creature.bonuses || []).filter(b =>
+                                b.applyTo === skillKey || b.applyTo === 'all-skills'
+                              );
+                              const activePenalties = (creature.penalties || []).filter(p =>
+                                p.applyTo === skillKey || p.applyTo === 'all-skills'
+                              );
+                              if (activeBonuses.length === 0 && activePenalties.length === 0) return null;
+                              return (
+                                <div className="skill-modifiers">
+                                  {activeBonuses.map((b, i) => (
+                                    <span
+                                      key={i}
+                                      className={`skill-modifier-badge ${b.type}`}
+                                      title={b.source + (b.condition ? ` (${b.condition})` : '')}
+                                    >
+                                      +{b.value} {b.type}
+                                    </span>
+                                  ))}
+                                  {activePenalties.map((p, i) => (
+                                    <span
+                                      key={`pen-${i}`}
+                                      className="skill-modifier-badge penalty"
+                                      title={p.source}
+                                    >
+                                      -{p.value} {p.type}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
                         ))}
                       </div>
@@ -563,6 +654,22 @@ export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
                 )
               ) : (
                 <p className="empty-message">No skills trained.</p>
+              )}
+              {/* Lore Skills */}
+              {creature.lores && creature.lores.length > 0 && (
+                <div className="ability-section" style={{ marginTop: '16px' }}>
+                  <h3 className="ability-header">Lore Skills</h3>
+                  <div className="skills-list">
+                    {creature.lores.map((lore) => (
+                      <div key={lore.name} className="skill-row-detailed">
+                        <div className="skill-header">
+                          <span className="skill-name">{lore.name}</span>
+                          <span className="skill-bonus">{formatBonus(lore.bonus)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -908,12 +1015,33 @@ export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
                       </div>
                       {creature.weaponInventory.filter((s: any) => s.state === 'held' || s.weapon?.isNatural).map((slot: any) => {
                         const w = slot.weapon;
+                        const strikingLabel = w.strikingRune === 'major-striking' ? 'Major Striking' : w.strikingRune === 'greater-striking' ? 'Greater Striking' : w.strikingRune === 'striking' ? 'Striking' : null;
                         return (
                           <div key={w.id} className="weapon-card" style={{ marginBottom: '6px' }}>
                             <div className="weapon-name">
                               {w.attackType === 'ranged' ? '🏹' : '⚔️'} {w.display}
                               {w.isNatural && <span style={{ fontSize: '10px', color: '#81c784', marginLeft: '6px' }}>(Natural)</span>}
                             </div>
+                            {/* Rune badges */}
+                            {(w.potencyRune || w.strikingRune || (w.propertyRunes && w.propertyRunes.length > 0)) && (
+                              <div className="weapon-runes">
+                                {w.potencyRune && (
+                                  <span className="rune-badge potency">+{w.potencyRune} Potency</span>
+                                )}
+                                {strikingLabel && (
+                                  <span className="rune-badge striking">{strikingLabel}</span>
+                                )}
+                                {w.propertyRunes && w.propertyRunes.map((runeId: string) => {
+                                  const rune = WEAPON_PROPERTY_RUNES[runeId];
+                                  return (
+                                    <span key={runeId} className="rune-badge property" title={rune?.effect || runeId}>
+                                      {rune?.name || runeId}
+                                      {rune?.damageDice && ` (${rune.damageDice} ${rune.damageType || ''})`}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
                             <div className="weapon-stats">
                               {w.attackBonus !== undefined && (
                                 <div className="weapon-stat">
@@ -1100,26 +1228,100 @@ export const CharacterSheetModal: React.FC<CharacterSheetModalProps> = ({
           )}
 
           {/* Feats Tab */}
-          {activeTab === 'feats' && creature.feats && creature.feats.length > 0 && (
+          {activeTab === 'feats' && (
             <div className="tab-pane">
-              {Object.entries(featsByType()).map(([type, feats]) =>
-                feats && feats.length > 0 ? (
-                  <div key={type} className="feat-group">
-                    <h3 className="feat-type-label">{type}</h3>
-                    <div className="feats-list">
-                      {feats.map((feat) => (
-                        <div key={feat.name} className="feat-item">
-                          <span className="feat-name">{feat.name}</span>
-                          {feat.level && feat.level > 1 && (
-                            <span className="feat-level">Level {feat.level}</span>
-                          )}
-                        </div>
+              {creature.feats && creature.feats.length > 0 ? (
+                <>
+                  <div className="feats-header">
+                    <input
+                      type="text"
+                      className="feats-search"
+                      placeholder="Search feats…"
+                      value={featSearch}
+                      onChange={(e) => setFeatSearch(e.target.value)}
+                    />
+                    <div className="feat-type-filters">
+                      {['All', ...Array.from(new Set((creature.feats || []).map(f => f.type || 'General')))].map(t => (
+                        <button
+                          key={t}
+                          className={`feat-type-filter-btn${featTypeFilter === t ? ' active' : ''}`}
+                          onClick={() => setFeatTypeFilter(t)}
+                        >{t}</button>
                       ))}
                     </div>
                   </div>
-                ) : null
+                  {(creature.feats || [])
+                    .filter(feat => {
+                      const matchesSearch = feat.name.toLowerCase().includes(featSearch.toLowerCase());
+                      const matchesType = featTypeFilter === 'All' || (feat.type || 'General') === featTypeFilter;
+                      return matchesSearch && matchesType;
+                    })
+                    .sort((a, b) => (a.level ?? 0) - (b.level ?? 0))
+                    .map((feat) => {
+                      const slug = feat.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                      const catalogEntry = FEAT_CATALOG_MAP.get(slug);
+                      const isExpanded = expandedFeats.has(feat.name);
+                      return (
+                        <div
+                          key={feat.name}
+                          className={`feat-item-enhanced${isExpanded ? ' expanded' : ''}`}
+                          onClick={() => {
+                            setExpandedFeats(prev => {
+                              const next = new Set(prev);
+                              if (next.has(feat.name)) next.delete(feat.name);
+                              else next.add(feat.name);
+                              return next;
+                            });
+                          }}
+                        >
+                          <div className="feat-item-header">
+                            <span className="feat-name">{feat.name}</span>
+                            <span className="feat-meta">
+                              {feat.type && <span className="feat-type-tag">{feat.type}</span>}
+                              {feat.level != null && <span className="feat-level">Lv {feat.level}</span>}
+                              {catalogEntry?.actionCost && (
+                                <span className="feat-action-cost">{catalogEntry.actionCost}</span>
+                              )}
+                            </span>
+                            <span className="feat-expand-icon">{isExpanded ? '▲' : '▼'}</span>
+                          </div>
+                          {catalogEntry?.traits && catalogEntry.traits.length > 0 && (
+                            <div className="feat-traits">
+                              {catalogEntry.traits.map(t => (
+                                <span key={t} className="feat-trait-badge">{t}</span>
+                              ))}
+                            </div>
+                          )}
+                          {isExpanded && (
+                            <div className="feat-description">
+                              {catalogEntry ? (
+                                <>
+                                  {catalogEntry.prerequisites && catalogEntry.prerequisites.length > 0 && (
+                                    <p className="feat-prerequisites"><strong>Prerequisites:</strong> {catalogEntry.prerequisites.join(', ')}</p>
+                                  )}
+                                  <p>{catalogEntry.description}</p>
+                                  {catalogEntry.mechanics && (
+                                    <p className="feat-mechanics">{catalogEntry.mechanics}</p>
+                                  )}
+                                </>
+                              ) : (
+                                <p className="feat-no-data">No description available.</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </>
+              ) : (
+                <p className="empty-message">No feats recorded.</p>
               )}
             </div>
+          )}
+
+          {/* Inventory Tab */}
+          {activeTab === 'inventory' && creature.type === 'player' && (
+            <CharacterInventory creature={creature} onCreatureUpdate={onCreatureUpdate} />
           )}
         </div>
       </div>

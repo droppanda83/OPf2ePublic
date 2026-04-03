@@ -668,8 +668,9 @@ function validateAttackRange(
   let weapon = weaponId
     ? actor.weaponInventory?.find((ws) => ws.weapon.id === weaponId)?.weapon
     : undefined;
-  if (!weapon && (actor as any).activeWeaponId) {
-    weapon = actor.weaponInventory?.find((ws) => ws.weapon.id === (actor as any).activeWeaponId)?.weapon;
+  const activeWeaponId = (actor as Creature & { activeWeaponId?: string }).activeWeaponId;
+  if (!weapon && activeWeaponId) {
+    weapon = actor.weaponInventory?.find((ws) => ws.weapon.id === activeWeaponId)?.weapon;
   }
   if (!weapon) {
     weapon = actor.weaponInventory?.find((ws) => ws.state === 'held')?.weapon;

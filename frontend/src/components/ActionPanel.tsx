@@ -3,7 +3,7 @@ import { getSpell, resolveSpellId } from '../utils/spellsWrapper';
 import { WEAPON_CATALOG } from '../../../shared/weapons';
 import { getShield } from '../../../shared/shields';
 import './ActionPanel.css';
-import type { GameState, Creature, GroundObject } from '../../../shared/types';
+import type { GameState, Creature, GroundObject, WeaponSlot, Condition } from '../../../shared/types';
 import { PF2eActionDiamond, PF2eReactionIcon, PF2eHeroPoints, ActionCostIcon } from './ActionIcons';
 import WeaponPicker from './WeaponPicker';
 import WeaponManager from './WeaponManager';
@@ -33,7 +33,14 @@ interface ActionRequirementCheckResult {
   unknown?: boolean;
 }
 
-type ActionRequirementCheck = (creature: any) => ActionRequirementCheckResult;
+type ActionRequirementCheck = (creature: Creature) => ActionRequirementCheckResult;
+
+declare global {
+  interface Window {
+    pendingStrikeAction?: string;
+    pendingSpellstrikeSpellId?: string;
+  }
+}
 
 interface ActionRequirement {
   id: string;
@@ -97,12 +104,12 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
 
   // Get available weapons from creature's weapon inventory
   const weaponInventory = currentCreature?.weaponInventory ?? [];
-  const heldWeapons = weaponInventory.filter((s: any) => s.state === 'held' || s.weapon?.isNatural);
-  const stowedWeapons = weaponInventory.filter((s: any) => s.state === 'stowed');
-  const droppedWeapons = weaponInventory.filter((s: any) => s.state === 'dropped');
+  const heldWeapons = weaponInventory.filter((s: WeaponSlot) => s.state === 'held' || s.weapon?.isNatural);
+  const stowedWeapons = weaponInventory.filter((s: WeaponSlot) => s.state === 'stowed');
+  const droppedWeapons = weaponInventory.filter((s: WeaponSlot) => s.state === 'dropped');
 
   // Build fallback weapon list for creatures without weaponInventory
-  const fallbackWeapons: any[] = useMemo(() => {
+  const fallbackWeapons: WeaponSlot[] = useMemo(() => {
     if (weaponInventory.length > 0) return [];
     if (!currentCreature) return [];
     // Build a synthetic entry from legacy weapon fields
@@ -146,8 +153,8 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
   // Calculate hands in use
   const getHandsInUse = () => {
     return heldWeapons
-      .filter((s: any) => !s.weapon?.isNatural)
-      .reduce((sum: number, s: any) => sum + (s.weapon?.hands || 1), 0);
+      .filter((s: WeaponSlot) => !s.weapon?.isNatural)
+      .reduce((sum: number, s: WeaponSlot) => sum + (s.weapon?.hands || 1), 0);
   };
 
   const handsInUse = getHandsInUse();
@@ -195,7 +202,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
             {currentCreature.name} is unconscious. They must make a recovery check each turn.
           </div>
           <div style={{ fontSize: '12px', color: '#ccc', marginBottom: '15px' }}>
-            <div>💀 Dying: {(currentCreature as any).conditions?.find((c: Creature) => c.name === 'dying')?.value ?? 1} / 4</div>
+            <div>💀 Dying: {currentCreature.conditions?.find((c: Condition) => c.name === 'dying')?.value ?? 1} / 4</div>
             {currentCreature.wounded > 0 && <div>🩹 Wounded: {currentCreature.wounded}</div>}
           </div>
           <div style={{ marginBottom: '12px' }}>
@@ -213,7 +220,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
                 id: 'death-save',
                 name: 'Recovery Check',
                 cost: 0,
-                description: `Flat check vs DC ${10 + ((currentCreature as any).conditions?.find((c: Creature) => c.name === 'dying')?.value ?? 1)}`,
+                description: `Flat check vs DC ${10 + (currentCreature.conditions?.find((c: Condition) => c.name === 'dying')?.value ?? 1)}`,
                 icon: '💀',
                 requiresTarget: false,
                 usesD20: true
@@ -259,7 +266,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     );
   }
 
-  const hasWeaponTrait = (creature: any, trait: string): ActionRequirementCheckResult => {
+  const hasWeaponTrait = (creature: Creature, trait: string): ActionRequirementCheckResult => {
     if (!creature) {
       return { ok: false, unknown: true };
     }
@@ -275,7 +282,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     return { ok: false };
   };
 
-  const getHandsUsed = (creature: any): number => {
+  const getHandsUsed = (creature: Creature): number => {
     if (!creature) {
       return 0;
     }
@@ -286,7 +293,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     return safeWeaponHands + safeShieldHands;
   };
 
-  const hasFreeHand = (creature: any): boolean => getHandsUsed(creature) < 2;
+  const hasFreeHand = (creature: Creature): boolean => getHandsUsed(creature) < 2;
 
   const requirement = (id: string, label: string, check: ActionRequirementCheck): ActionRequirement => ({
     id,
@@ -356,10 +363,10 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     ok: !creature?.flourishUsedThisTurn
   }));
   const reqHasStowedWeapons = requirement('has-stowed', 'Has stowed weapons', (creature) => ({
-    ok: (creature?.weaponInventory ?? []).some((s: any) => s.state === 'stowed')
+            ok: (creature?.weaponInventory ?? []).some((s: WeaponSlot) => s.state === 'stowed')
   }));
   const reqHasHeldWeapons = requirement('has-held', 'Has held weapons', (creature) => ({
-    ok: (creature?.weaponInventory ?? []).some((s: any) => s.state === 'held' && !s.weapon?.isNatural)
+            ok: (creature?.weaponInventory ?? []).some((s: WeaponSlot) => s.state === 'held' && !s.weapon?.isNatural)
   }));
 
   const actions: ActionDefinition[] = [
@@ -899,7 +906,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
 
   const hasFeat = (needle: string): boolean => {
     const featList = currentCreature?.feats ?? [];
-    return featList.some((feat: any) =>
+    return featList.some((feat) =>
       typeof feat?.name === 'string' && feat.name.toLowerCase().includes(needle.toLowerCase())
     );
   };
@@ -2119,7 +2126,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
       setSpecialMenuOpen(false);
       setWeaponManageOpen(false);
       // Store the action type so weapon picker knows which action to create
-      (window as any).pendingStrikeAction = action.id;
+                      window.pendingStrikeAction = action.id;
       // Don't select the action yet - wait for weapon selection
       return;
     }
@@ -2145,7 +2152,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
       setSpecialMenuOpen(false);
       setWeaponManageOpen(false);
       setWeaponPickerOpen(false);
-      (window as any).pendingSpellstrikeSpellId = undefined;
+                    window.pendingSpellstrikeSpellId = undefined;
       return;
     }
 
@@ -2156,14 +2163,14 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
 
   const handleWeaponSelect = (weaponId: string) => {
     // Check real inventory first, then fallback list
-    const slot = weaponInventory.find((s: any) => s.weapon?.id === weaponId)
-      ?? fallbackWeapons.find((s: any) => s.weapon?.id === weaponId);
+    const slot = weaponInventory.find((s: WeaponSlot) => s.weapon?.id === weaponId)
+      ?? fallbackWeapons.find((s: WeaponSlot) => s.weapon?.id === weaponId);
     if (!slot) return;
     const weapon = slot.weapon;
     
     // Get the pending action type (strike or feat-based strike)
-    const actionType = (window as any).pendingStrikeAction || 'strike';
-    const pendingSpellstrikeSpellId = (window as any).pendingSpellstrikeSpellId as string | undefined;
+    const actionType = window.pendingStrikeAction || 'strike';
+    const pendingSpellstrikeSpellId = window.pendingSpellstrikeSpellId;
 
     if (actionType === 'spellstrike' && !pendingSpellstrikeSpellId) {
       alert('Select a spell before choosing a weapon for Spellstrike.');
@@ -2241,14 +2248,14 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
       usesD20: true
     };
     if (actionType === 'spellstrike') {
-      (window as any).pendingSpellstrikeSpellId = undefined;
+                    window.pendingSpellstrikeSpellId = undefined;
     }
     setWeaponPickerOpen(false);
     onSelectAction(strikeAction);
   };
 
   const handleWeaponAction = (actionType: 'draw-weapon' | 'stow-weapon' | 'drop-weapon', weaponId: string) => {
-    const slot = weaponInventory.find((s: any) => s.weapon?.id === weaponId);
+    const slot = weaponInventory.find((s: WeaponSlot) => s.weapon?.id === weaponId);
     if (!slot) return;
     const weapon = slot.weapon;
     const cost = actionType === 'drop-weapon' ? 0 : 1;
@@ -2308,8 +2315,8 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     // Close modal and prepare Spellstrike action with the spell
     setSpellstrikeModalOpen(false);
     // Store spell and continue into normal weapon picker flow for strike-like actions
-    (window as any).pendingSpellstrikeSpellId = spellId;
-    (window as any).pendingStrikeAction = 'spellstrike';
+                    window.pendingSpellstrikeSpellId = spellId;
+                    window.pendingStrikeAction = 'spellstrike';
     setWeaponPickerOpen(true);
     setActionMenuOpen(false);
     setSpellsMenuOpen(false);

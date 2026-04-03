@@ -18,16 +18,22 @@ export type { BestiaryEntry } from './bestiary';
 export { getCreaturesByLevel, getCreaturesInRange, getCreaturesByTag, getCreatureByName, pickRandom } from './bestiary';
 export * from './encounterBuilder';
 export * from './encounterMaps';
-// foundryEncounterMaps removed – FOUNDRY_MAP_CATALOG had zero consumers (274 KB dead code)
+// foundryEncounterMaps removed – replaced by foundryMapCatalog with comprehensive Foundry VTT map data
+export * from './foundryMapCatalog';
+export * from './campaignMapTracker';
 export * from './feats';
 export * from './mapGenerator';
-export * from './atlasMapGenerator';
 export * from './creatureTokens';
+export * from './tokenArt';
+export * from './events';
 
 // Companion / Familiar / Eidolon catalogs
 export * from './companions';
 export * from './familiarAbilities';
 export * from './eidolons';
+
+// Hazards & Traps (Phase 24)
+export * from './hazards';
 
 // Dice rolling utility
 export function rollDice(times: number, sides: number): number[] {

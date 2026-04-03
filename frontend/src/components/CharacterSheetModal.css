@@ -16,17 +16,17 @@
 }
 
 .character-sheet-modal {
-  background-color: #1e1e1e;
-  border: 2px solid #444;
-  border-radius: 8px;
+  background-color: var(--pf2e-bg-base);
+  border: 2px solid var(--pf2e-border);
+  border-radius: var(--pf2e-radius-lg);
   width: 100%;
   max-width: 900px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+  box-shadow: var(--pf2e-shadow-lg);
   color: #ccc;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--pf2e-font-body);
   overflow: hidden;
   margin: auto;
 }
@@ -898,4 +898,231 @@
 /* Editable avatar hover effect in header */
 .sheet-avatar.editable:hover {
   opacity: 0.85;
+}
+
+/* ── Conditions Overview (Overview tab) ── */
+.conditions-overview {
+  margin-bottom: 16px;
+}
+
+.conditions-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.condition-badge {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(255, 152, 0, 0.15);
+  border: 1px solid rgba(255, 152, 0, 0.35);
+  color: #ffb74d;
+  font-weight: 500;
+}
+
+/* ── Hero Point Empty Circle ── */
+.hero-point-circle.empty {
+  background: linear-gradient(135deg, #3a3a3a 0%, #2a2a2a 100%);
+  border-color: #555;
+  color: #666;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Weapon Rune Badges (Combat tab) ── */
+.weapon-runes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.rune-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.rune-badge.potency {
+  background: rgba(212, 175, 55, 0.15);
+  color: #d4af37;
+  border: 1px solid rgba(212, 175, 55, 0.3);
+}
+
+.rune-badge.striking {
+  background: rgba(255, 87, 34, 0.15);
+  color: #ff7043;
+  border: 1px solid rgba(255, 87, 34, 0.3);
+}
+
+.rune-badge.property {
+  background: rgba(79, 195, 247, 0.12);
+  color: #4fc3f7;
+  border: 1px solid rgba(79, 195, 247, 0.25);
+}
+
+/* ── Feats Tab Overhaul ── */
+.feats-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.feats-search {
+  width: 100%;
+  padding: 6px 10px;
+  background: #1a1a1a;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  color: #d0c3b4;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.feats-search:focus {
+  border-color: #d4af37;
+  outline: none;
+}
+
+.feats-search::placeholder {
+  color: #666;
+}
+
+.feat-type-filters {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.feat-type-filter-btn {
+  padding: 2px 8px;
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid #3a3a3a;
+  color: #888;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.feat-type-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #bbb;
+}
+
+.feat-type-filter-btn.active {
+  background: rgba(212, 175, 55, 0.15);
+  border-color: rgba(212, 175, 55, 0.4);
+  color: #d4af37;
+}
+
+.feat-item-enhanced {
+  padding: 8px 12px;
+  background: #252525;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.feat-item-enhanced:hover {
+  border-color: rgba(212, 175, 55, 0.3);
+}
+
+.feat-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.feat-item-header .feat-name {
+  flex: 1;
+  color: #d0c3b4;
+}
+
+.feat-item-header .feat-level {
+  background: #333;
+  color: #999;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+.feat-item-header .feat-expand-icon {
+  font-size: 10px;
+  color: #666;
+  margin-left: 6px;
+  transition: transform 0.15s;
+}
+
+.feat-item-header .feat-expand-icon.open {
+  transform: rotate(90deg);
+}
+
+.feat-description {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #3a3a3a;
+  font-size: 11px;
+  color: #999;
+  line-height: 1.5;
+}
+
+.feat-description .feat-traits {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.feat-description .feat-trait-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  background: rgba(79, 195, 247, 0.1);
+  color: #4fc3f7;
+  border: 1px solid rgba(79, 195, 247, 0.25);
+  border-radius: 3px;
+}
+
+/* ── Skills Conditional Modifiers ── */
+.skill-modifiers {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding-left: 4px;
+  margin-top: 2px;
+}
+
+.skill-modifier-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.skill-modifier-badge.item {
+  background: rgba(212, 175, 55, 0.1);
+  color: #d4af37;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+.skill-modifier-badge.circumstance {
+  background: rgba(79, 195, 247, 0.1);
+  color: #4fc3f7;
+  border: 1px solid rgba(79, 195, 247, 0.2);
+}
+
+.skill-modifier-badge.status {
+  background: rgba(156, 39, 176, 0.1);
+  color: #ce93d8;
+  border: 1px solid rgba(156, 39, 176, 0.2);
+}
+.skill-modifier-badge.penalty {
+  background: rgba(211, 47, 47, 0.1);
+  color: #ef9a9a;
+  border: 1px solid rgba(211, 47, 47, 0.3);
 }

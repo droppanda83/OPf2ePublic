@@ -7,17 +7,102 @@ import { Router, Request, Response } from 'express';
 import { AppContext } from '../appContext';
 import { createDefaultGMSession, getTensionBand } from '../ai/gmChatbot';
 import {
-  applyMapTemplateToGame, generateAndApplyAtlasMap, toneToMapTheme,
+  applyMapTemplateToGame, generateAndApplyProceduralMap, toneToMapTheme,
   inferMapThemeFromChat, normalizeDifficulty, buildEncounterEnemies,
-  getMapById, createDefaultAbilities, createDefaultProficiencies,
-  findExplorationPath, getCreatureByName, getCreatureTokenUrl,
+  createDefaultAbilities, createDefaultProficiencies,
+  findExplorationPath, getCreatureByName,
   getCreatureXP, XP_PER_LEVEL,
 } from '../routeHelpers';
+import { getTokenArtUrl } from '../services/tokenArtService';
+import { selectMapForNarrative } from '../services/mapSelectionService';
+import { getFoundryMapById, FOUNDRY_MAP_CATALOG } from 'pf2e-shared/foundryMapCatalog';
 import type { Creature, MapGeneratorTheme, EncounterMapTemplate, Difficulty } from '../routeHelpers';
 import type { CampaignPreferences, GMChatMessage, GMSession, RecurringNPC, StoryArc } from 'pf2e-shared';
 
+interface SceneAction {
+  actionType?: string;
+  details?: {
+    name?: string;
+    creature?: string;
+    displayName?: string;
+    role?: RecurringNPC['role'];
+    description?: string;
+    icon?: string;
+    x?: number;
+    y?: number;
+    disposition?: string;
+  };
+}
+
+interface CampaignFramework {
+  openingNarration?: string;
+  storyArc?: {
+    bbegName?: string;
+    bbegMotivation?: string;
+    keyLocations?: string[];
+    milestones?: unknown[];
+    secretPlots?: unknown[];
+  };
+  npcs?: Array<{
+    name?: string;
+    role?: RecurringNPC['role'];
+    disposition?: number;
+    description?: string;
+    location?: string;
+  }>;
+}
+
 export function createGMRoutes(ctx: AppContext): Router {
   const router = Router();
+
+  const emitTensionChanged = (
+    gameId: string,
+    previousScore: number,
+    session: GMSession,
+    reason: string,
+  ) => {
+    if (previousScore === session.tensionTracker.score) return;
+    ctx.eventBus.emit({
+      type: 'world:tension-changed',
+      timestamp: Date.now(),
+      gameId,
+      previousScore,
+      newScore: session.tensionTracker.score,
+      trend: session.tensionTracker.trend,
+      reason,
+    });
+  };
+
+  const emitTimeAdvanced = (gameId: string, amount: number, unit: 'rounds' | 'minutes' | 'hours' | 'days', reason: string) => {
+    ctx.eventBus.emit({
+      type: 'world:time-advanced',
+      timestamp: Date.now(),
+      gameId,
+      amount,
+      unit,
+      reason,
+    });
+  };
+
+  const emitQuestUpdated = (
+    gameId: string,
+    questId: string,
+    title: string,
+    status: 'introduced' | 'active' | 'completed' | 'failed' | 'updated',
+    description: string,
+    source: string,
+  ) => {
+    ctx.eventBus.emit({
+      type: 'world:quest-updated',
+      timestamp: Date.now(),
+      gameId,
+      questId,
+      title,
+      status,
+      description,
+      source,
+    });
+  };
 
   // ─── Initialize GM session ───────────────────────────────────
   router.post('/api/game/:gameId/gm/init', async (req: Request, res: Response) => {
@@ -49,27 +134,83 @@ export function createGMRoutes(ctx: AppContext): Router {
           ),
         });
 
-        // Generate a procedural map (wrapped in try-catch so GM session still works if map gen fails)
+        // Apply map: prefer explicit Foundry map > AI-selected Foundry map (campaign) > atlas generation
         try {
-          const validThemes: string[] = ['dungeon', 'cave', 'wilderness', 'urban', 'indoor', 'ship', 'tower', 'bridge', 'caravan', 'sewers', 'castle', 'mine'];
-          const procTheme: MapGeneratorTheme = (preferences.mapTheme && validThemes.includes(preferences.mapTheme))
-            ? preferences.mapTheme as MapGeneratorTheme
-            : toneToMapTheme(preferences.tone);
-          const procResult = generateAndApplyAtlasMap(gameState, procTheme, undefined, undefined,
-            (() => {
-              const raw = preferences.mapSubTheme;
-              if (Array.isArray(raw) && raw.length > 0) return { subTheme: raw[Math.floor(Math.random() * raw.length)] };
-              if (typeof raw === 'string' && raw) return { subTheme: raw };
-              return undefined;
-            })());
-          gameState.gmSession.currentEncounterMapId = procResult.id;
+          const foundryMapId = (preferences as Partial<CampaignPreferences> & { foundryMapId?: string }).foundryMapId;
+          let foundryMap;
+          if (foundryMapId === '__random__') {
+            foundryMap = FOUNDRY_MAP_CATALOG.length > 0
+              ? FOUNDRY_MAP_CATALOG[Math.floor(Math.random() * FOUNDRY_MAP_CATALOG.length)]
+              : undefined;
+            if (foundryMap) console.log(`🎲 Random Foundry map selected: "${foundryMap.name}" (${foundryMap.id})`);
+          } else {
+            foundryMap = foundryMapId ? getFoundryMapById(foundryMapId) : undefined;
+          }
+          if (foundryMap) {
+            // Explicitly selected Foundry map (encounter mode)
+            applyMapTemplateToGame(gameState, foundryMap);
+            gameState.gmSession.currentEncounterMapId = foundryMap.id;
+            console.log(`🗺️ GM init: applied player-selected Foundry map "${foundryMap.name}" (${foundryMap.id})`);
+          } else if (preferences.mode === 'campaign' || !preferences.mode) {
+            // Campaign mode: AI GM picks a Foundry map based on campaign keywords
+            const narrativeContext = [
+              preferences.campaignName,
+              preferences.tone,
+              ...(preferences.themes || []),
+              preferences.customNotes || '',
+            ].filter(Boolean).join(' ');
+
+            const avgLevel = gameState.creatures
+              .filter((c: Creature) => c.type === 'player')
+              .reduce((sum: number, c: Creature) => sum + (c.level || 1), 0) /
+              Math.max(1, gameState.creatures.filter((c: Creature) => c.type === 'player').length);
+
+            const aiSelection = selectMapForNarrative({
+              narrativeContext,
+              partyLevel: Math.round(avgLevel),
+            });
+
+            if (aiSelection.map) {
+              applyMapTemplateToGame(gameState, aiSelection.map);
+              gameState.gmSession.currentEncounterMapId = aiSelection.map.id;
+              console.log(`🗺️ GM init: AI selected Foundry map "${aiSelection.map.name}" (confidence: ${aiSelection.confidence}%, reason: ${aiSelection.reason})`);
+            } else {
+              // Fallback to atlas generation if no Foundry map scored well
+              const validThemes: string[] = ['dungeon', 'cave', 'wilderness', 'urban', 'indoor', 'ship', 'tower', 'bridge', 'caravan', 'sewers', 'castle', 'mine'];
+              const procTheme: MapGeneratorTheme = (preferences.mapTheme && validThemes.includes(preferences.mapTheme))
+                ? preferences.mapTheme as MapGeneratorTheme
+                : toneToMapTheme(preferences.tone);
+              const procResult = generateAndApplyProceduralMap(gameState, procTheme, undefined, undefined,
+                (() => {
+                  const raw = preferences.mapSubTheme;
+                  if (Array.isArray(raw) && raw.length > 0) return { subTheme: raw[Math.floor(Math.random() * raw.length)] };
+                  if (typeof raw === 'string' && raw) return { subTheme: raw };
+                  return undefined;
+                })());
+              gameState.gmSession.currentEncounterMapId = procResult.id;
+            }
+          } else {
+            // Encounter mode without explicit Foundry map: atlas generation
+            const validThemes: string[] = ['dungeon', 'cave', 'wilderness', 'urban', 'indoor', 'ship', 'tower', 'bridge', 'caravan', 'sewers', 'castle', 'mine'];
+            const procTheme: MapGeneratorTheme = (preferences.mapTheme && validThemes.includes(preferences.mapTheme))
+              ? preferences.mapTheme as MapGeneratorTheme
+              : toneToMapTheme(preferences.tone);
+            const procResult = generateAndApplyProceduralMap(gameState, procTheme, undefined, undefined,
+              (() => {
+                const raw = preferences.mapSubTheme;
+                if (Array.isArray(raw) && raw.length > 0) return { subTheme: raw[Math.floor(Math.random() * raw.length)] };
+                if (typeof raw === 'string' && raw) return { subTheme: raw };
+                return undefined;
+              })());
+            gameState.gmSession.currentEncounterMapId = procResult.id;
+          }
         } catch (mapErr) {
-          console.warn('⚠️ Atlas map generation failed during GM init, using existing map:', mapErr);
+          console.warn('⚠️ Map application failed during GM init, using existing map:', mapErr);
         }
 
         // Generate opening scene
         let openingContent: string;
-        let sceneActions: any[] = [];
+        let sceneActions: SceneAction[] = [];
         try {
           const sceneResult = await ctx.gmChatbot.generateOpeningScene(gameState, gameState.gmSession);
           openingContent = sceneResult.content;
@@ -132,10 +273,10 @@ export function createGMRoutes(ctx: AppContext): Router {
             gameState.creatures.push(npcCreature);
             npcCreature._map = gameState.map;
 
-            if (!gameState.gmSession.recurringNPCs.find((n: any) => n.name.toLowerCase() === npcName.toLowerCase())) {
+            if (!gameState.gmSession.recurringNPCs.find((n: RecurringNPC) => n.name.toLowerCase() === npcName.toLowerCase())) {
               gameState.gmSession.recurringNPCs.push({
                 id: npcId, name: npcName,
-                role: (action.details?.role as any) || 'neutral',
+                role: action.details?.role || 'neutral',
                 disposition: action.details?.role === 'ally' ? 70 : action.details?.role === 'enemy' ? -50 : 50,
                 description: action.details?.description || `${npcName} present in the area`,
                 interactions: [], isAlive: true, location: 'Opening scene',
@@ -170,13 +311,13 @@ export function createGMRoutes(ctx: AppContext): Router {
                   conditions: bc.conditions || [], damageResistances: bc.damageResistances || [],
                   damageImmunities: bc.damageImmunities || [], damageWeaknesses: bc.damageWeaknesses || [],
                   skills: bc.skills || [], specials: bc.specials || [],
-                  tokenImageUrl: bc.tokenImageUrl || getCreatureTokenUrl(bestiaryEntry.tags),
+                  tokenImageUrl: bc.tokenImageUrl || getTokenArtUrl(bestiaryEntry.creature.name, bestiaryEntry.tags),
                   npcDisposition: disposition, bestiaryName: bestiaryEntry.creature.name,
                   _map: gameState.map,
                 } as Creature;
 
                 gameState.creatures.push(creatureNpc);
-                if (!gameState.gmSession.recurringNPCs.find((n: any) => n.name.toLowerCase() === displayName.toLowerCase())) {
+                if (!gameState.gmSession.recurringNPCs.find((n: RecurringNPC) => n.name.toLowerCase() === displayName.toLowerCase())) {
                   gameState.gmSession.recurringNPCs.push({
                     id: npcId, name: displayName,
                     role: disposition === 'hostile' ? 'enemy' : disposition === 'friendly' ? 'ally' : 'neutral',
@@ -227,10 +368,10 @@ export function createGMRoutes(ctx: AppContext): Router {
             };
             gameState.creatures.push(npcCreature);
             npcCreature._map = gameState.map;
-            if (!gameState.gmSession.recurringNPCs.find((n: any) => n.name.toLowerCase() === npc.name.toLowerCase())) {
+            if (!gameState.gmSession.recurringNPCs.find((n: RecurringNPC) => n.name.toLowerCase() === npc.name.toLowerCase())) {
               gameState.gmSession.recurringNPCs.push({
                 id: npcId, name: npc.name,
-                role: (npc.role as any) || 'neutral',
+                role: npc.role,
                 disposition: npc.role === 'ally' ? 70 : 50,
                 description: npc.description,
                 interactions: [], isAlive: true, location: 'Opening scene',
@@ -321,6 +462,7 @@ export function createGMRoutes(ctx: AppContext): Router {
         role: 'player', content: message, timestamp: Date.now(),
       };
       gameState.gmSession.chatHistory.push(playerMsg);
+      const previousTension = gameState.gmSession.tensionTracker.score;
 
       const { response, sessionUpdates, mechanicalActions } = await ctx.gmChatbot.processMessage(
         message, gameState, gameState.gmSession,
@@ -328,6 +470,7 @@ export function createGMRoutes(ctx: AppContext): Router {
 
       if (sessionUpdates.tensionTracker) {
         gameState.gmSession.tensionTracker = sessionUpdates.tensionTracker;
+        emitTensionChanged(gameId, previousTension, gameState.gmSession, 'GM chat update');
       }
       gameState.gmSession.chatHistory.push(response);
 
@@ -342,7 +485,7 @@ export function createGMRoutes(ctx: AppContext): Router {
         } else if (action.actionType === 'set-encounter-map') {
           const requestedTheme = typeof action.details?.theme === 'string' ? action.details.theme as MapGeneratorTheme : undefined;
           const requestedSubTheme = typeof action.details?.subTheme === 'string' ? action.details.subTheme : undefined;
-          const genOptions: Record<string, any> = {};
+          const genOptions: Record<string, unknown> = {};
           if (requestedSubTheme) genOptions.subTheme = requestedSubTheme;
           if (action.details?.type) genOptions.type = action.details.type;
           if (action.details?.density) genOptions.density = action.details.density;
@@ -352,7 +495,7 @@ export function createGMRoutes(ctx: AppContext): Router {
           const requestedMapId = typeof action.details?.mapId === 'string'
             ? action.details.mapId
             : typeof action.details?.raw === 'string' ? action.details.raw : undefined;
-          const catalogMap = requestedMapId ? getMapById(requestedMapId) : undefined;
+          const catalogMap = requestedMapId ? getFoundryMapById(requestedMapId) : undefined;
           if (catalogMap) {
             applyMapTemplateToGame(gameState, catalogMap);
             gameState.gmSession.currentEncounterMapId = catalogMap.id;
@@ -369,7 +512,7 @@ export function createGMRoutes(ctx: AppContext): Router {
               procTheme = inferred.theme;
               if (!procOptions && inferred.options) procOptions = inferred.options;
             }
-            const procResult = generateAndApplyAtlasMap(gameState, procTheme, undefined, undefined, procOptions);
+            const procResult = generateAndApplyProceduralMap(gameState, procTheme, undefined, undefined, procOptions);
             gameState.gmSession.currentEncounterMapId = procResult.id;
             action.success = true;
             action.details = { ...action.details, mapId: procResult.id, mapName: procResult.name, procedural: true, theme: procTheme, subTheme: requestedSubTheme };
@@ -379,14 +522,52 @@ export function createGMRoutes(ctx: AppContext): Router {
           const rawDifficulty = typeof action.details?.difficulty === 'string' ? action.details.difficulty : undefined;
           const effectiveDifficulty = normalizeDifficulty(rawDifficulty || (gameState.gmSession.campaignPreferences.encounterBalance as string));
           const requestedMapId = typeof action.details?.mapId === 'string' ? action.details.mapId : undefined;
-          let selectedMap = requestedMapId ? getMapById(requestedMapId) : undefined;
-          if (!selectedMap && gameState.gmSession.currentEncounterMapId) selectedMap = getMapById(gameState.gmSession.currentEncounterMapId);
-          if (!selectedMap) {
-            const tone = gameState.gmSession?.campaignPreferences?.tone;
-            const inferred = inferMapThemeFromChat(gameState.gmSession, tone);
-            const procResult = generateAndApplyAtlasMap(gameState, inferred.theme, undefined, undefined, inferred.options);
-            gameState.gmSession.currentEncounterMapId = procResult.id;
-            selectedMap = procResult;
+          let selectedMap: EncounterMapTemplate | undefined = requestedMapId ? getFoundryMapById(requestedMapId) : undefined;
+
+          // Prefer the current map for chat-triggered encounters if it's suitable for combat
+          const currentMapSuitable = !selectedMap && gameState.map
+            && gameState.map.width >= 10 && (gameState.map.height || 0) >= 10
+            && gameState.map.terrain?.length > 0;
+
+          if (currentMapSuitable) {
+            // Current map is already suitable — stay on it instead of picking a new one
+            if (gameState.gmSession.currentEncounterMapId) {
+              selectedMap = getFoundryMapById(gameState.gmSession.currentEncounterMapId);
+            }
+            console.log(`🗺️ Keeping current map for chat-triggered encounter`);
+          } else if (!selectedMap) {
+            // Current map not suitable — AI GM picks a Foundry map based on recent chat context
+            if (gameState.gmSession.currentEncounterMapId) selectedMap = getFoundryMapById(gameState.gmSession.currentEncounterMapId);
+            if (!selectedMap) {
+              const recentChat = gameState.gmSession.chatHistory.slice(-10).map((m: GMChatMessage) => m.content).join(' ');
+              const avgLevel = Math.round(
+                gameState.creatures.filter((c: Creature) => c.type === 'player')
+                  .reduce((sum: number, c: Creature) => sum + (c.level || 1), 0) /
+                Math.max(1, gameState.creatures.filter((c: Creature) => c.type === 'player').length)
+              );
+              const aiSelection = selectMapForNarrative({
+                narrativeContext: recentChat,
+                theme: gameState.gmSession.campaignPreferences.mapTheme as MapGeneratorTheme,
+                partyLevel: avgLevel,
+                campaignId: gameId,
+              });
+              if (aiSelection.map) {
+                applyMapTemplateToGame(gameState, aiSelection.map);
+                gameState.gmSession.currentEncounterMapId = aiSelection.map.id;
+                selectedMap = aiSelection.map;
+                console.log(`🗺️ AI GM selected Foundry map for encounter: "${aiSelection.map.name}" (${aiSelection.confidence}%)`);
+              } else {
+                // Fallback to atlas
+                const tone = gameState.gmSession?.campaignPreferences?.tone;
+                const inferred = inferMapThemeFromChat(gameState.gmSession, tone);
+                const procResult = generateAndApplyProceduralMap(gameState, inferred.theme, undefined, undefined, inferred.options);
+                gameState.gmSession.currentEncounterMapId = procResult.id;
+                selectedMap = procResult;
+              }
+            } else {
+              applyMapTemplateToGame(gameState, selectedMap);
+              gameState.gmSession.currentEncounterMapId = selectedMap.id;
+            }
           } else {
             applyMapTemplateToGame(gameState, selectedMap);
             gameState.gmSession.currentEncounterMapId = selectedMap.id;
@@ -438,10 +619,10 @@ export function createGMRoutes(ctx: AppContext): Router {
           gameState.creatures.push(npcCreature);
           npcCreature._map = gameState.map;
 
-          const existingRecurring = gameState.gmSession.recurringNPCs.find((n: any) => n.name.toLowerCase() === npcName.toLowerCase());
+          const existingRecurring = gameState.gmSession.recurringNPCs.find((n: RecurringNPC) => n.name.toLowerCase() === npcName.toLowerCase());
           if (!existingRecurring) {
             ctx.gmChatbot.addRecurringNPC(gameState.gmSession, {
-              name: npcName, role: (action.details?.role as any) || 'neutral',
+              name: npcName, role: action.details?.role || 'neutral',
               disposition: action.details?.disposition ?? 50,
               description: action.details?.description || `${npcName} placed on the map`,
               location: `(${clampedX}, ${clampedY})`, interactions: [], isAlive: true,
@@ -511,13 +692,13 @@ export function createGMRoutes(ctx: AppContext): Router {
             damageImmunities: bestiaryCreature.damageImmunities || [], damageWeaknesses: bestiaryCreature.damageWeaknesses || [],
             skills: bestiaryCreature.skills || [],
             specials: npcIcon ? [npcIcon, ...(bestiaryCreature.specials || [])] : (bestiaryCreature.specials || []),
-            tokenImageUrl: bestiaryCreature.tokenImageUrl || getCreatureTokenUrl(bestiaryEntry.tags),
+            tokenImageUrl: bestiaryCreature.tokenImageUrl || getTokenArtUrl(bestiaryEntry.creature.name, bestiaryEntry.tags),
             npcDisposition: disposition, bestiaryName: bestiaryEntry.creature.name,
             _map: gameState.map,
           } as Creature;
 
           gameState.creatures.push(creatureNpc);
-          const existingRecurring = gameState.gmSession.recurringNPCs.find((n: any) => n.name.toLowerCase() === displayName.toLowerCase());
+          const existingRecurring = gameState.gmSession.recurringNPCs.find((n: RecurringNPC) => n.name.toLowerCase() === displayName.toLowerCase());
           if (!existingRecurring) {
             ctx.gmChatbot.addRecurringNPC(gameState.gmSession, {
               name: displayName,
@@ -621,7 +802,7 @@ export function createGMRoutes(ctx: AppContext): Router {
         {
           mapWidth: mapW, mapHeight: mapH,
           terrain: gameState.map.terrain, tiles: gameState.map.tiles,
-          moveCostOverride: (gameState.map as any).moveCostOverride,
+          moveCostOverride: (gameState.map as { moveCostOverride?: EncounterMapTemplate['moveCostOverride'] }).moveCostOverride,
           occupiedPositions: occupiedSet, allowDiagonal: true,
         },
       );
@@ -629,6 +810,28 @@ export function createGMRoutes(ctx: AppContext): Router {
 
       const oldPos = { ...creature.positions };
       creature.positions = { x: tx, y: ty };
+      ctx.eventBus.emit({
+        type: 'exploration:travel',
+        timestamp: Date.now(),
+        gameId,
+        creatureId: creature.id,
+        creatureName: creature.name,
+        fromPosition: oldPos,
+        toPosition: { x: tx, y: ty },
+        pathLength: path.length,
+        mode: 'exploration-move',
+      });
+      ctx.eventBus.emit({
+        type: 'exploration:room-entered',
+        timestamp: Date.now(),
+        gameId,
+        creatureId: creature.id,
+        creatureName: creature.name,
+        fromPosition: oldPos,
+        toPosition: { x: tx, y: ty },
+        pathLength: path.length,
+        summary: `${creature.name} moved to (${tx}, ${ty})`,
+      });
       console.log(`🚶 Exploration move: ${creature.name} (${oldPos.x},${oldPos.y}) → (${tx},${ty}) [${path.length} steps]`);
       res.json({ success: true, creature: creature.id, from: oldPos, to: { x: tx, y: ty }, path, gameState });
     } catch (error) {
@@ -645,6 +848,7 @@ export function createGMRoutes(ctx: AppContext): Router {
       const gameState = ctx.gameEngine.getGameState(gameId);
       if (!gameState || !gameState.gmSession) { res.status(404).json({ error: 'Game or GM session not found' }); return; }
       const session = gameState.gmSession;
+      const previousScore = session.tensionTracker.score;
       let newScore: number;
       if (autoCalculate) {
         newScore = ctx.gmChatbot.calculateAutoTension(gameState, session);
@@ -657,6 +861,7 @@ export function createGMRoutes(ctx: AppContext): Router {
         lastUpdated: Date.now(),
         history: [...session.tensionTracker.history, { score: newScore, reason: reason || 'Manual adjustment', timestamp: Date.now() }],
       };
+      emitTensionChanged(gameId, previousScore, session, reason || (autoCalculate ? 'Auto recalculation' : 'Manual adjustment'));
       res.json({ tensionTracker: session.tensionTracker, band: getTensionBand(newScore) });
     } catch (error) {
       res.status(500).json({ error: String(error) });
@@ -700,6 +905,14 @@ export function createGMRoutes(ctx: AppContext): Router {
       const gameState = ctx.gameEngine.getGameState(gameId);
       if (!gameState || !gameState.gmSession) { res.status(404).json({ error: 'Game or GM session not found' }); return; }
       ctx.gmChatbot.setPhase(gameState.gmSession, phase);
+      if (phase === 'social') {
+        ctx.eventBus.emit({
+          type: 'exploration:social-started',
+          timestamp: Date.now(),
+          gameId,
+          location: gameState.gmSession.storyArc?.keyLocations?.[0] || 'Unknown',
+        });
+      }
       res.json({ phase: gameState.gmSession.currentPhase });
     } catch (error) {
       res.status(500).json({ error: String(error) });
@@ -764,6 +977,14 @@ export function createGMRoutes(ctx: AppContext): Router {
       const gameState = ctx.gameEngine.getGameState(gameId);
       if (!gameState || !gameState.gmSession) { res.status(404).json({ error: 'Game or GM session not found' }); return; }
       ctx.gmChatbot.createStoryArc(gameState.gmSession, arcData);
+      emitQuestUpdated(
+        gameId,
+        'story-arc',
+        arcData.bbegName || 'Story Arc Updated',
+        'updated',
+        arcData.bbegMotivation || 'Story arc changed',
+        'gm/story',
+      );
       res.json({ storyArc: gameState.gmSession.storyArc });
     } catch (error) {
       res.status(500).json({ error: String(error) });
@@ -776,6 +997,14 @@ export function createGMRoutes(ctx: AppContext): Router {
       const gameState = ctx.gameEngine.getGameState(gameId);
       if (!gameState || !gameState.gmSession) { res.status(404).json({ error: 'Game or GM session not found' }); return; }
       ctx.gmChatbot.advanceStoryPhase(gameState.gmSession);
+      emitQuestUpdated(
+        gameId,
+        'story-arc',
+        gameState.gmSession.storyArc?.bbegName || 'Story Arc',
+        'updated',
+        gameState.gmSession.storyArc?.storyPhase || 'Story advanced',
+        'gm/story/advance',
+      );
       res.json({ storyArc: gameState.gmSession.storyArc });
     } catch (error) {
       res.status(500).json({ error: String(error) });
@@ -789,10 +1018,18 @@ export function createGMRoutes(ctx: AppContext): Router {
     try {
       const gameState = ctx.gameEngine.getGameState(gameId);
       if (!gameState || !gameState.gmSession) { res.status(404).json({ error: 'Game or GM session not found' }); return; }
-      const map = getMapById(mapId);
+      const map = getFoundryMapById(mapId);
       if (!map) { res.status(404).json({ error: 'Map not found' }); return; }
       applyMapTemplateToGame(gameState, map);
       gameState.gmSession.currentEncounterMapId = map.id;
+      ctx.eventBus.emit({
+        type: 'exploration:area-discovered',
+        timestamp: Date.now(),
+        gameId,
+        areaId: map.id,
+        title: map.name,
+        description: `Map selected: ${map.name}`,
+      });
       res.json({ map, gameState, gmSession: gameState.gmSession });
     } catch (error) {
       res.status(500).json({ error: String(error) });
@@ -806,19 +1043,40 @@ export function createGMRoutes(ctx: AppContext): Router {
     try {
       const gameState = ctx.gameEngine.getGameState(gameId);
       if (!gameState || !gameState.gmSession) { res.status(404).json({ error: 'Game or GM session not found' }); return; }
+      const previousTension = gameState.gmSession.tensionTracker.score;
 
       const prefsDifficulty = gameState.gmSession.campaignPreferences.encounterBalance as string;
       const chosenDifficulty: Difficulty = normalizeDifficulty(difficulty || prefsDifficulty);
 
       let selectedMap: EncounterMapTemplate | undefined;
-      if (mapId) selectedMap = getMapById(mapId);
-      else if (gameState.gmSession.currentEncounterMapId) selectedMap = getMapById(gameState.gmSession.currentEncounterMapId);
+      if (mapId) selectedMap = getFoundryMapById(mapId);
+      else if (gameState.gmSession.currentEncounterMapId) selectedMap = getFoundryMapById(gameState.gmSession.currentEncounterMapId);
       if (!selectedMap) {
-        const tone = gameState.gmSession?.campaignPreferences?.tone;
-        const inferred = inferMapThemeFromChat(gameState.gmSession, tone);
-        const procResult = generateAndApplyAtlasMap(gameState, inferred.theme, undefined, undefined, inferred.options);
-        gameState.gmSession.currentEncounterMapId = procResult.id;
-        selectedMap = procResult;
+        // AI GM picks a Foundry map based on recent narrative
+        const recentChat = gameState.gmSession.chatHistory.slice(-10).map((m: GMChatMessage) => m.content).join(' ');
+        const avgLevel = Math.round(
+          gameState.creatures.filter((c: Creature) => c.type === 'player')
+            .reduce((sum: number, c: Creature) => sum + (c.level || 1), 0) /
+          Math.max(1, gameState.creatures.filter((c: Creature) => c.type === 'player').length)
+        );
+        const aiSelection = selectMapForNarrative({
+          narrativeContext: recentChat,
+          theme: gameState.gmSession.campaignPreferences.mapTheme as MapGeneratorTheme,
+          partyLevel: avgLevel,
+          campaignId: gameId,
+        });
+        if (aiSelection.map) {
+          applyMapTemplateToGame(gameState, aiSelection.map);
+          gameState.gmSession.currentEncounterMapId = aiSelection.map.id;
+          selectedMap = aiSelection.map;
+          console.log(`🗺️ Button encounter: AI GM selected Foundry map "${aiSelection.map.name}" (${aiSelection.confidence}%)`);
+        } else {
+          const tone = gameState.gmSession?.campaignPreferences?.tone;
+          const inferred = inferMapThemeFromChat(gameState.gmSession, tone);
+          const procResult = generateAndApplyProceduralMap(gameState, inferred.theme, undefined, undefined, inferred.options);
+          gameState.gmSession.currentEncounterMapId = procResult.id;
+          selectedMap = procResult;
+        }
       } else {
         applyMapTemplateToGame(gameState, selectedMap);
         gameState.gmSession.currentEncounterMapId = selectedMap.id;
@@ -850,6 +1108,14 @@ export function createGMRoutes(ctx: AppContext): Router {
       gameState.gmSession.tensionTracker.trend = 'rising';
       gameState.gmSession.tensionTracker.lastUpdated = Date.now();
       gameState.gmSession.tensionTracker.history.push({ score: gameState.gmSession.tensionTracker.score, reason: 'Encounter started', timestamp: Date.now() });
+      ctx.eventBus.emit({
+        type: 'combat:started',
+        timestamp: Date.now(),
+        gameId,
+        turnOrder: gameState.currentRound.turnOrder,
+        creatureCount: gameState.creatures.length,
+      });
+      emitTensionChanged(gameId, previousTension, gameState.gmSession, 'Encounter started');
 
       res.json({ intro, map: selectedMap, enemies, gameState, gmSession: gameState.gmSession });
     } catch (error) {
@@ -864,6 +1130,7 @@ export function createGMRoutes(ctx: AppContext): Router {
     try {
       const gameState = ctx.gameEngine.getGameState(gameId);
       if (!gameState || !gameState.gmSession) { res.status(404).json({ error: 'Game or GM session not found' }); return; }
+      const previousTension = gameState.gmSession.tensionTracker.score;
       const intro = ctx.gmChatbot.generateEncounterIntro(gameState, gameState.gmSession);
       const introMsg: GMChatMessage = { id: `gm-encounter-intro-${Date.now()}`, role: 'gm', content: intro, timestamp: Date.now() };
       gameState.gmSession.chatHistory.push(introMsg);
@@ -873,6 +1140,7 @@ export function createGMRoutes(ctx: AppContext): Router {
       gameState.gmSession.tensionTracker.lastUpdated = Date.now();
       gameState.gmSession.tensionTracker.history.push({ score: gameState.gmSession.tensionTracker.score, reason: 'Encounter started', timestamp: Date.now() });
       gameState.gmSession.currentPhase = 'combat';
+      emitTensionChanged(gameId, previousTension, gameState.gmSession, 'Encounter intro');
       res.json({ intro, gmSession: gameState.gmSession });
     } catch (error) {
       res.status(500).json({ error: String(error) });
@@ -886,6 +1154,7 @@ export function createGMRoutes(ctx: AppContext): Router {
     try {
       const gameState = ctx.gameEngine.getGameState(gameId);
       if (!gameState || !gameState.gmSession) { res.status(404).json({ error: 'Game or GM session not found' }); return; }
+      const previousTension = gameState.gmSession.tensionTracker.score;
 
       const conclusion = ctx.gmChatbot.generateEncounterConclusion(gameState, gameState.gmSession, victory !== false);
       const conclusionMsg: GMChatMessage = { id: `gm-encounter-conclusion-${Date.now()}`, role: 'gm', content: conclusion, timestamp: Date.now() };
@@ -967,11 +1236,434 @@ export function createGMRoutes(ctx: AppContext): Router {
       gameState.gmSession.stashedMap = undefined;
       gameState.gmSession.stashedMapId = undefined;
 
+      emitTensionChanged(gameId, previousTension, gameState.gmSession, victory !== false ? 'Encounter won' : 'Encounter lost');
+      ctx.eventBus.emit({
+        type: 'combat:ended',
+        timestamp: Date.now(),
+        gameId,
+        totalRounds: gameState.currentRound.number,
+        outcome: victory !== false ? 'players' : 'enemies',
+      });
+      emitQuestUpdated(
+        gameId,
+        `encounter-${gameState.gmSession.encounterCount}`,
+        `Encounter ${gameState.gmSession.encounterCount}`,
+        victory !== false ? 'completed' : 'failed',
+        `XP awarded: ${xpAward}`,
+        'gm/encounter/conclusion',
+      );
+
       res.json({
         conclusion, xpAward, levelUps, sessionNote: note,
         gmSession: gameState.gmSession, gameState,
         restoredNPCs: restoredNPCs.map((n: Creature) => ({ id: n.id, name: n.name })),
       });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  // ─── Session Zero (Phase 9) ───────────────────────────────────
+  router.post('/api/game/:gameId/gm/session-zero', async (req: Request, res: Response) => {
+    const { gameId } = req.params;
+    const input = req.body;
+    try {
+      const gameState = ctx.gameEngine.getGameState(gameId);
+      if (!gameState) { res.status(404).json({ error: 'Game not found' }); return; }
+
+      // Build preferences from Session Zero input
+      const preferences: Partial<CampaignPreferences> = {
+        campaignName: String(input.campaignName || 'Solo Campaign').slice(0, 100),
+        tone: input.tone || 'heroic',
+        themes: Array.isArray(input.themes) ? input.themes.slice(0, 10) : ['adventure'],
+        pacing: input.pacing || 'moderate',
+        encounterBalance: input.encounterBalance || 'moderate',
+        customNotes: String(input.customNotes || '').slice(0, 500),
+        playerCount: Math.max(1, Math.min(6, Number(input.playerCount) || 1)),
+        averageLevel: Math.max(1, Math.min(20, Number(input.averageLevel) || 1)),
+      };
+
+      // Try to generate campaign framework via Session Zero generator
+      let campaignFramework: CampaignFramework | null = null;
+      try {
+        campaignFramework = await ctx.sessionZeroGenerator.generate({
+          campaignName: preferences.campaignName!,
+          tone: preferences.tone!,
+          themes: preferences.themes!,
+          pacing: preferences.pacing!,
+          encounterBalance: preferences.encounterBalance!,
+          lootLevel: input.lootLevel || 'standard',
+          playerCount: preferences.playerCount!,
+          averageLevel: preferences.averageLevel!,
+          customNotes: preferences.customNotes,
+          companionAI: input.companionAI || 'full',
+          narrationVerbosity: input.narrationVerbosity || 'standard',
+          ruleCitations: input.ruleCitations !== false,
+        });
+        console.log(`🎭 Session Zero: generated campaign framework "${preferences.campaignName}"`);
+      } catch (err) {
+        console.warn('⚠️ Session Zero generator failed, using defaults:', err);
+      }
+
+      // Initialize GM session with these preferences
+      if (!gameState.gmSession) {
+        gameState.gmSession = createDefaultGMSession(preferences);
+      } else {
+        gameState.gmSession.campaignPreferences = {
+          ...gameState.gmSession.campaignPreferences,
+          ...preferences,
+        };
+      }
+
+      // If framework was generated, enrich the session
+      if (campaignFramework) {
+        if (campaignFramework.storyArc) {
+          gameState.gmSession.storyArc = {
+            bbegName: campaignFramework.storyArc.bbegName || 'Unknown',
+            bbegMotivation: campaignFramework.storyArc.bbegMotivation || 'Unknown',
+            keyLocations: campaignFramework.storyArc.keyLocations || [],
+            storyPhase: 'setup',
+            milestones: campaignFramework.storyArc.milestones || [],
+            secretPlots: campaignFramework.storyArc.secretPlots || [],
+          };
+        }
+        if (Array.isArray(campaignFramework.npcs)) {
+          for (const npc of campaignFramework.npcs) {
+            if (!gameState.gmSession.recurringNPCs.find((n: RecurringNPC) => n.name?.toLowerCase() === npc.name?.toLowerCase())) {
+              gameState.gmSession.recurringNPCs.push({
+                id: `npc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                name: npc.name || 'Unknown NPC',
+                role: npc.role || 'neutral',
+                disposition: npc.disposition ?? 50,
+                description: npc.description || '',
+                interactions: [],
+                isAlive: true,
+                location: npc.location || 'Unknown',
+              });
+            }
+          }
+        }
+      }
+
+      // Store Session Zero metadata on the GM session
+      gameState.gmSession.sessionZeroComplete = true;
+      gameState.gmSession.lootLevel = input.lootLevel || 'standard';
+      gameState.gmSession.companionAI = input.companionAI || 'full';
+      gameState.gmSession.narrationVerbosity = input.narrationVerbosity || 'standard';
+      gameState.gmSession.ruleCitations = input.ruleCitations !== false;
+
+      // Add welcome message
+      const welcomeMsg: GMChatMessage = {
+        id: `gm-session-zero-${Date.now()}`,
+        role: 'gm',
+        content: campaignFramework?.openingNarration
+          || `Welcome to "${preferences.campaignName}"! Your ${preferences.tone} campaign is ready. The AI Game Master awaits your first move. Type anything to begin your adventure!`,
+        timestamp: Date.now(),
+      };
+      gameState.gmSession.chatHistory.push(welcomeMsg);
+
+      emitQuestUpdated(
+        gameId,
+        'campaign-start',
+        preferences.campaignName || 'Campaign Start',
+        'introduced',
+        welcomeMsg.content.slice(0, 240),
+        'gm/session-zero',
+      );
+
+      console.log(`🎭 Session Zero complete for game ${gameId}: "${preferences.campaignName}" (${preferences.tone})`);
+      res.json({ gmSession: gameState.gmSession, gameState, campaignFramework });
+    } catch (error) {
+      console.error('❌ Error in Session Zero:', error);
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  // ─── Runtime GM Settings (Phase 9) ────────────────────────────
+  router.put('/api/game/:gameId/gm/settings', (req: Request, res: Response) => {
+    const { gameId } = req.params;
+    const { companionAI, narrationVerbosity, ruleCitations, lootLevel } = req.body;
+    try {
+      const gameState = ctx.gameEngine.getGameState(gameId);
+      if (!gameState || !gameState.gmSession) { res.status(404).json({ error: 'Game or GM session not found' }); return; }
+
+      const VALID_COMPANION = ['full', 'assisted', 'manual'];
+      const VALID_VERBOSITY = ['brief', 'standard', 'detailed', 'elaborate'];
+      const VALID_LOOT = ['standard', 'high'];
+
+      if (companionAI && VALID_COMPANION.includes(companionAI)) gameState.gmSession.companionAI = companionAI;
+      if (narrationVerbosity && VALID_VERBOSITY.includes(narrationVerbosity)) gameState.gmSession.narrationVerbosity = narrationVerbosity;
+      if (typeof ruleCitations === 'boolean') gameState.gmSession.ruleCitations = ruleCitations;
+      if (lootLevel && VALID_LOOT.includes(lootLevel)) gameState.gmSession.lootLevel = lootLevel;
+
+      res.json({
+        companionAI: gameState.gmSession.companionAI,
+        narrationVerbosity: gameState.gmSession.narrationVerbosity,
+        ruleCitations: gameState.gmSession.ruleCitations,
+        lootLevel: gameState.gmSession.lootLevel,
+      });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  // ─── World State Summary (Phase 9) ────────────────────────────
+  router.get('/api/game/:gameId/gm/world-state', (req: Request, res: Response) => {
+    const { gameId } = req.params;
+    try {
+      const gameState = ctx.gameEngine.getGameState(gameId);
+      if (!gameState || !gameState.gmSession) { res.status(404).json({ error: 'Game or GM session not found' }); return; }
+
+      // Extract quest-like info from session notes and story arc
+      const quests: { id: string; title: string; status: string; description: string }[] = [];
+      const session = gameState.gmSession;
+
+      // Derive quests from story arc milestones
+      if (session.storyArc?.milestones) {
+        for (let i = 0; i < session.storyArc.milestones.length; i++) {
+          const m = session.storyArc.milestones[i];
+          quests.push({
+            id: `milestone-${i}`,
+            title: typeof m === 'string' ? m : ((m as { title?: string }).title || `Milestone ${i + 1}`),
+            status: typeof m === 'object' && m !== null && Boolean((m as { completed?: boolean }).completed) ? 'completed' : 'active',
+            description: typeof m === 'object' && m !== null ? ((m as { description?: string }).description || '') : '',
+          });
+        }
+      }
+
+      // Simple calendar based on encounter count (approximation)
+      const daysElapsed = Math.max(1, (session.encounterCount ?? 0) * 2 + (session.sessionNotes?.length ?? 0));
+      const seasons = ['Abadius (Winter)', 'Calistril (Winter)', 'Pharast (Spring)', 'Gozran (Spring)', 'Desnus (Spring)', 'Sarenith (Summer)', 'Erastus (Summer)', 'Arodus (Summer)', 'Rova (Autumn)', 'Lamashan (Autumn)', 'Neth (Autumn)', 'Kuthona (Winter)'];
+      const seasonIdx = Math.floor(((daysElapsed - 1) / 30)) % 12;
+      const hoursOfDay = [
+        'Dawn', 'Morning', 'Midday', 'Afternoon', 'Evening', 'Night',
+      ];
+      const timeIdx = (session.encounterCount + (session.sessionNotes?.length || 0)) % hoursOfDay.length;
+
+      res.json({
+        quests,
+        calendar: {
+          day: daysElapsed,
+          season: seasons[seasonIdx],
+          timeOfDay: hoursOfDay[timeIdx],
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  // ─── Encounter Preview (Phase 9) ──────────────────────────────
+  router.post('/api/game/:gameId/gm/encounter/preview', (req: Request, res: Response) => {
+    const { gameId } = req.params;
+    const { difficulty } = req.body;
+    try {
+      const gameState = ctx.gameEngine.getGameState(gameId);
+      if (!gameState || !gameState.gmSession) { res.status(404).json({ error: 'Game or GM session not found' }); return; }
+
+      const chosenDifficulty = normalizeDifficulty(difficulty || 'moderate');
+      const players = gameState.creatures.filter((c: Creature) => c.type === 'player');
+      const avgLevel = players.length > 0
+        ? Math.round(players.reduce((sum: number, c: Creature) => sum + (c.level || 1), 0) / players.length)
+        : 1;
+
+      // Generate preview enemies on a shallow copy — never mutate actual game state for a preview
+      const previewState = { ...gameState, creatures: [...gameState.creatures] };
+      const enemies = buildEncounterEnemies(previewState, chosenDifficulty, undefined);
+      // Extract only the newly-added creatures (those not in the original list)
+      const originalIds = new Set(gameState.creatures.map((c: Creature) => c.id));
+      const newEnemies = previewState.creatures.filter((c: Creature) => !originalIds.has(c.id));
+      const previewEnemies = newEnemies.map((e: Creature) => ({
+        name: e.name,
+        level: e.level || 0,
+        hp: e.maxHealth || 1,
+        description: (e as Creature & { bestiaryDescription?: string }).bestiaryDescription || '',
+      }));
+
+      // Calculate XP
+      let totalXP = 0;
+      for (const e of newEnemies) totalXP += getCreatureXP(e.level, avgLevel);
+
+      // Get map name
+      let mapName: string | undefined;
+      if (gameState.gmSession?.currentEncounterMapId) {
+        const map = getFoundryMapById(gameState.gmSession.currentEncounterMapId);
+        if (map) mapName = map.name;
+      }
+
+      // Simple narrative hook based on tone
+      const hooks: Record<string, string[]> = {
+        heroic: ['The ground trembles as danger approaches...', 'Steel gleams in the torchlight as foes emerge!', 'A horn sounds in the distance — battle draws near.'],
+        gritty: ['Blood and darkness await around the corner...', 'The stench of death fills the air.', 'Shadows move with hostile intent.'],
+        horror: ['Something unspeakable stirs in the darkness...', 'A chill runs down your spine as shapes emerge.', 'The silence is broken by an inhuman shriek.'],
+        'dungeon-crawl': ['You hear movement beyond the next door...', 'The chamber ahead is not empty.', 'Territorial creatures guard the passage.'],
+      };
+      const tone = gameState.gmSession?.campaignPreferences?.tone || 'heroic';
+      const toneHooks = hooks[tone] || hooks.heroic;
+      const narrativeHook = toneHooks[Math.floor(Math.random() * toneHooks.length)];
+
+      res.json({
+        difficulty: chosenDifficulty,
+        enemies: previewEnemies,
+        mapName,
+        narrativeHook,
+        xpReward: Math.max(10, totalXP),
+      });
+    } catch (error) {
+      console.error('❌ Error in encounter preview:', error);
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  // ─── Downtime Activities (Phase 9) ────────────────────────────
+  router.get('/api/game/:gameId/gm/downtime/activities', (req: Request, res: Response) => {
+    const { gameId } = req.params;
+    try {
+      const gameState = ctx.gameEngine.getGameState(gameId);
+      if (!gameState) { res.status(404).json({ error: 'Game not found' }); return; }
+
+      // Base activities always available
+      const activities: Array<{ id: string; name: string; icon: string; description: string; daysRequired: number }> = [
+        { id: 'long-rest', name: 'Rest & Recover', icon: '😴', description: 'Full rest — restore HP and daily resources.', daysRequired: 1 },
+        { id: 'gather-info', name: 'Gather Information', icon: '🔍', description: 'Ask around to learn about the area, rumors, or people.', daysRequired: 1 },
+        { id: 'earn-income', name: 'Earn Income', icon: '💰', description: 'Use a skill to earn money during your downtime.', daysRequired: 1 },
+        { id: 'retrain', name: 'Retrain', icon: '📖', description: 'Retrain a feat, skill, or class feature with a trainer.', daysRequired: 7 },
+      ];
+
+      // Check for merchant NPCs to enable shopping
+      const merchants = (gameState.gmSession?.recurringNPCs || []).filter((n: RecurringNPC) => n.role === 'merchant');
+      for (const merchant of merchants.slice(0, 3)) {
+        activities.push({
+          id: 'shop-' + merchant.id,
+          name: `Shop at ${merchant.name}`,
+          icon: '🏪',
+          description: `Browse ${merchant.name}'s wares`,
+          daysRequired: 0,
+        });
+      }
+
+      res.json({ activities });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  router.post('/api/game/:gameId/gm/downtime/perform', async (req: Request, res: Response) => {
+    const { gameId } = req.params;
+    const { activityId, days } = req.body;
+    try {
+      const gameState = ctx.gameEngine.getGameState(gameId);
+      if (!gameState || !gameState.gmSession) { res.status(404).json({ error: 'Game or GM session not found' }); return; }
+      const previousTension = gameState.gmSession.tensionTracker.score;
+
+      const safeDays = Math.max(0, Math.min(30, Number(days) || 1));
+      const safeActivityId = String(activityId || '').slice(0, 100);
+
+      // Generate narrative response for the activity
+      let narrative = '';
+      try {
+        const result = await ctx.gmChatbot.processMessage(
+          `I want to spend ${safeDays} day(s) performing the downtime activity: ${safeActivityId}. Describe what happens.`,
+          gameState,
+          gameState.gmSession,
+        );
+        narrative = result.response.content;
+        gameState.gmSession.chatHistory.push(result.response);
+        if (result.sessionUpdates.tensionTracker) {
+          gameState.gmSession.tensionTracker = result.sessionUpdates.tensionTracker;
+          emitTensionChanged(gameId, previousTension, gameState.gmSession, `Downtime: ${safeActivityId}`);
+        }
+      } catch {
+        narrative = `You spend ${safeDays} day(s) on ${safeActivityId}. The time passes uneventfully.`;
+        const fallbackMsg: GMChatMessage = {
+          id: `gm-downtime-${Date.now()}`,
+          role: 'gm',
+          content: narrative,
+          timestamp: Date.now(),
+        };
+        gameState.gmSession.chatHistory.push(fallbackMsg);
+      }
+
+      // Handle healing during rest
+      if (safeActivityId === 'long-rest') {
+        for (const c of gameState.creatures.filter((c: Creature) => c.type === 'player')) {
+          c.currentHealth = c.maxHealth;
+          c.conditions = [];
+        }
+      }
+
+      // Set phase to downtime
+      gameState.gmSession.currentPhase = 'rest';
+      emitTimeAdvanced(gameId, safeDays, 'days', `Downtime activity: ${safeActivityId}`);
+
+      if (safeActivityId === 'earn-income') {
+        ctx.eventBus.emit({
+          type: 'downtime:income-earned',
+          timestamp: Date.now(),
+          gameId,
+          amount: 0,
+          currency: 'gp',
+          source: 'earn-income',
+          daysSpent: safeDays,
+        });
+      } else if (safeActivityId === 'retrain') {
+        ctx.eventBus.emit({
+          type: 'downtime:retrain-complete',
+          timestamp: Date.now(),
+          gameId,
+          target: 'retraining',
+          daysSpent: safeDays,
+        });
+      } else if (safeActivityId === 'gather-info') {
+        ctx.eventBus.emit({
+          type: 'downtime:rumor-heard',
+          timestamp: Date.now(),
+          gameId,
+          rumor: narrative.slice(0, 240),
+        });
+      } else if (safeActivityId.startsWith('craft')) {
+        ctx.eventBus.emit({
+          type: 'downtime:crafting-complete',
+          timestamp: Date.now(),
+          gameId,
+          itemName: 'Crafting task',
+          daysSpent: safeDays,
+        });
+      }
+
+      res.json({ narrative, gmSession: gameState.gmSession, gameState });
+    } catch (error) {
+      console.error('❌ Error in downtime activity:', error);
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  // ─── XP Award (referenced by GMChatPanel) ─────────────────────
+  router.post('/api/game/:gameId/xp/award', (req: Request, res: Response) => {
+    const { gameId } = req.params;
+    const { amount, reason } = req.body;
+    try {
+      const gameState = ctx.gameEngine.getGameState(gameId);
+      if (!gameState || !gameState.gmSession) { res.status(404).json({ error: 'Game or GM session not found' }); return; }
+
+      const xpAmount = Math.max(0, Math.min(1000, Number(amount) || 0));
+      gameState.gmSession.xpAwarded += xpAmount;
+
+      const levelUps: { id: string; name: string; oldLevel: number; newLevel: number }[] = [];
+      for (const player of gameState.creatures.filter((c: Creature) => c.type === 'player')) {
+        const prevXP = Math.max(0, player.currentXP ?? 0);
+        const oldLevel = Math.max(1, player.level ?? 1);
+        const newXP = prevXP + xpAmount;
+        if (newXP >= XP_PER_LEVEL) {
+          player.level = oldLevel + 1;
+          player.currentXP = newXP - XP_PER_LEVEL;
+          levelUps.push({ id: player.id, name: player.name, oldLevel, newLevel: player.level });
+        } else {
+          player.currentXP = newXP;
+        }
+      }
+
+      res.json({ xpAwarded: xpAmount, gmSession: gameState.gmSession, levelUps });
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }

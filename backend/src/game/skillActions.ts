@@ -1,4 +1,4 @@
-import { Creature, GameState, Position, rollD20, getDegreeOfSuccess, rollDamageFormula, calculateSaveBonus, computePathCost } from 'pf2e-shared';
+import { Creature, GameState, Position, ActionResult, rollD20, getDegreeOfSuccess, rollDamageFormula, calculateSaveBonus, computePathCost } from 'pf2e-shared';
 import { getEffectiveSpeed } from './helpers';
 import { applyForcedMovement } from './subsystems';
 
@@ -35,7 +35,7 @@ export function resolveDemoralizeAction(
   gameState: GameState,
   targetId?: string,
   heroPointsSpent?: number
-): any {
+): ActionResult {
   if (!targetId) {
     return { success: false, message: 'No target specified for Demoralize!' , errorCode: 'NO_TARGET' };
   }
@@ -152,7 +152,7 @@ export function resolveShoveAction(
   gameState: GameState,
   targetId?: string,
   heroPointsSpent?: number
-): any {
+): ActionResult {
   if (!targetId) {
     return { success: false, message: 'No target specified for Shove!' , errorCode: 'NO_TARGET' };
   }
@@ -258,7 +258,7 @@ export function resolveTripAction(
   gameState: GameState,
   targetId?: string,
   heroPointsSpent?: number
-): any {
+): ActionResult {
   if (!targetId) {
     return { success: false, message: 'No target specified for Trip!' , errorCode: 'NO_TARGET' };
   }
@@ -356,7 +356,7 @@ export function resolveGrappleAction(
   gameState: GameState,
   targetId?: string,
   heroPointsSpent?: number
-): any {
+): ActionResult {
   if (!targetId) {
     return { success: false, message: 'No target specified for Grapple.' , errorCode: 'NO_TARGET' };
   }
@@ -366,7 +366,7 @@ export function resolveGrappleAction(
   }
 
   const hasFreeHand = !actor.hands?.primary?.item || !actor.hands?.secondary?.item;
-  const hasGrappleWeapon = (actor.weaponInventory ?? []).some((w: any) =>
+  const hasGrappleWeapon = (actor.weaponInventory ?? []).some((w) =>
     Array.isArray(w.traits) && w.traits.includes('grapple') && w.state === 'held'
   );
   if (!hasFreeHand && !hasGrappleWeapon) {
@@ -406,12 +406,12 @@ export function resolveGrappleAction(
 
   if (result === 'critical-success') {
     if (!target.conditions) target.conditions = [];
-    target.conditions = target.conditions.filter((c: any) => c.name !== 'grabbed');
+    target.conditions = target.conditions.filter((c) => c.name !== 'grabbed');
     target.conditions.push({ name: 'restrained', duration: 1, source: 'grapple' });
     message += `\n✨ ${target.name} is restrained! (off-guard, immobilized)`;
   } else if (result === 'success') {
     if (!target.conditions) target.conditions = [];
-    target.conditions = target.conditions.filter((c: any) => c.name !== 'restrained');
+    target.conditions = target.conditions.filter((c) => c.name !== 'restrained');
     target.conditions.push({ name: 'grabbed', duration: 1, source: 'grapple' });
     message += `\n✅ ${target.name} is grabbed! (off-guard, immobilized)`;
   } else if (result === 'critical-failure') {
@@ -431,9 +431,9 @@ export function resolveEscapeAction(
   gameState: GameState,
   targetId?: string,
   heroPointsSpent?: number
-): any {
+): ActionResult {
   const escapeConditions = ['grabbed', 'restrained', 'immobilized'];
-  const hasEscape = (actor.conditions ?? []).some((c: any) => escapeConditions.includes(c.name));
+  const hasEscape = (actor.conditions ?? []).some((c) => escapeConditions.includes(c.name));
   if (!hasEscape) {
     return { success: false, message: 'You are not grabbed, restrained, or immobilized.' , errorCode: 'VALIDATION_FAILED' };
   }
@@ -443,7 +443,7 @@ export function resolveEscapeAction(
     grabber = gameState.creatures.find((c) => c.id === targetId);
   }
 
-  const unarmedWeapon = actor.weaponInventory?.find((w: any) => w.weapon?.isNatural && w.state === 'held');
+  const unarmedWeapon = actor.weaponInventory?.find((w) => w.weapon?.isNatural && w.state === 'held');
   const unarmedMod = unarmedWeapon?.weapon?.attackBonus ?? ctx.getSkillBonus(actor, 'athletics');
   const athleticsMod = ctx.getSkillBonus(actor, 'athletics');
   const acrobaticsMod = ctx.getSkillBonus(actor, 'acrobatics');
@@ -480,7 +480,7 @@ export function resolveEscapeAction(
   message += `Result: **${result.toUpperCase()}**`;
 
   if (result === 'critical-success' || result === 'success') {
-    actor.conditions = (actor.conditions ?? []).filter((c: any) => !escapeConditions.includes(c.name));
+    actor.conditions = (actor.conditions ?? []).filter((c) => !escapeConditions.includes(c.name));
     message += result === 'critical-success'
       ? `\n✨ Critical Success! You escape and can Step 5ft as a free action.`
       : `\n✅ Success! You escape.`;
@@ -499,7 +499,7 @@ export function resolveDisarmAction(
   gameState: GameState,
   targetId?: string,
   heroPointsSpent?: number
-): any {
+): ActionResult {
   if (!targetId) {
     return { success: false, message: 'No target specified for Disarm.' , errorCode: 'NO_TARGET' };
   }
@@ -509,14 +509,14 @@ export function resolveDisarmAction(
   }
 
   const hasFreeHand = !actor.hands?.primary?.item || !actor.hands?.secondary?.item;
-  const hasDisarmWeapon = (actor.weaponInventory ?? []).some((w: any) =>
+  const hasDisarmWeapon = (actor.weaponInventory ?? []).some((w) =>
     Array.isArray(w.traits) && w.traits.includes('disarm') && w.state === 'held'
   );
   if (!hasFreeHand && !hasDisarmWeapon) {
     return { success: false, message: 'You need a free hand or a disarm weapon to Disarm.' , errorCode: 'NO_FREE_HAND' };
   }
 
-  const targetHasWeapon = (target.weaponInventory ?? []).some((w: any) => w.state === 'held' && !w.isNatural);
+  const targetHasWeapon = (target.weaponInventory ?? []).some((w) => w.state === 'held' && !w.weapon?.isNatural);
   if (!targetHasWeapon) {
     return { success: false, message: `${target.name} has no weapon to disarm.` , errorCode: 'NO_WEAPON' };
   }
@@ -553,7 +553,7 @@ export function resolveDisarmAction(
   message += `Result: **${result.toUpperCase()}**`;
 
   if (result === 'critical-success') {
-    const weaponSlot = target.weaponInventory?.find((w: any) => w.state === 'held' && !w.weapon?.isNatural);
+    const weaponSlot = target.weaponInventory?.find((w) => w.state === 'held' && !w.weapon?.isNatural);
     if (weaponSlot) {
       weaponSlot.state = 'dropped';
       const weaponName = weaponSlot.weapon?.display ?? 'weapon';
@@ -581,7 +581,7 @@ export function resolveBattleMedicineAction(
   gameState: GameState,
   targetId?: string,
   heroPointsSpent?: number
-): any {
+): ActionResult {
   if (!targetId) {
     return { success: false, message: 'No target specified for Battle Medicine.' , errorCode: 'NO_TARGET' };
   }
@@ -590,7 +590,7 @@ export function resolveBattleMedicineAction(
     return { success: false, message: 'Target not found or is unconscious.' , errorCode: 'TARGET_NOT_FOUND' };
   }
 
-  const battleMedicineUsed = (actor as any).battleMedicineTargets ?? [];
+  const battleMedicineUsed = actor.battleMedicineTargets ?? [];
   if (battleMedicineUsed.includes(targetId)) {
     return { success: false, message: `You've already used Battle Medicine on ${target.name} today!` , errorCode: 'ALREADY_USED' };
   }
@@ -643,10 +643,8 @@ export function resolveBattleMedicineAction(
     message += `\n   ${target.name}: ${oldHP}/${target.maxHealth} HP → ${target.currentHealth}/${target.maxHealth} HP`;
   }
 
-  if (!actor.hasOwnProperty('battleMedicineTargets')) {
-    (actor as any).battleMedicineTargets = [];
-  }
-  (actor as any).battleMedicineTargets.push(targetId);
+  actor.battleMedicineTargets = actor.battleMedicineTargets ?? [];
+  actor.battleMedicineTargets.push(targetId);
 
   return { success: true, message, details: { d20: finalD20, medicineBonus, total, baseDC, result, healing, ...(heroPointMessage && { heroPointMessage, heroPointsSpent }) } };
 }
@@ -657,7 +655,7 @@ export function resolveTumbleThroughAction(
   gameState: GameState,
   targetId?: string,
   heroPointsSpent?: number
-): any {
+): ActionResult {
   if (!targetId) {
     return { success: false, message: 'No target specified for Tumble Through.' , errorCode: 'NO_TARGET' };
   }
@@ -714,10 +712,10 @@ export function resolveHideAction(
   actor: Creature,
   gameState: GameState,
   heroPointsSpent?: number
-): any {
+): ActionResult {
   const stealthBonus = ctx.getSkillBonus(actor, 'stealth');
-  const enemies = gameState.creatures.filter((c: any) => c.id !== actor.id && c.currentHealth > 0);
-  const highestEnemyLevel = Math.max(...enemies.map((e: any) => e.level ?? 1), 1);
+  const enemies = gameState.creatures.filter((c) => c.id !== actor.id && c.currentHealth > 0);
+  const highestEnemyLevel = Math.max(...enemies.map((e) => e.level ?? 1), 1);
   const perceptionDC = 15 + highestEnemyLevel;
 
   const d20 = rollD20();
@@ -755,7 +753,7 @@ export function resolveHideAction(
     // Hidden Paragon (Level 20 Rogue feat): Become invisible for 1 round on successful Hide
     const hasHiddenParagon = actor.level >= 20 && 
       actor.characterClass === 'Rogue' && 
-      (actor.feats?.some((f: any) => {
+      (actor.feats?.some((f) => {
         const name = typeof f === 'string' ? f : f?.name;
         return typeof name === 'string' && name.toLowerCase().includes('hidden paragon');
       }) || actor.specials?.some((s: string) => s.toLowerCase().includes('hidden paragon')));
@@ -784,15 +782,15 @@ export function resolveSneakAction(
   gameState: GameState,
   targetPosition?: Position,
   heroPointsSpent?: number
-): any {
-  const isHidden = (actor.conditions ?? []).some((c: any) => c.name === 'hidden');
+): ActionResult {
+  const isHidden = (actor.conditions ?? []).some((c) => c.name === 'hidden');
   if (!isHidden) {
     return { success: false, message: 'You must be hidden to Sneak. Use Hide first.' , errorCode: 'VALIDATION_FAILED' };
   }
 
   const stealthBonus = ctx.getSkillBonus(actor, 'stealth');
-  const enemies = gameState.creatures.filter((c: any) => c.id !== actor.id && c.currentHealth > 0);
-  const highestEnemyLevel = Math.max(...enemies.map((e: any) => e.level ?? 1), 1);
+  const enemies = gameState.creatures.filter((c) => c.id !== actor.id && c.currentHealth > 0);
+  const highestEnemyLevel = Math.max(...enemies.map((e) => e.level ?? 1), 1);
   const perceptionDC = 15 + highestEnemyLevel;
 
   const d20 = rollD20();
@@ -899,7 +897,7 @@ export function resolveSneakAction(
     // Hidden Paragon (Level 20 Rogue feat): Become invisible for 1 round on successful Sneak
     const hasHiddenParagon = actor.level >= 20 && 
       actor.characterClass === 'Rogue' && 
-      (actor.feats?.some((f: any) => {
+      (actor.feats?.some((f) => {
         const name = typeof f === 'string' ? f : f?.name;
         return typeof name === 'string' && name.toLowerCase().includes('hidden paragon');
       }) || actor.specials?.some((s: string) => s.toLowerCase().includes('hidden paragon')));
@@ -917,7 +915,7 @@ export function resolveSneakAction(
       message += `\n🌟 **Hidden Paragon!** You become invisible for 1 round!`;
     }
   } else if (result === 'critical-failure' || result === 'failure') {
-    actor.conditions = (actor.conditions ?? []).filter((c: any) => c.name !== 'hidden');
+    actor.conditions = (actor.conditions ?? []).filter((c) => c.name !== 'hidden');
     message += `\n❌ Failure! You are detected and no longer hidden.`;
   }
 
@@ -934,7 +932,7 @@ export function resolveRecallKnowledgeAction(
   gameState: GameState,
   targetId?: string,
   heroPointsSpent?: number
-): any {
+): ActionResult {
   if (!targetId) {
     return { success: false, message: 'No target specified for Recall Knowledge.' , errorCode: 'NO_TARGET' };
   }
@@ -943,7 +941,7 @@ export function resolveRecallKnowledgeAction(
     return { success: false, message: 'Target not found or is unconscious.' , errorCode: 'TARGET_NOT_FOUND' };
   }
 
-  const recallUsed = (actor as any).recallKnowledgeTargets ?? [];
+  const recallUsed = actor.recallKnowledgeTargets ?? [];
   if (recallUsed.includes(targetId)) {
     return { success: false, message: `You've already used Recall Knowledge on ${target.name} this combat!` , errorCode: 'ALREADY_USED' };
   }
@@ -983,8 +981,8 @@ export function resolveRecallKnowledgeAction(
 
   if (result === 'critical-success') {
     message += `\n✨ Critical Success! You learn two useful facts:`;
-    message += `\n   • Weaknesses: ${target.damageWeaknesses?.map((w: any) => `${w.type} ${w.value}`).join(', ') ?? 'None'}`;
-    message += `\n   • Resistances: ${target.damageResistances?.map((r: any) => `${r.type} ${r.value}`).join(', ') ?? 'None'}`;
+    message += `\n   • Weaknesses: ${target.damageWeaknesses?.map((w) => `${w.type} ${w.value}`).join(', ') ?? 'None'}`;
+    message += `\n   • Resistances: ${target.damageResistances?.map((r) => `${r.type} ${r.value}`).join(', ') ?? 'None'}`;
     message += `\n   • Lowest Save: ${getLowestSave(target)}`;
   } else if (result === 'success') {
     message += `\n✅ Success! You learn one useful fact:`;
@@ -993,10 +991,8 @@ export function resolveRecallKnowledgeAction(
     message += `\n❌ Failure. You don't recall anything useful.`;
   }
 
-  if (!actor.hasOwnProperty('recallKnowledgeTargets')) {
-    (actor as any).recallKnowledgeTargets = [];
-  }
-  (actor as any).recallKnowledgeTargets.push(targetId);
+  actor.recallKnowledgeTargets = actor.recallKnowledgeTargets ?? [];
+  actor.recallKnowledgeTargets.push(targetId);
 
   return { success: true, message, details: { d20: finalD20, bestBonus, total, knowledgeDC, result, ...(heroPointMessage && { heroPointMessage, heroPointsSpent }) } };
 }
@@ -1006,19 +1002,19 @@ export function resolveSeekAction(
   actor: Creature,
   gameState: GameState,
   heroPointsSpent?: number
-): any {
+): ActionResult {
   const perceptionBonus = ctx.getSkillBonus(actor, 'perception');
-  const hiddenEnemies = gameState.creatures.filter((c: any) =>
+  const hiddenEnemies = gameState.creatures.filter((c) =>
     c.id !== actor.id &&
     c.currentHealth > 0 &&
-    (c.conditions ?? []).some((cond: any) => cond.name === 'hidden')
+    (c.conditions ?? []).some((cond) => cond.name === 'hidden')
   );
 
   if (hiddenEnemies.length === 0) {
     return { success: false, message: 'There are no hidden creatures to seek.' , errorCode: 'VALIDATION_FAILED' };
   }
 
-  const stealthDCs = hiddenEnemies.map((e: any) => 15 + ctx.getSkillBonus(e, 'stealth'));
+  const stealthDCs = hiddenEnemies.map((e) => 15 + ctx.getSkillBonus(e, 'stealth'));
   const highestDC = Math.max(...stealthDCs);
 
   const d20 = rollD20();
@@ -1047,17 +1043,17 @@ export function resolveSeekAction(
   message += `Result: **${result.toUpperCase()}**`;
 
   if (result === 'critical-success' || result === 'success') {
-    hiddenEnemies.forEach((enemy: any) => {
-      enemy.conditions = (enemy.conditions ?? []).filter((c: any) => c.name !== 'hidden');
+    hiddenEnemies.forEach((enemy) => {
+      enemy.conditions = (enemy.conditions ?? []).filter((c) => c.name !== 'hidden');
     });
-    const names = hiddenEnemies.map((e: any) => e.name).join(', ');
+    const names = hiddenEnemies.map((e) => e.name).join(', ');
     message += `\n✅ Success! You find: ${names}`;
   } else {
     message += `\n❌ Failure. You don't locate any hidden creatures.`;
 
     if (ctx.hasFeat(actor, 'Sense the Unseen')) {
       const nearbyHidden = hiddenEnemies
-        .map((enemy: any) => ({ enemy, distance: ctx.calculateDistance(actor.positions, enemy.positions) }))
+        .map((enemy) => ({ enemy, distance: ctx.calculateDistance(actor.positions, enemy.positions) }))
         .filter((entry) => entry.distance <= 6)
         .sort((a, b) => a.distance - b.distance);
 
@@ -1083,7 +1079,7 @@ export function resolveAidAction(
   gameState: GameState,
   targetId?: string,
   heroPointsSpent?: number
-): any {
+): ActionResult {
   if (!targetId) {
     return { success: false, message: 'No target specified to Aid.' , errorCode: 'NO_TARGET' };
   }

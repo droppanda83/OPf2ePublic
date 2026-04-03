@@ -5,10 +5,10 @@ import { CharacterSheetModal } from '../components/CharacterSheetModal';
 import { CharacterBuilder } from '../components/CharacterBuilder';
 import { LevelUpWizard } from '../components/LevelUpWizard';
 import { PartyStash } from '../components/PartyStash';
+import { MapBrowser } from '../components/MapBrowser';
 import { CharacterService } from '../services/characterService';
 import type { Creature, CharacterSheet, CampaignPreferences, CampaignTone, PacingSetting } from '../../../shared/types';
 import { XP_PER_LEVEL } from '../../../shared/types';
-import type { MapGeneratorTheme } from '../../../shared/mapGenerator';
 import type { Difficulty } from '../../../shared/encounterBuilder';
 import { DIFFICULTIES, DIFFICULTY_LABELS, DIFFICULTY_COLORS } from '../../../shared/encounterBuilder';
 import './LandingPage.css';
@@ -79,25 +79,6 @@ const CAMPAIGN_DIFFICULTY_DESC: Record<Difficulty, string> = {
   extreme: 'High-risk campaign tone where survival requires optimized choices and caution.',
 };
 
-// ─── Map Theme Config ────────────────────────────────
-// Only themes with real atlas tile data are shown.
-
-const MAP_THEMES: { id: MapGeneratorTheme; label: string; icon: string; desc: string }[] = [
-  { id: 'wilderness', label: 'Wilderness',      icon: '🌲', desc: 'Open forest, clearings, and natural terrain' },
-];
-
-/** Sub-biomes available in the approved atlas tile data */
-const WILDERNESS_SUB_BIOMES: { id: string; label: string; icon: string; desc: string }[] = [
-  { id: 'random',         label: 'Random',         icon: '🎲', desc: 'A randomly chosen wilderness biome' },
-  { id: 'campsite',       label: 'Campsite',       icon: '🏕️', desc: 'A wilderness campsite with tents and a fire pit' },
-  { id: 'cave entrance',  label: 'Cave Entrance',  icon: '🕳️', desc: 'Rocky cave mouth surrounded by wilderness' },
-  { id: 'farm',           label: 'Farm',           icon: '🌾', desc: 'Farmland with crops, fences, and barns' },
-  { id: 'path',           label: 'Path',           icon: '🛤️', desc: 'A winding trail through the wilds' },
-  { id: 'pond',           label: 'Pond',           icon: '💧', desc: 'A still pond surrounded by vegetation' },
-  { id: 'river',          label: 'River',          icon: '🏞️', desc: 'A river cutting through the landscape' },
-  { id: 'ruins',          label: 'Ruins',          icon: '🏚️', desc: 'Crumbling stone ruins reclaimed by nature' },
-];
-
 // ─── Main Component ─────────────────────────────────
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onStartBattle, initialScreen, onReturnHome }) => {
@@ -115,9 +96,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartBattle, initial
   const [encounterDifficulty, setEncounterDifficulty] = useState<Difficulty>('moderate');
   const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('normal');
 
-  // Map theme (shared between campaign and encounter)
-  const [selectedMapTheme, setSelectedMapTheme] = useState<MapGeneratorTheme>('wilderness');
-  const [selectedSubBiomes, setSelectedSubBiomes] = useState<string[]>([]);
+  // Map selection (Foundry maps only)
+  const [selectedFoundryMapId, setSelectedFoundryMapId] = useState<string | null>(null);
+  const [selectedFoundryMapName, setSelectedFoundryMapName] = useState<string>('');
+  const [showMapBrowser, setShowMapBrowser] = useState(false);
 
   // Campaign-specific
   const [campaignPrompt, setCampaignPrompt] = useState<string>('');
@@ -237,8 +219,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartBattle, initial
     setCampaignThemes(['adventure', 'exploration']);
     setCampaignPacing('moderate');
     setCampaignName('');
-    setSelectedMapTheme('wilderness');
-    setSelectedSubBiomes([]);
+    setSelectedFoundryMapId(null);
+    setSelectedFoundryMapName('');
     setReturnScreen(mode);
     setScreen(mode);
 
@@ -355,7 +337,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartBattle, initial
       const updatedSheet: CharacterSheet = {
         ...allChars[matchIdx],
         level: updatedCreature.level,
-        abilities: updatedCreature.abilities as any,
+        abilities: updatedCreature.abilities,
         maxHealth: updatedCreature.maxHealth,
         currentXP: updatedCreature.currentXP || 0,
         feats: (updatedCreature.feats || []).map(f => ({ name: f.name, type: (f.type || 'class') as 'class' | 'skill' | 'general' | 'ancestry' | 'archetype', level: f.level || updatedCreature.level })),
@@ -371,7 +353,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartBattle, initial
           const updatedSheet = slot.characterSheet ? {
             ...slot.characterSheet,
             level: updatedCreature.level,
-            abilities: updatedCreature.abilities as any,
+            abilities: updatedCreature.abilities,
             maxHp: updatedCreature.maxHealth,
             currentXP: updatedCreature.currentXP || 0,
             updatedAt: Date.now(),
@@ -420,8 +402,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartBattle, initial
         themes: campaignThemes,
         pacing: campaignPacing,
         aiModel: selectedModel || undefined,
-        mapTheme: selectedMapTheme || undefined,
-        mapSubTheme: selectedSubBiomes.length > 0 ? selectedSubBiomes : undefined,
+        foundryMapId: selectedFoundryMapId || undefined,
         mode: 'campaign',
         encounterBalance: encounterDifficulty as 'easy' | 'moderate' | 'hard' | 'deadly',
         playerCount: creatures.length,
@@ -440,8 +421,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartBattle, initial
         themes: [],
         pacing: 'moderate',
         aiModel: selectedModel || undefined,
-        mapTheme: selectedMapTheme || undefined,
-        mapSubTheme: selectedSubBiomes.length > 0 ? selectedSubBiomes : undefined,
+        foundryMapId: selectedFoundryMapId || undefined,
         mode: 'encounter',
         encounterBalance: encounterDifficulty as 'easy' | 'moderate' | 'hard' | 'deadly',
         playerCount: creatures.length,
@@ -474,7 +454,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartBattle, initial
       if (s?._meta?.source === 'local-fallback') {
         const reason = s?._meta?.reason ? ` Reason: ${s._meta.reason}` : '';
         const diag = Array.isArray(s?._meta?.diagnostics) && s._meta.diagnostics.length > 0
-          ? ` Attempts: ${s._meta.diagnostics.map((d: any) => `${d.model}→${d.provider}${d.status ? `(${d.status})` : ''}:${d.outcome}`).join(' ; ')}`
+          ? ` Attempts: ${s._meta.diagnostics.map((d: { model?: string; provider?: string; status?: string; outcome?: string }) => `${d.model}→${d.provider}${d.status ? `(${d.status})` : ''}:${d.outcome}`).join(' ; ')}`
           : '';
         setSuggestionError(`AI unavailable for campaign suggestions (requested: ${s?._meta?.requestedModel || selectedModel || 'unknown'}, used: ${s?._meta?.model || 'none'}). Showing local fallback ideas.${reason}${diag}`);
       } else if (s?._meta?.source === 'ai' && s?._meta?.requestedModel && s?._meta?.model && s._meta.requestedModel !== s._meta.model) {
@@ -1094,62 +1074,83 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartBattle, initial
             </section>
           )}
 
-          {/* ─── Map / Terrain (Encounter only) ───────── */}
+          {/* ─── Battle Map Selection (Encounter only) ─── */}
           {!isCampaign && (
-            <section className="setup-section">
-              <h2>Map Terrain</h2>
-              <p className="section-hint">Select which features to include on the battlefield. Leave all unchecked for a random biome.</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '6px', marginTop: 8 }}>
-                {WILDERNESS_SUB_BIOMES.filter(b => b.id !== 'random').map(b => {
-                  const checked = selectedSubBiomes.includes(b.id);
-                  return (
-                    <label
-                      key={b.id}
-                      title={b.desc}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        padding: '8px 12px',
-                        borderRadius: 8,
-                        border: `1px solid ${checked ? '#7c4dff' : '#3f2626'}`,
-                        background: checked ? 'rgba(124,77,255,0.12)' : 'rgba(30,18,18,0.6)',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s',
-                        color: checked ? '#c9b5ff' : '#d0c3b4',
-                        fontSize: 13,
-                        fontWeight: checked ? 600 : 400,
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => {
-                          setSelectedSubBiomes(prev =>
-                            prev.includes(b.id)
-                              ? prev.filter(id => id !== b.id)
-                              : [...prev, b.id]
-                          );
-                        }}
-                        style={{ accentColor: '#7c4dff', width: 16, height: 16 }}
-                      />
-                      <span>{b.icon} {b.label}</span>
-                    </label>
-                  );
-                })}
+          <section className="setup-section">
+            <h2>Battle Map</h2>
+            <p className="section-hint">
+              Choose a specific battle map or pick one at random.
+            </p>
+
+            {selectedFoundryMapId ? (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 14px', borderRadius: 8,
+                background: selectedFoundryMapId === '__random__'
+                  ? 'rgba(124,77,255,0.12)' : 'rgba(200,155,63,0.12)',
+                border: `1px solid ${selectedFoundryMapId === '__random__' ? '#7c4dff' : '#c89b3f'}`,
+              }}>
+                <span style={{ fontSize: 20 }}>{selectedFoundryMapId === '__random__' ? '🎲' : '🗺️'}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: selectedFoundryMapId === '__random__' ? '#c9b5ff' : '#c89b3f', fontWeight: 600, fontSize: 14 }}>{selectedFoundryMapName}</div>
+                  <div style={{ color: '#b0a090', fontSize: 12 }}>
+                    {selectedFoundryMapId === '__random__' ? 'A random map will be chosen' : 'Foundry VTT map selected'}
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setSelectedFoundryMapId(null); setSelectedFoundryMapName(''); }}
+                  style={{
+                    background: 'rgba(200,50,50,0.2)', border: '1px solid #a33', borderRadius: 6,
+                    color: '#f88', padding: '4px 10px', cursor: 'pointer', fontSize: 12,
+                  }}
+                >
+                  Clear
+                </button>
+                {selectedFoundryMapId !== '__random__' && (
+                  <button
+                    onClick={() => setShowMapBrowser(true)}
+                    style={{
+                      background: 'rgba(124,77,255,0.15)', border: '1px solid #7c4dff', borderRadius: 6,
+                      color: '#c9b5ff', padding: '4px 10px', cursor: 'pointer', fontSize: 12,
+                    }}
+                  >
+                    Change
+                  </button>
+                )}
               </div>
-              {selectedSubBiomes.length === 0 && (
-                <p className="difficulty-desc" style={{ marginTop: 6 }}>🎲 Random — the map will feature a randomly chosen biome.</p>
-              )}
-              {selectedSubBiomes.length > 0 && (
-                <p className="difficulty-desc" style={{ marginTop: 6 }}>
-                  Selected: {selectedSubBiomes.map(id => {
-                    const b = WILDERNESS_SUB_BIOMES.find(x => x.id === id);
-                    return b ? `${b.icon} ${b.label}` : id;
-                  }).join(', ')}
-                </p>
-              )}
-            </section>
+            ) : (
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={() => setShowMapBrowser(true)}
+                  style={{
+                    flex: 1, padding: '14px 16px', borderRadius: 8,
+                    background: 'rgba(30,18,18,0.6)', border: '1px dashed #5a3a3a',
+                    color: '#d0c3b4', cursor: 'pointer', fontSize: 14,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseOver={(e) => { e.currentTarget.style.borderColor = '#7c4dff'; e.currentTarget.style.color = '#c9b5ff'; }}
+                  onMouseOut={(e) => { e.currentTarget.style.borderColor = '#5a3a3a'; e.currentTarget.style.color = '#d0c3b4'; }}
+                >
+                  🗺️ Browse Maps
+                </button>
+                <button
+                  onClick={() => { setSelectedFoundryMapId('__random__'); setSelectedFoundryMapName('Random Map'); }}
+                  style={{
+                    flex: 1, padding: '14px 16px', borderRadius: 8,
+                    background: 'rgba(30,18,18,0.6)', border: '1px dashed #5a3a3a',
+                    color: '#d0c3b4', cursor: 'pointer', fontSize: 14,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseOver={(e) => { e.currentTarget.style.borderColor = '#7c4dff'; e.currentTarget.style.color = '#c9b5ff'; }}
+                  onMouseOut={(e) => { e.currentTarget.style.borderColor = '#5a3a3a'; e.currentTarget.style.color = '#d0c3b4'; }}
+                >
+                  🎲 Random Map
+                </button>
+              </div>
+            )}
+          </section>
           )}
 
           {/* ─── Campaign Challenge (Campaign only) ───── */}
@@ -1243,6 +1244,25 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartBattle, initial
       </div>
 
       {/* ─── Modals ──────────────────────────────────── */}
+
+      {showMapBrowser && (
+        <MapBrowser
+          asModal
+          onClose={() => setShowMapBrowser(false)}
+          onSelectMap={(mapId, mapName) => {
+            setSelectedFoundryMapId(mapId);
+            setSelectedFoundryMapName(mapName || mapId);
+            setShowMapBrowser(false);
+          }}
+          partyLevel={
+            playerSlots.filter(s => s.creature).length > 0
+              ? Math.round(playerSlots.filter(s => s.creature).reduce((sum, s) => sum + (s.creature?.level || 1), 0) / playerSlots.filter(s => s.creature).length)
+              : undefined
+          }
+          campaignMode={isCampaignMode()}
+          selectedMapId={selectedFoundryMapId || undefined}
+        />
+      )}
 
       <PathbuilderUploadModal
         isOpen={uploadModalOpen}

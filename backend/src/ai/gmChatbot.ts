@@ -23,7 +23,9 @@ import {
   Creature,
   BestiaryEntry,
   ENCOUNTER_MAP_CATALOG,
+  getMapById,
 } from 'pf2e-shared';
+import type { FoundryMapEntry } from 'pf2e-shared/foundryMapCatalog';
 // Heavy data import – loaded directly to keep the barrel lightweight
 import { BESTIARY } from 'pf2e-shared/bestiary';
 
@@ -1431,6 +1433,15 @@ ${this.getToneGuidance(prefs.tone)}
     const mapW = gameState.map?.width || 20;
     const mapH = gameState.map?.height || gameState.map?.width || 20;
 
+    // Look up Foundry map narration context if available
+    const currentMapId = session.currentEncounterMapId;
+    const currentMap = currentMapId ? getMapById(currentMapId) : undefined;
+    const foundryMap = currentMap as FoundryMapEntry | undefined;
+    const mapNarration = foundryMap?.narrationContext || '';
+    const mapTactical = foundryMap?.tacticalNotes || '';
+    const mapDescription = currentMap?.description || '';
+    const mapName = currentMap?.name || '';
+
     const playerIntros = players.map(p =>
       `${p.name} (Level ${p.level} ${p.ancestry || ''} ${p.characterClass || 'Adventurer'})`
     ).join(', ');
@@ -1458,6 +1469,10 @@ ${playerIntros || 'A group of brave adventurers'}
 MAP INFO:
 - The battle map is ${mapW} tiles wide and ${mapH} tiles tall (grid coordinates 0-${mapW - 1} x, 0-${mapH - 1} y)
 - The party tokens start near the center of the map
+${mapName ? `- Map Name: "${mapName}"` : ''}
+${mapDescription ? `- Map Description: ${mapDescription}` : ''}
+${mapNarration ? `- Scene Atmosphere (USE THIS for your narration): ${mapNarration}` : ''}
+${mapTactical ? `- Tactical Layout: ${mapTactical}` : ''}
 - Place NPCs at positions that make spatial sense for the scene
 
 YOUR TASK:
@@ -1615,6 +1630,12 @@ You could seek out Lady Voss before someone else gets to her first, examine the 
 
     if (enemies.length === 0) return 'An encounter begins, but no enemies are visible yet...';
 
+    // Inject Foundry map narration context if available
+    const currentMapId = session.currentEncounterMapId;
+    const currentMap = currentMapId ? getMapById(currentMapId) : undefined;
+    const foundryMap = currentMap as FoundryMapEntry | undefined;
+    const mapNarration = foundryMap?.narrationContext;
+
     // Build rich enemy introductions with bestiary data
     const enemyIntros = enemies.map(e => {
       const entry = this.lookupBestiary(e.name);
@@ -1663,7 +1684,13 @@ You could seek out Lady Voss before someone else gets to her first, examine the 
       },
     };
 
-    return toneIntros[tone]?.[band] || toneIntros.heroic[band];
+    const baseIntro = toneIntros[tone]?.[band] || toneIntros.heroic[band];
+
+    // Prepend map narration context if we have one from a Foundry map
+    if (mapNarration) {
+      return `*${mapNarration}*\n\n${baseIntro}`;
+    }
+    return baseIntro;
   }
 
   generateEncounterConclusion(gameState: GameState, session: GMSession, victory: boolean): string {

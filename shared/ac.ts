@@ -84,7 +84,7 @@ export function getConditionModifiers(
           penalties.push({ type: 'circumstance', value: 2, source: 'Prone' });
         }
         if (applyTo === 'ac') {
-          // Prone creatures are flat-footed (off-guard)
+          // Prone creatures are off-guard
           penalties.push({ type: 'circumstance', value: 2, source: 'Prone (off-guard)' });
         }
         break;
@@ -364,10 +364,10 @@ Bonuses Array:
 
   // Weapon proficiency
   let profRank: ProficiencyRank = creature.proficiencies?.unarmed ?? 'trained';
-  const hasAdvancedWeaponTraining = creature.feats?.some((feat: any) => {
+  const hasAdvancedWeaponTraining = creature.feats?.some((feat: string | { name?: string }) => {
     const name = typeof feat === 'string' ? feat : feat?.name;
     return typeof name === 'string' && name.toLowerCase().trim() === 'advanced weapon training';
-  }) || creature.specials?.some((entry: any) =>
+  }) || creature.specials?.some((entry: string) =>
     typeof entry === 'string' && entry.toLowerCase().trim() === 'advanced weapon training'
   );
   if (weapon) {

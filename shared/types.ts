@@ -6,6 +6,22 @@ import { AbilityScores, AbilityName, ProficiencyProfile, ProficiencyRank, Bonus,
 export type { DamageType };
 export type { AbilityScores, AbilityName, ProficiencyProfile, ProficiencyRank, Bonus, Penalty };
 
+// ─── Action Result Type ──────────────────────────────
+/**
+ * Standard return type for all action resolvers (feats, class actions, skills, spells, combat, etc.).
+ * Every resolver returns at minimum { success, message }. Additional fields vary by action type.
+ */
+export interface ActionResult {
+  success: boolean;
+  message: string;
+  errorCode?: string;
+  damage?: number;
+  damageType?: string;
+  details?: Record<string, unknown>;
+  attackRoll?: AttackRoll;
+  conditions?: { name: string; duration: number | 'permanent'; value?: number }[];
+}
+
 // ─── Proficiency & Weapon Types ──────────────────────
 
 // ─── Weapon Inventory ────────────────────────────────
@@ -265,6 +281,41 @@ export interface EphemeralEffectEntry {
   source: string;
 }
 
+// ─── Per-Character Inventory Item ────────────────────────────
+export type InventoryItemCategory = 'weapon' | 'armor' | 'shield' | 'worn' | 'held' | 'consumable' | 'gear';
+export type EquipmentSlot = 'head' | 'eyepiece' | 'neck' | 'chest' | 'back' | 'bracers' | 'hands' | 'belt' | 'feet' | 'armor' | 'shield';
+
+export interface InventoryItem {
+  /** Unique instance ID (e.g., 'inv-healing-potion-1') */
+  id: string;
+  /** Display name */
+  name: string;
+  /** Bulk: 0 = negligible, 0.1 = light, 1+ = standard */
+  bulk: number;
+  /** Whether the item is currently equipped/worn */
+  equipped: boolean;
+  /** For magic items requiring investiture (max 10 invested items) */
+  invested?: boolean;
+  /** Stack count */
+  quantity: number;
+  /** Item category */
+  category: InventoryItemCategory;
+  /** Equipment slot when equipped (worn items) */
+  slot?: EquipmentSlot;
+  /** Hand slot when actively held */
+  heldSlot?: 'held-1' | 'held-2';
+  /** Catalog ID reference (e.g., from WORN_ITEMS, CONSUMABLE_CATALOG, ADVENTURING_GEAR) */
+  catalogId?: string;
+  /** Which catalog this came from */
+  catalogType?: 'wornItem' | 'consumable' | 'gear' | 'weapon' | 'armor' | 'shield';
+  /** GP value per unit */
+  gpValue?: number;
+  /** Item level */
+  level?: number;
+  /** Traits (e.g., ['invested', 'magical']) */
+  traits?: string[];
+}
+
 export interface Creature {
   id: string;
   name: string;
@@ -280,6 +331,20 @@ export interface Creature {
   space?: number;
   /** Base unarmed/natural melee reach in feet before weapon/feat overrides (tiny=0, small/medium=5, large=10, huge=15, gargantuan=20). */
   naturalReach?: number;
+
+  // ── Perception, Saves & Senses ──
+  /** Perception modifier (flat value for NPCs, computed for PCs) */
+  perception?: number;
+  /** Saving throw modifiers (flat values for NPCs) */
+  fortitudeSave?: number;
+  reflexSave?: number;
+  willSave?: number;
+  /** Creature senses (e.g., ['darkvision', 'scent (imprecise) 30 feet']) */
+  senses?: string[];
+  /** Languages spoken (e.g., ['Common', 'Draconic', 'Dwarven']) */
+  languages?: string[];
+  /** Rarity: common, uncommon, rare, or unique */
+  rarity?: 'common' | 'uncommon' | 'rare' | 'unique';
 
   // ── Subclass/instinct ──
   /** Barbarian instinct (e.g., 'animal', 'dragon', 'fury', 'giant', 'spirit', 'superstition') */
@@ -369,7 +434,7 @@ export interface Creature {
   speed: number;
   // Grid position
   positions: Position;
-  // Conditions (frightened, flat-footed, etc.)
+  // Conditions (frightened, off-guard, etc.)
   conditions: Condition[];
   // Combat state
   initiative: number;
@@ -379,6 +444,11 @@ export interface Creature {
   actionsRemaining?: number; // Actions left in the current turn
   flourishUsedThisTurn?: boolean; // Only one Flourish action per turn
   reactionUsed?: boolean; // Whether the creature has used its reaction this round
+  extraReactionsAvailable?: number; // Additional reactions granted until end of turn/round
+  combatReflexesUsed?: boolean; // Tracks the extra reaction from Combat Reflexes
+  mapByWeapon?: Map<string, number>; // Weapon-specific MAP tracking for flexible flurry style effects
+  battleMedicineTargets?: string[]; // Per-day Battle Medicine targets already treated
+  recallKnowledgeTargets?: string[]; // Targets already used for Recall Knowledge gating
   // Death tracking
   dying: boolean;
   dead?: boolean; // True when dying value reaches 4+
@@ -388,6 +458,7 @@ export interface Creature {
   wounded: number;
   // Spellcasting
   keyAbility?: AbilityName; // Key ability for spell DCs
+  classDC?: number; // Class DC when available from import/build pipeline
   spellcasters?: SpellcasterTradition[]; // Multiple spellcasting traditions (for multiclass/archetype abilities)
   // Deprecated: use spellcasters instead
   spells?: string[];
@@ -424,6 +495,7 @@ export interface Creature {
   unleashPsycheUsedThisEncounter?: boolean; // Once per encounter
   ancestry?: string; // e.g. "Human"
   heritage?: string; // e.g. "Nephilim"
+  background?: string; // e.g. "Acrobat", "Street Urchin"
   focusPoints?: number; // Current focus points
   maxFocusPoints?: number; // Max focus points
   heroPoints?: number; // Hero points
@@ -547,8 +619,11 @@ export interface Creature {
     quantity: number; // How many the creature has
   }[];
 
-  /** Senses (e.g., 'darkvision', 'low-light vision', 'greater darkvision', 'scent (imprecise) 30 feet') */
-  senses?: string[];
+  // ── TASK 5: Per-Character Inventory System ──
+  /** Personal inventory items (non-weapon gear, worn items, consumables, etc.) */
+  inventory?: InventoryItem[];
+  /** Currency held by this creature */
+  currency?: { gp: number; sp: number; cp: number; pp: number };
 
   /** Token image URL — displayed on the battle grid (base64 data URL or file path) */
   tokenImageUrl?: string;
@@ -665,6 +740,8 @@ export interface GameState {
   log: GameLog[];
   groundObjects: GroundObject[]; // Weapons and items on the ground
   gmSession?: GMSession;         // Phase 19: AI GM Chatbot session data
+  /** Phase 24: Active hazard instances on the map */
+  hazardInstances?: import('./hazards').HazardInstance[];
 }
 
 export interface GameLog {
@@ -744,6 +821,13 @@ export interface CharacterSheet {
   ancestry: string; // e.g., "Human", "Elf", "Dwarf"
   heritage: string; // e.g., "Versatile Heritage", "Half-Orc"
   background: string; // e.g., "Acrobat", "Ancient Historian"
+  backgroundDetails?: {
+    description?: string;
+    lore?: string;
+    trainedSkillOptions?: string[];
+    featId?: string;
+    featName?: string;
+  };
   class: string; // e.g., "Rogue", "Fighter"
 
   // Bio / Description (GM reference)
@@ -996,6 +1080,7 @@ export interface CampaignPreferences {
   aiModel?: string;                      // Optional OpenAI model override for this campaign/session
   mapTheme?: string;                     // Optional map/terrain theme override (dungeon, cave, wilderness, etc.)
   mapSubTheme?: string | string[];       // Optional sub-biome(s) within the main theme (campsite, river, ruins, etc.)
+  foundryMapId?: string;                 // Optional Foundry VTT map ID selected by the player
   mode?: 'campaign' | 'encounter';       // Whether this is a full campaign or combat-only encounter
   encounterBalance: 'easy' | 'moderate' | 'hard' | 'deadly';
   playerCount: number;
@@ -1100,10 +1185,20 @@ export interface GMSession {
   stashedMap?: any;
   /** Exploration map ID stashed before combat */
   stashedMapId?: string;
+  /** Whether Session Zero has been completed for this session */
+  sessionZeroComplete?: boolean;
+  /** Loot level preference (standard / high) */
+  lootLevel?: string;
+  /** AI companion mode (full / assisted / manual) */
+  companionAI?: string;
+  /** Narration verbosity (brief / standard / detailed / elaborate) */
+  narrationVerbosity?: string;
+  /** Whether to show PF2e rule citations in output */
+  ruleCitations?: boolean;
 }
 
 /** Map theme values shared between EncounterMapTemplate and ProceduralMap */
-export type MapTheme = 'dungeon' | 'wilderness' | 'urban' | 'indoor' | 'special' | 'ship' | 'tower' | 'bridge' | 'caravan' | 'sewers' | 'castle' | 'mine';
+export type MapTheme = 'dungeon' | 'wilderness' | 'urban' | 'indoor' | 'special' | 'ship' | 'tower' | 'bridge' | 'caravan' | 'sewers' | 'castle' | 'mine' | 'cave';
 
 /** Encounter map template from the pre-made library */
 export interface EncounterMapTemplate {

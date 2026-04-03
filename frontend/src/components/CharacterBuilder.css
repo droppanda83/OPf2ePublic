@@ -8,9 +8,9 @@
   width: 100%;
   height: 100%;
   max-height: 100vh;
-  background: linear-gradient(135deg, #1a1210 0%, #140e0b 100%);
+  background: linear-gradient(135deg, var(--pf2e-bg-base) 0%, #140e0b 100%);
   color: #ddd;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--pf2e-font-body);
 }
 
 /* ─── HEADER ─── */
@@ -23,7 +23,7 @@
 .builder-header h1 {
   margin: 0 0 15px 0;
   font-size: 28px;
-  color: #d4af37;
+  color: var(--pf2e-gold);
 }
 
 .progress-bar {
@@ -41,11 +41,11 @@
 }
 
 .progress-step.active {
-  background: #d4af37;
+  background: var(--pf2e-gold);
 }
 
 .progress-step.current {
-  box-shadow: 0 0 10px #d4af37;
+  box-shadow: 0 0 10px var(--pf2e-gold);
 }
 
 .step-label {
@@ -69,8 +69,8 @@
 
 .step-content h2 {
   margin-top: 0;
-  color: #d4af37;
-  border-bottom: 2px solid #d4af37;
+  color: var(--pf2e-gold);
+  border-bottom: 2px solid var(--pf2e-gold);
   padding-bottom: 10px;
 }
 
@@ -86,7 +86,7 @@
 .form-group label {
   display: block;
   margin-bottom: 8px;
-  color: #d4af37;
+  color: var(--pf2e-gold);
   font-weight: 600;
   font-size: 14px;
 }

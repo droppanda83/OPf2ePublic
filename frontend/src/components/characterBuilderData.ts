@@ -479,65 +479,61 @@ export function validateAncestryCoverage(expectedCount: number = EXPECTED_ANCEST
 // Background ability boosts (can be single ability or array of choices)
 // PF2e backgrounds provide a choice between 2+ abilities for their boost
 export const BACKGROUND_BOOSTS: Record<string, string | string[]> = {
-  'Acrobat': ['Strength', 'Dexterity'],  // STR or DEX
-  'Alchemist': ['Intelligence', 'Wisdom'],  // INT or WIS
-  'Ancient Historian': ['Constitution', 'Intelligence'],  // CON or INT
-  'Animal Helper': ['Wisdom', 'Charisma'],  // WIS or CHA
-  'Artisan': ['Strength', 'Intelligence'],  // STR or INT
-  'Artist': ['Dexterity', 'Charisma'],  // DEX or CHA
-  'Athlete': ['Strength', 'Dexterity'],  // STR or DEX
-  'Barkeep': ['Constitution', 'Charisma'],  // CON or CHA
-  'Bastion Dweller': ['Wisdom', 'Charisma'],  // WIS or CHA
-  'Beast Doctor': ['Constitution', 'Wisdom'],  // CON or WIS
-  'Bookkeeper': ['Intelligence', 'Wisdom'],  // INT or WIS
-  'Bounty Hunter': ['Strength', 'Wisdom'],  // STR or WIS
-  'Brigand': ['Dexterity', 'Charisma'],  // DEX or CHA
-  'Brightsmith': ['Strength', 'Intelligence'],  // STR or INT
-  'Briny Sailor': ['Constitution', 'Dexterity'],  // CON or DEX
-  'Burgher': ['Intelligence', 'Charisma'],  // INT or CHA
-  'Butcher': ['Strength', 'Constitution'],  // STR or CON
-  'Captain': ['Strength', 'Wisdom'],  // STR or WIS
-  'Cardsharp': ['Dexterity', 'Charisma'],  // DEX or CHA
-  'Charlatan': ['Intelligence', 'Charisma'],  // INT or CHA
-  'Chef': ['Constitution', 'Intelligence'],  // CON or INT
-  'City Official': ['Constitution', 'Charisma'],  // CON or CHA
-  'Clerk': ['Intelligence', 'Wisdom'],  // INT or WIS
-  'Climber': ['Strength', 'Dexterity'],  // STR or DEX
-  'Closer': ['Strength', 'Charisma'],  // STR or CHA
-  'Clown': ['Dexterity', 'Charisma'],  // DEX or CHA
-  'Cobbler': ['Dexterity', 'Intelligence'],  // DEX or INT
-  'Codger': ['Constitution', 'Charisma'],  // CON or CHA
-  // ── Additional Player Core backgrounds ──
-  'Acolyte': ['Intelligence', 'Wisdom'],  // INT or WIS
-  'Cultist': ['Intelligence', 'Charisma'],  // INT or CHA
-  'Criminal': ['Dexterity', 'Intelligence'],  // DEX or INT
-  'Detective': ['Intelligence', 'Wisdom'],  // INT or WIS
-  'Diplomat': ['Constitution', 'Charisma'],  // CON or CHA
-  'Emissary': ['Intelligence', 'Charisma'],  // INT or CHA
-  'Entertainer': ['Dexterity', 'Charisma'],  // DEX or CHA
-  'Farmhand': ['Constitution', 'Wisdom'],  // CON or WIS
-  'Field Medic': ['Constitution', 'Wisdom'],  // CON or WIS
-  'Fortune Teller': ['Intelligence', 'Charisma'],  // INT or CHA
-  'Gambler': ['Dexterity', 'Charisma'],  // DEX or CHA
-  'Gladiator': ['Strength', 'Charisma'],  // STR or CHA
-  'Guard': ['Strength', 'Charisma'],  // STR or CHA
-  'Herbalist': ['Constitution', 'Wisdom'],  // CON or WIS
-  'Hermit': ['Constitution', 'Intelligence'],  // CON or INT
-  'Hunter': ['Dexterity', 'Wisdom'],  // DEX or WIS
-  'Laborer': ['Strength', 'Constitution'],  // STR or CON
-  'Martial Disciple': ['Strength', 'Dexterity'],  // STR or DEX
-  'Merchant': ['Intelligence', 'Charisma'],  // INT or CHA
-  'Miner': ['Strength', 'Wisdom'],  // STR or WIS
-  'Noble': ['Intelligence', 'Charisma'],  // INT or CHA
-  'Nomad': ['Constitution', 'Wisdom'],  // CON or WIS
-  'Pilgrim': ['Constitution', 'Wisdom'],  // CON or WIS
-  'Prisoner': ['Strength', 'Constitution'],  // STR or CON
-  'Sailor': ['Strength', 'Dexterity'],  // STR or DEX
-  'Scholar': ['Intelligence', 'Wisdom'],  // INT or WIS
-  'Scout': ['Dexterity', 'Wisdom'],  // DEX or WIS
-  'Street Urchin': ['Dexterity', 'Constitution'],  // DEX or CON
-  'Tinker': ['Dexterity', 'Intelligence'],  // DEX or INT
-  'Warrior': ['Strength', 'Constitution'],  // STR or CON
+  // ── Player Core (AoN-verified) ──
+  'Acolyte': ['Intelligence', 'Wisdom'],
+  'Acrobat': ['Strength', 'Dexterity'],
+  'Animal Whisperer': ['Wisdom', 'Charisma'],
+  'Artisan': ['Strength', 'Intelligence'],
+  'Artist': ['Dexterity', 'Charisma'],
+  'Bandit': ['Dexterity', 'Charisma'],
+  'Barkeep': ['Constitution', 'Charisma'],
+  'Barrister': ['Intelligence', 'Charisma'],
+  'Bounty Hunter': ['Strength', 'Wisdom'],
+  'Charlatan': ['Intelligence', 'Charisma'],
+  'Cook': ['Constitution', 'Intelligence'],
+  'Criminal': ['Dexterity', 'Intelligence'],
+  'Cultist': ['Intelligence', 'Charisma'],
+  'Detective': ['Intelligence', 'Wisdom'],
+  'Emissary': ['Intelligence', 'Charisma'],
+  'Entertainer': ['Dexterity', 'Charisma'],
+  'Farmhand': ['Constitution', 'Wisdom'],
+  'Field Medic': ['Constitution', 'Wisdom'],
+  'Fortune Teller': ['Intelligence', 'Charisma'],
+  'Gambler': ['Dexterity', 'Charisma'],
+  'Gladiator': ['Strength', 'Charisma'],
+  'Guard': ['Strength', 'Charisma'],
+  'Herbalist': ['Constitution', 'Wisdom'],
+  'Hermit': ['Constitution', 'Intelligence'],
+  'Hunter': ['Dexterity', 'Wisdom'],
+  'Laborer': ['Strength', 'Constitution'],
+  'Martial Disciple': ['Strength', 'Dexterity'],
+  'Merchant': ['Intelligence', 'Charisma'],
+  'Miner': ['Strength', 'Wisdom'],
+  'Noble': ['Intelligence', 'Charisma'],
+  'Nomad': ['Constitution', 'Wisdom'],
+  'Prisoner': ['Strength', 'Constitution'],
+  'Sailor': ['Strength', 'Dexterity'],
+  'Scholar': ['Intelligence', 'Wisdom'],
+  'Scout': ['Dexterity', 'Wisdom'],
+  'Street Urchin': ['Dexterity', 'Constitution'],
+  'Tinker': ['Dexterity', 'Intelligence'],
+  'Warrior': ['Strength', 'Constitution'],
+  // ── Player Core 2 (AoN-verified) ──
+  'Astrologer': ['Intelligence', 'Wisdom'],
+  'Barber': ['Dexterity', 'Wisdom'],
+  'Bookkeeper': ['Intelligence', 'Wisdom'],
+  'Courier': ['Dexterity', 'Intelligence'],
+  'Driver': ['Strength', 'Dexterity'],
+  'Outrider': ['Constitution', 'Wisdom'],
+  'Pilgrim': ['Wisdom', 'Charisma'],
+  'Refugee': ['Constitution', 'Wisdom'],
+  'Root Worker': ['Intelligence', 'Wisdom'],
+  'Saboteur': ['Strength', 'Dexterity'],
+  'Scavenger': ['Intelligence', 'Wisdom'],
+  'Servant': ['Dexterity', 'Charisma'],
+  'Squire': ['Strength', 'Constitution'],
+  'Tax Collector': ['Strength', 'Charisma'],
+  'Ward': ['Constitution', 'Charisma'],
 };
 
 // ──────────────────────────────────────────────────────────
@@ -571,67 +567,340 @@ export const SKILL_ABILITIES: Record<string, string> = {
   'Lore': 'intelligence'
 };
 
-// Background skills: each background grants training in 1 specific skill + 1 Lore
+// Background skills: each background grants training in specific skill(s) + 1 Lore (AoN-verified)
 export const BACKGROUND_SKILLS: Record<string, { skills: string[], lore: string }> = {
-  'Acrobat': { skills: ['Acrobatics', 'Performance'], lore: 'Circus Lore' },
-  'Alchemist': { skills: ['Crafting', 'Medicine'], lore: 'Alchemical Lore' },
-  'Ancient Historian': { skills: ['Arcana', 'Society'], lore: 'History Lore' },
-  'Animal Helper': { skills: ['Medicine', 'Nature'], lore: 'Animal Lore' },
-  'Artisan': { skills: ['Crafting', 'Society'], lore: 'Guild Lore' },
-  'Artist': { skills: ['Crafting', 'Performance'], lore: 'Art Lore' },
-  'Athlete': { skills: ['Acrobatics', 'Athletics'], lore: 'Athletic Lore' },
-  'Barkeep': { skills: ['Diplomacy', 'Society'], lore: 'Alcohol Lore' },
-  'Bastion Dweller': { skills: ['Diplomacy', 'Society'], lore: 'Politics Lore' },
-  'Beast Doctor': { skills: ['Medicine', 'Nature'], lore: 'Veterinary Lore' },
-  'Bookkeeper': { skills: ['Crafting', 'Society'], lore: 'Accounting Lore' },
-  'Bounty Hunter': { skills: ['Survival', 'Intimidation'], lore: 'Legal Lore' },
-  'Brigand': { skills: ['Intimidation', 'Stealth'], lore: 'Underworld Lore' },
-  'Brightsmith': { skills: ['Crafting', 'Diplomacy'], lore: 'Smithing Lore' },
-  'Briny Sailor': { skills: ['Athletics', 'Nature'], lore: 'Sailing Lore' },
-  'Burgher': { skills: ['Diplomacy', 'Society'], lore: 'Mercantile Lore' },
-  'Butcher': { skills: ['Athletics', 'Survival'], lore: 'Butchery Lore' },
-  'Captain': { skills: ['Diplomacy', 'Intimidation'], lore: 'Warfare Lore' },
-  'Cardsharp': { skills: ['Deception', 'Performance'], lore: 'Games Lore' },
-  'Charlatan': { skills: ['Deception', 'Society'], lore: 'Underworld Lore' },
-  'Chef': { skills: ['Crafting', 'Survival'], lore: 'Cooking Lore' },
-  'City Official': { skills: ['Diplomacy', 'Society'], lore: 'Legal Lore' },
-  'Clerk': { skills: ['Diplomacy', 'Society'], lore: 'Bureaucracy Lore' },
-  'Climber': { skills: ['Acrobatics', 'Athletics'], lore: 'Mountaineering Lore' },
-  'Closer': { skills: ['Deception', 'Diplomacy'], lore: 'Mercantile Lore' },
-  'Clown': { skills: ['Acrobatics', 'Performance'], lore: 'Theater Lore' },
-  'Cobbler': { skills: ['Crafting', 'Society'], lore: 'Leatherworking Lore' },
-  'Codger': { skills: ['Diplomacy', 'Survival'], lore: 'Farming Lore' },
-  // ── Additional Player Core backgrounds ──
-  'Acolyte': { skills: ['Religion', 'Diplomacy'], lore: 'Scribing Lore' },
-  'Cultist': { skills: ['Occultism', 'Deception'], lore: 'Cult Lore' },
-  'Criminal': { skills: ['Stealth', 'Intimidation'], lore: 'Underworld Lore' },
-  'Detective': { skills: ['Society', 'Deception'], lore: 'Underworld Lore' },
-  'Diplomat': { skills: ['Diplomacy', 'Society'], lore: 'Politics Lore' },
-  'Emissary': { skills: ['Diplomacy', 'Society'], lore: 'City Lore' },
-  'Entertainer': { skills: ['Performance', 'Acrobatics'], lore: 'Theater Lore' },
-  'Farmhand': { skills: ['Athletics', 'Nature'], lore: 'Farming Lore' },
-  'Field Medic': { skills: ['Medicine', 'Nature'], lore: 'Warfare Lore' },
-  'Fortune Teller': { skills: ['Occultism', 'Performance'], lore: 'Fortune-Telling Lore' },
-  'Gambler': { skills: ['Deception', 'Performance'], lore: 'Games Lore' },
-  'Gladiator': { skills: ['Athletics', 'Performance'], lore: 'Gladiatorial Lore' },
-  'Guard': { skills: ['Athletics', 'Intimidation'], lore: 'Legal Lore' },
-  'Herbalist': { skills: ['Medicine', 'Nature'], lore: 'Herbalism Lore' },
+  // ── Player Core (AoN-verified) ──
+  'Acolyte': { skills: ['Religion'], lore: 'Scribing Lore' },
+  'Acrobat': { skills: ['Acrobatics'], lore: 'Circus Lore' },
+  'Animal Whisperer': { skills: ['Nature'], lore: 'Terrain Lore' },
+  'Artisan': { skills: ['Crafting'], lore: 'Guild Lore' },
+  'Artist': { skills: ['Crafting'], lore: 'Art Lore' },
+  'Bandit': { skills: ['Intimidation'], lore: 'Terrain Lore' },
+  'Barkeep': { skills: ['Diplomacy'], lore: 'Alcohol Lore' },
+  'Barrister': { skills: ['Diplomacy'], lore: 'Legal Lore' },
+  'Bounty Hunter': { skills: ['Survival'], lore: 'Legal Lore' },
+  'Charlatan': { skills: ['Deception'], lore: 'Underworld Lore' },
+  'Cook': { skills: ['Survival'], lore: 'Cooking Lore' },
+  'Criminal': { skills: ['Stealth'], lore: 'Underworld Lore' },
+  'Cultist': { skills: ['Occultism'], lore: 'Cult Lore' },
+  'Detective': { skills: ['Society'], lore: 'Underworld Lore' },
+  'Emissary': { skills: ['Society'], lore: 'City Lore' },
+  'Entertainer': { skills: ['Performance'], lore: 'Theater Lore' },
+  'Farmhand': { skills: ['Athletics'], lore: 'Farming Lore' },
+  'Field Medic': { skills: ['Medicine'], lore: 'Warfare Lore' },
+  'Fortune Teller': { skills: ['Occultism'], lore: 'Fortune-Telling Lore' },
+  'Gambler': { skills: ['Deception'], lore: 'Games Lore' },
+  'Gladiator': { skills: ['Performance'], lore: 'Gladiatorial Lore' },
+  'Guard': { skills: ['Intimidation'], lore: 'Legal Lore' },
+  'Herbalist': { skills: ['Nature'], lore: 'Herbalism Lore' },
   'Hermit': { skills: ['Nature', 'Occultism'], lore: 'Cave Lore' },
-  'Hunter': { skills: ['Survival', 'Stealth'], lore: 'Tanning Lore' },
-  'Laborer': { skills: ['Athletics', 'Crafting'], lore: 'Labor Lore' },
+  'Hunter': { skills: ['Survival'], lore: 'Tanning Lore' },
+  'Laborer': { skills: ['Athletics'], lore: 'Labor Lore' },
   'Martial Disciple': { skills: ['Acrobatics', 'Athletics'], lore: 'Warfare Lore' },
-  'Merchant': { skills: ['Diplomacy', 'Society'], lore: 'Mercantile Lore' },
-  'Miner': { skills: ['Survival', 'Crafting'], lore: 'Mining Lore' },
-  'Noble': { skills: ['Diplomacy', 'Society'], lore: 'Heraldry Lore' },
-  'Nomad': { skills: ['Survival', 'Nature'], lore: 'Desert Lore' },
-  'Pilgrim': { skills: ['Religion', 'Diplomacy'], lore: 'Pilgrimage Lore' },
-  'Prisoner': { skills: ['Stealth', 'Intimidation'], lore: 'Underworld Lore' },
-  'Sailor': { skills: ['Athletics', 'Acrobatics'], lore: 'Sailing Lore' },
+  'Merchant': { skills: ['Diplomacy'], lore: 'Mercantile Lore' },
+  'Miner': { skills: ['Survival'], lore: 'Mining Lore' },
+  'Noble': { skills: ['Society'], lore: 'Heraldry Lore' },
+  'Nomad': { skills: ['Survival'], lore: 'Terrain Lore' },
+  'Prisoner': { skills: ['Stealth'], lore: 'Underworld Lore' },
+  'Sailor': { skills: ['Athletics'], lore: 'Sailing Lore' },
   'Scholar': { skills: ['Arcana', 'Religion'], lore: 'Academia Lore' },
-  'Scout': { skills: ['Survival', 'Nature'], lore: 'Scouting Lore' },
-  'Street Urchin': { skills: ['Thievery', 'Stealth'], lore: 'City Lore' },
-  'Tinker': { skills: ['Crafting', 'Society'], lore: 'Engineering Lore' },
-  'Warrior': { skills: ['Athletics', 'Intimidation'], lore: 'Warfare Lore' },
+  'Scout': { skills: ['Survival'], lore: 'Terrain Lore' },
+  'Street Urchin': { skills: ['Thievery'], lore: 'City Lore' },
+  'Tinker': { skills: ['Crafting'], lore: 'Engineering Lore' },
+  'Warrior': { skills: ['Intimidation'], lore: 'Warfare Lore' },
+  // ── Player Core 2 (AoN-verified) ──
+  'Astrologer': { skills: ['Occultism'], lore: 'Astrology Lore' },
+  'Barber': { skills: ['Medicine'], lore: 'Surgery Lore' },
+  'Bookkeeper': { skills: ['Society'], lore: 'Accounting Lore' },
+  'Courier': { skills: ['Society'], lore: 'City Lore' },
+  'Driver': { skills: ['Acrobatics'], lore: 'Driving Lore' },
+  'Outrider': { skills: ['Nature'], lore: 'Plains Lore' },
+  'Pilgrim': { skills: ['Religion'], lore: 'Deity Lore' },
+  'Refugee': { skills: ['Society'], lore: 'Settlement Lore' },
+  'Root Worker': { skills: ['Occultism'], lore: 'Herbalism Lore' },
+  'Saboteur': { skills: ['Thievery'], lore: 'Engineering Lore' },
+  'Scavenger': { skills: ['Survival'], lore: 'Settlement Lore' },
+  'Servant': { skills: ['Society'], lore: 'Labor Lore' },
+  'Squire': { skills: ['Athletics'], lore: 'Heraldry Lore' },
+  'Tax Collector': { skills: ['Intimidation'], lore: 'Settlement Lore' },
+  'Ward': { skills: ['Performance'], lore: 'Genealogy Lore' },
+};
+
+export interface BackgroundDetail {
+  description: string;
+  featId: string;
+  featName: string;
+}
+
+// All backgrounds with AoN-verified canonical feats and descriptions
+export const BACKGROUND_DETAILS: Record<string, BackgroundDetail> = {
+  // ── Player Core (AoN-verified) ──
+  'Acolyte': {
+    description: 'You spent your early days in a religious monastery or cloister. You may have traveled out into the world to spread the message of your religion or because you cast away the teachings of your faith, but deep down you\'ll always carry within you the lessons you learned.',
+    featId: 'student-of-the-canon',
+    featName: 'Student of the Canon',
+  },
+  'Acrobat': {
+    description: 'In a circus or on the streets, you earned your pay by performing as an acrobat. You might have turned to adventuring when the money dried up, or simply decided to put your skills to better use.',
+    featId: 'steady-balance',
+    featName: 'Steady Balance',
+  },
+  'Animal Whisperer': {
+    description: 'You have always felt a connection to animals, and it was only a small leap to learn to train them. As you travel, you continuously encounter different creatures, befriending them along the way.',
+    featId: 'train-animal',
+    featName: 'Train Animal',
+  },
+  'Artisan': {
+    description: 'You are a skilled artisan who crafts items of quality and precision. Your talents earned you respect in your community and a living, and now you seek greater challenges.',
+    featId: 'specialty-crafting',
+    featName: 'Specialty Crafting',
+  },
+  'Artist': {
+    description: 'Your art is your greatest passion, whatever form it takes. Adventuring might help you find inspiration, or simply be a way to survive until you become a world-famous artist.',
+    featId: 'specialty-crafting',
+    featName: 'Specialty Crafting',
+  },
+  'Bandit': {
+    description: 'Your past includes no small amount of rural banditry, robbing travelers on the road and scraping by. Whether your robbery was sanctioned by a local authority or unsanctioned, you eventually decided to try your hand at a less risky profession.',
+    featId: 'group-coercion',
+    featName: 'Group Coercion',
+  },
+  'Barkeep': {
+    description: 'You have five specialties: hefting barrels, drinking, polishing steins, drinking, and drinking. You worked in a bar, where you learned how to hold your liquor and rowdily socialize.',
+    featId: 'hobnobber',
+    featName: 'Hobnobber',
+  },
+  'Barrister': {
+    description: 'Piles of legal manuals, stern teachers, and experience in the courtroom have instructed you in legal matters. You\'re capable of mounting a prosecution or defense in court, and you tend to keep abreast of local laws.',
+    featId: 'group-impression',
+    featName: 'Group Impression',
+  },
+  'Bounty Hunter': {
+    description: 'Bringing in lawbreakers lined your pockets. Maybe you had an altruistic motive and sought to bring in criminals to make the streets safer, or maybe the coin was motivation enough.',
+    featId: 'experienced-tracker',
+    featName: 'Experienced Tracker',
+  },
+  'Charlatan': {
+    description: 'You traveled from place to place, peddling false fortunes and snake oil in one town, pretending to be royalty in exile to seduce a wealthy heir in the next.',
+    featId: 'charming-liar',
+    featName: 'Charming Liar',
+  },
+  'Cook': {
+    description: 'You grew up in the kitchens of a tavern or other dining establishment and excelled there, becoming an exceptional cook. Baking, cooking, a little brewing on the side—you\'ve spent lots of time out of sight.',
+    featId: 'seasoned',
+    featName: 'Seasoned',
+  },
+  'Criminal': {
+    description: 'As an unscrupulous independent or as a member of an underworld organization, you lived a life of crime. You might have become an adventurer to seek redemption, to escape the law, or simply to get access to bigger and better loot.',
+    featId: 'experienced-smuggler',
+    featName: 'Experienced Smuggler',
+  },
+  'Cultist': {
+    description: 'You were (or still are) a member of a cult whose rites may involve sacred dances to ensure a strong harvest or dire rituals that call upon dark powers.',
+    featId: 'schooled-in-secrets',
+    featName: 'Schooled in Secrets',
+  },
+  'Detective': {
+    description: 'You solved crimes as a police inspector or took jobs for wealthy clients as a private investigator. You might have become an adventurer as part of your next big mystery.',
+    featId: 'streetwise',
+    featName: 'Streetwise',
+  },
+  'Emissary': {
+    description: 'As a diplomat or messenger, you traveled to lands far and wide. Communicating with new people and forming alliances were your stock and trade.',
+    featId: 'multilingual',
+    featName: 'Multilingual',
+  },
+  'Entertainer': {
+    description: 'Through an education in the arts or sheer dogged practice, you learned to entertain crowds. You might have been an actor, a dancer, a musician, a street magician, or any other sort of performer.',
+    featId: 'fascinating-performance',
+    featName: 'Fascinating Performance',
+  },
+  'Farmhand': {
+    description: 'With a strong back and an understanding of seasonal cycles, you tilled the land and tended crops. Your farm could have been razed by invaders, you could have lost the family tying you to the land, or you might have simply tired of the drudgery.',
+    featId: 'assurance',
+    featName: 'Assurance (Athletics)',
+  },
+  'Field Medic': {
+    description: 'In the chaotic rush of battle, you learned to adapt to rapidly changing conditions as you administered to battle casualties. You patched up soldiers, guards, or other combatants.',
+    featId: 'battle-medicine',
+    featName: 'Battle Medicine',
+  },
+  'Fortune Teller': {
+    description: 'The strands of fate are woven through your fingers. You might have learned your trade by reading the cards, studying the stars, or communing with spirits.',
+    featId: 'oddity-identification',
+    featName: 'Oddity Identification',
+  },
+  'Gambler': {
+    description: 'The thrill of the game drove you. Whether at cards, dice, or another contest of chance, you had the knack for reading others and calculated your risks carefully.',
+    featId: 'lie-to-me',
+    featName: 'Lie to Me',
+  },
+  'Gladiator': {
+    description: 'The bloody games of the arena taught you the art of combat. Before you attained true fame, you departed—or escaped—the arena to explore the world.',
+    featId: 'impressive-performance',
+    featName: 'Impressive Performance',
+  },
+  'Guard': {
+    description: 'You served as a guard, whether in a city watch, a noble household, or a caravan. You learned how to keep the peace and how to handle trouble when it arose.',
+    featId: 'quick-coercion',
+    featName: 'Quick Coercion',
+  },
+  'Herbalist': {
+    description: 'As a formally trained apothecary or a rural practitioner of folk medicine, you learned the healing properties of various herbs. You\'re adept at collecting the right natural cures in all sorts of environments.',
+    featId: 'natural-medicine',
+    featName: 'Natural Medicine',
+  },
+  'Hermit': {
+    description: 'In an isolated place—like a cave, remote oasis, or secluded mansion—you lived a life of solitude. Adventuring might represent your first foray out among other people in some time.',
+    featId: 'dubious-knowledge',
+    featName: 'Dubious Knowledge',
+  },
+  'Hunter': {
+    description: 'You stalked and took down animals and other creatures of the wild. Skinning animals, harvesting their flesh, and cooking them were also part of your training.',
+    featId: 'survey-wildlife',
+    featName: 'Survey Wildlife',
+  },
+  'Laborer': {
+    description: 'You\'ve spent years performing arduous physical labor. It was a difficult life, but you somehow survived. You may have embraced adventuring as an easier method to make your way in the world.',
+    featId: 'hefty-hauler',
+    featName: 'Hefty Hauler',
+  },
+  'Martial Disciple': {
+    description: 'You dedicated yourself to intense training and rigorous study to become a great warrior. The school you attended might have been a traditionalist monastery, an elite military academy, or a prestigious mercenary organization.',
+    featId: 'cat-fall',
+    featName: 'Cat Fall',
+  },
+  'Merchant': {
+    description: 'In a market, on the road, or both, you traded goods for profit. You might have been a traveling peddler, a local shopkeeper, or a member of a vast trading company.',
+    featId: 'bargain-hunter',
+    featName: 'Bargain Hunter',
+  },
+  'Miner': {
+    description: 'You earned a living wrenching precious minerals from the lightless depths of the earth. Adventuring might have seemed lucrative or glamorous compared to this backbreaking labor.',
+    featId: 'terrain-expertise',
+    featName: 'Terrain Expertise',
+  },
+  'Noble': {
+    description: 'You were born into a noble family, whether a minor house or a powerful dynasty. You\'ve been groomed for leadership and diplomacy since childhood.',
+    featId: 'courtly-graces',
+    featName: 'Courtly Graces',
+  },
+  'Nomad': {
+    description: 'Traveling far and wide, you picked up basic tactics for surviving on the road and in unknown lands, getting by with few supplies and even fewer comforts.',
+    featId: 'assurance',
+    featName: 'Assurance (Survival)',
+  },
+  'Prisoner': {
+    description: 'You might have been imprisoned for crimes (whether you were guilty or not), or enslaved for some part of your upbringing. In your adventuring life, you take full advantage of your newfound freedom.',
+    featId: 'experienced-smuggler',
+    featName: 'Experienced Smuggler',
+  },
+  'Sailor': {
+    description: 'You heard the call of the sea from a young age. You might have signed on with a merchant vessel, joined the navy, or even sailed with a crew of pirates.',
+    featId: 'underwater-marauder',
+    featName: 'Underwater Marauder',
+  },
+  'Scholar': {
+    description: 'You have a knack for learning, and sequestered yourself from the outside world to study. You might have become an adventurer to learn more about the world, or simply to put your encyclopedic knowledge to use.',
+    featId: 'assurance',
+    featName: 'Assurance',
+  },
+  'Scout': {
+    description: 'You called the wilderness home as you found trails and guided travelers. Your wanderlust could have driven you to explore and map uncharted areas.',
+    featId: 'forager',
+    featName: 'Forager',
+  },
+  'Street Urchin': {
+    description: 'You grew up on the streets with little safety and had to rely on quick hands, caution, and community networks to get by.',
+    featId: 'pickpocket',
+    featName: 'Pickpocket',
+  },
+  'Tinker': {
+    description: 'You have a talent for building and fixing things. You might have been a clockmaker, a blacksmith, or a carpenter, and your skills now serve you well on the road.',
+    featId: 'specialty-crafting',
+    featName: 'Specialty Crafting',
+  },
+  'Warrior': {
+    description: 'You spent your early life in drills, skirmishes, and martial culture, preparing you for open conflict. In your adventuring career, you rely on the martial training that made you tough and disciplined.',
+    featId: 'intimidating-glare',
+    featName: 'Intimidating Glare',
+  },
+  // ── Player Core 2 (AoN-verified) ──
+  'Astrologer': {
+    description: 'Astrologers look to the stars for signs and portents, using their positions in the heavens to chart courses for those living beneath them.',
+    featId: 'oddity-identification',
+    featName: 'Oddity Identification',
+  },
+  'Barber': {
+    description: 'Haircuts, dentistry, bloodletting, and surgery—if it takes a steady hand and a razor, you can do it. You may have taken to the road to expand your skills or test yourself against a world that leaves your patients battered and bruised.',
+    featId: 'risky-surgery',
+    featName: 'Risky Surgery',
+  },
+  'Bookkeeper': {
+    description: 'You ran the numbers on a large farm, for a merchant\'s endeavors, or with a major guild in the city. You kept track of expenses, payroll, profits, and anything else that had to do with money.',
+    featId: 'eye-for-numbers',
+    featName: 'Eye for Numbers',
+  },
+  'Courier': {
+    description: 'In your youth, you earned coin running messages for persons of wealth and influence, darting through crowded city streets. Your dogged commitment to deliver your message was good training for the life of an adventurer.',
+    featId: 'glean-contents',
+    featName: 'Glean Contents',
+  },
+  'Driver': {
+    description: 'You live behind the controls of a vehicle, and can handle anything the road or waves and sky can throw at you. You adventure to test your skills with new and interesting vehicles.',
+    featId: 'assurance',
+    featName: 'Assurance (Driving Lore)',
+  },
+  'Outrider': {
+    description: 'In your youth, you galloped on horseback over vast prairies, serving as a vanguard for your settlement, an army, or another group. Seeing so many different lands built a thirst in you to adventure and explore the world.',
+    featId: 'express-rider',
+    featName: 'Express Rider',
+  },
+  'Pilgrim': {
+    description: 'In your youth, you made several pilgrimages to important shrines and sacred sites. You might have been a mendicant friar, a seller of religious relics (real or fraudulent), or just a simple farmer following the dictates of your faith.',
+    featId: 'pilgrims-token',
+    featName: "Pilgrim's Token",
+  },
+  'Refugee': {
+    description: 'You come from a land very distant from the one you now find yourself in, driven by war, plague, or simply in the pursuit of opportunity. Adventuring is a way to support yourself while offering hope to those who need it most.',
+    featId: 'streetwise',
+    featName: 'Streetwise',
+  },
+  'Root Worker': {
+    description: 'Some ailments can\'t be cured by herbs alone. You learned ritual remedies as well, calling on nature spirits to soothe aches and ward off the evil eye.',
+    featId: 'root-magic',
+    featName: 'Root Magic',
+  },
+  'Saboteur': {
+    description: 'Whether you do it for personal enjoyment or at the behest of a mercenary company or military organization, you have a knack for destroying things. You have a sense for an object or structure\'s weak spots.',
+    featId: 'concealing-legerdemain',
+    featName: 'Concealing Legerdemain',
+  },
+  'Scavenger': {
+    description: 'You\'ve made a living sorting through the things society throws away. You might have scavenged simply to survive, or plied a trade as a ragpicker, dung carter, or the like.',
+    featId: 'forager',
+    featName: 'Forager',
+  },
+  'Servant': {
+    description: 'You held a role of servitude, waiting on nobles and engendering their trust as one of the confidantes of the household. You might have walked away on good terms, or perhaps you know dangerous secrets.',
+    featId: 'read-lips',
+    featName: 'Read Lips',
+  },
+  'Squire': {
+    description: 'You trained at the feet of a knight, maintaining their gear and supporting them at tourneys and in battle. Now you search for a challenge that will prove you worthy of full knighthood.',
+    featId: 'armor-assist',
+    featName: 'Armor Assist',
+  },
+  'Tax Collector': {
+    description: 'Reviled but required, you were sent when taxes were due. Performing your job might have required travel and persuasion, or perhaps you were responsible for collecting taxes on trade.',
+    featId: 'quick-coercion',
+    featName: 'Quick Coercion',
+  },
+  'Ward': {
+    description: 'When you were young, you became the ward of another house—boarded, fed, and educated, but never quite a part of the family. Now, adventuring is your chance to grow and roam free.',
+    featId: 'fascinating-performance',
+    featName: 'Fascinating Performance',
+  },
 };
 
 // Class skills: automatic training + additional picks (PF2e Remaster)
@@ -2817,6 +3086,57 @@ export const getClassBoostOptions = (className: string, rogueRacket: BuilderStat
 };
 
 export const BACKGROUNDS = Object.keys(BACKGROUND_BOOSTS).sort();
+
+export const EXPECTED_BACKGROUND_COUNT = 53;
+
+export function validateBackgroundCoverage(expectedCount: number = EXPECTED_BACKGROUND_COUNT): string[] {
+  const issues: string[] = [];
+  const backgroundKeys = Object.keys(BACKGROUND_BOOSTS);
+  const skillKeys = Object.keys(BACKGROUND_SKILLS);
+  const detailKeys = Object.keys(BACKGROUND_DETAILS);
+
+  if (backgroundKeys.length !== expectedCount) {
+    issues.push(`Expected ${expectedCount} backgrounds, found ${backgroundKeys.length}.`);
+  }
+
+  const missingSkillMappings = backgroundKeys.filter(bg => !skillKeys.includes(bg));
+  if (missingSkillMappings.length > 0) {
+    issues.push(`Missing skill/lore mappings for: ${missingSkillMappings.join(', ')}.`);
+  }
+
+  const orphanSkillMappings = skillKeys.filter(bg => !backgroundKeys.includes(bg));
+  if (orphanSkillMappings.length > 0) {
+    issues.push(`Skill/lore mappings exist for unknown backgrounds: ${orphanSkillMappings.join(', ')}.`);
+  }
+
+  const missingDetailMappings = backgroundKeys.filter(bg => !detailKeys.includes(bg));
+  if (missingDetailMappings.length > 0) {
+    issues.push(`Missing detail mappings for: ${missingDetailMappings.join(', ')}.`);
+  }
+
+  const orphanDetailMappings = detailKeys.filter(bg => !backgroundKeys.includes(bg));
+  if (orphanDetailMappings.length > 0) {
+    issues.push(`Detail mappings exist for unknown backgrounds: ${orphanDetailMappings.join(', ')}.`);
+  }
+
+  for (const background of backgroundKeys) {
+    const skillData = BACKGROUND_SKILLS[background];
+    const details = BACKGROUND_DETAILS[background];
+    if (!skillData || !Array.isArray(skillData.skills) || skillData.skills.length < 1 || !skillData.lore) {
+      issues.push(`Background ${background} has incomplete skill/lore data.`);
+      continue;
+    }
+    if (!details || !details.description || !details.featId || !details.featName) {
+      issues.push(`Background ${background} has incomplete detail metadata.`);
+      continue;
+    }
+    if (details.description.length < 30) {
+      issues.push(`Background ${background} needs a more descriptive flavor text.`);
+    }
+  }
+
+  return issues;
+}
 
 export const CLASSES = Object.keys(CLASS_BOOSTS).sort();
 

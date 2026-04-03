@@ -128,7 +128,7 @@ export function hasBlankSlate(creature: Creature): boolean {
     return false;
   }
 
-  return creature.feats?.some((f: any) => {
+  return creature.feats?.some((f) => {
     const name = typeof f === 'string' ? f : f?.name;
     return typeof name === 'string' && name.toLowerCase().includes('blank slate');
   }) || creature.specials?.some((s: string) => s.toLowerCase().includes('blank slate')) || false;
@@ -153,7 +153,7 @@ export function getAvailableDebilitations(creature: Creature): string[] {
   const specials = creature.specials ?? [];
 
   const hasFeat = (featName: string) => {
-    return feats.some((f: any) => {
+    return feats.some((f) => {
       const name = typeof f === 'string' ? f : f?.name;
       return typeof name === 'string' && name.toLowerCase().includes(featName.toLowerCase());
     }) || specials.some((s: string) => s.toLowerCase().includes(featName.toLowerCase()));

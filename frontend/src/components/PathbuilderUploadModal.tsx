@@ -50,6 +50,16 @@ export const PathbuilderUploadModal: React.FC<PathbuilderUploadModalProps> = ({
     setFiles(files.filter((_, i) => i !== index));
   };
 
+  const addDroppedFiles = (droppedFiles: File[]) => {
+    const validFiles = droppedFiles.filter(file => file.name.toLowerCase().endsWith('.json'));
+    if (validFiles.length !== droppedFiles.length) {
+      setError('Some dropped files were skipped because they were not JSON files.');
+    }
+    if (validFiles.length > 0) {
+      setFiles(multiple ? [...files, ...validFiles] : validFiles);
+    }
+  };
+
   const handleImport = async () => {
     setLoading(true);
     setParseErrors([]);
@@ -72,11 +82,11 @@ export const PathbuilderUploadModal: React.FC<PathbuilderUploadModalProps> = ({
         try {
           const creature = parsePathbuilderCharacter(data);
           importedCreatures.push(creature);
-        } catch (parseError: any) {
-          errors.push({ file: file.name, error: parseError.message || 'Failed to parse character' });
+        } catch (parseError: unknown) {
+          errors.push({ file: file.name, error: parseError instanceof Error ? parseError.message : 'Failed to parse character' });
         }
-      } catch (error: any) {
-        errors.push({ file: file.name, error: error.message || 'Failed to read file' });
+      } catch (error: unknown) {
+        errors.push({ file: file.name, error: error instanceof Error ? error.message : 'Failed to read file' });
       }
     }
 
@@ -175,9 +185,7 @@ export const PathbuilderUploadModal: React.FC<PathbuilderUploadModalProps> = ({
             e.preventDefault();
             e.currentTarget.style.backgroundColor = '#0d0d0d';
             const droppedFiles = Array.from(e.dataTransfer.files);
-            handleFileSelect({
-              target: { files: droppedFiles } as any,
-            } as React.ChangeEvent<HTMLInputElement>);
+            addDroppedFiles(droppedFiles);
           }}
         >
           <div style={{ color: '#00d4aa', marginBottom: '10px' }}>📁</div>

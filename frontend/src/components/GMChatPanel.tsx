@@ -4,6 +4,7 @@ import GameLog from './GameLog';
 import './GMChatPanel.css';
 import type {
   GameState,
+  GameLog,
   GMSession,
   GMChatMessage,
   TensionBand,
@@ -16,7 +17,7 @@ const API_BASE = '/api';
 
 interface GMChatPanelProps {
   gameId: string | null;
-  log: any[];           // Combat log entries for the Combat Log tab
+  log: GameLog[];           // Combat log entries for the Combat Log tab
   gmSession: GMSession | null;
   onSessionUpdate: (session: GMSession) => void;
   onGameStateUpdate?: (gameState: GameState) => void;
@@ -426,8 +427,9 @@ const GMChatPanel: React.FC<GMChatPanelProps> = ({
         onGameStateUpdate(res.data.gameState);
       }
       setActiveTab('gm-chat');
-    } catch (error: any) {
-      console.error('Encounter start failed:', error?.response?.data || error);
+    } catch (error: unknown) {
+      const apiError = error as { response?: { data?: unknown } };
+      console.error('Encounter start failed:', apiError.response?.data || error);
     } finally {
       setEncounterStarting(false);
     }

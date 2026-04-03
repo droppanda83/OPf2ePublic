@@ -4,11 +4,28 @@
  * Handles: game creation, action execution, end-turn, save/load, exploration movement.
  */
 import { useReducer, useCallback, useRef } from 'react';
-import type { Creature, GameState, GMSession, CampaignPreferences } from '../../../shared/types';
+import type { Creature, GameLog, GameState, GMSession, CampaignPreferences } from '../../../shared/types';
 import type { Difficulty } from '../../../shared/encounterBuilder';
 import * as api from '../services/apiService';
 import { devLog, devError } from '../utils/devLog';
 import type { BattleAnimationRequest } from '../components/BattleAnimationOverlay';
+
+type RollOutcome = 'critical-success' | 'success' | 'failure' | 'critical-failure';
+
+interface ExecutableAction {
+  id: string;
+  name?: string;
+  cost: number;
+  movementType?: string;
+  aoe?: unknown;
+  weaponId?: string;
+  spellId?: string;
+  pickupDestination?: string;
+  readyActionId?: string;
+  itemId?: string;
+}
+
+type ActionTarget = string | { x: number; y: number } | undefined;
 
 // ─── State Shape ───────────────────────────────────────────
 
@@ -42,7 +59,7 @@ type GameAction =
   | { type: 'GAME_STATE_UPDATED'; gameState: GameState }
   | { type: 'ACTION_SUCCESS'; gameState: GameState; actionCost: number; clearTarget?: boolean }
   | { type: 'TURN_ENDED'; gameState: GameState; nextCreatureId: string }
-  | { type: 'AI_TURN_STEP'; creatures: Creature[]; log?: any[] }
+  | { type: 'AI_TURN_STEP'; creatures: Creature[]; log?: GameLog[] }
   | { type: 'AI_TURN_COMPLETE'; gameState: GameState; nextCreatureId: string }
   | { type: 'SELECT_TARGET'; targetId: string | null }
   | { type: 'CLEAR_SELECTION' };
@@ -100,7 +117,7 @@ function gameReducer(state: GameUIState, action: GameAction): GameUIState {
         gameState: {
           ...state.gameState,
           creatures: state.gameState.creatures.map((c: Creature) => {
-            const snap = action.creatures.find((s: any) => s.id === c.id);
+            const snap = action.creatures.find((s: Creature) => s.id === c.id);
             if (snap) {
               return { ...c, currentHealth: snap.currentHealth, conditions: snap.conditions, dead: snap.dead };
             }
@@ -140,7 +157,7 @@ export interface UseGameStateReturn {
   uiState: GameUIState;
   dispatch: React.Dispatch<GameAction>;
   startNewGame: () => Promise<void>;
-  executeAction: (action: any, targetOrPosition?: any, overrideCreatureId?: string, heroPointsSpent?: number) => Promise<api.ActionResponse | undefined>;
+  executeAction: (action: ExecutableAction, targetOrPosition?: ActionTarget, overrideCreatureId?: string, heroPointsSpent?: number) => Promise<api.ActionResponse | undefined>;
   handleEndTurn: () => Promise<void>;
   handleSaveGame: (saveName: string) => Promise<void>;
   handleLoadGame: (saveId: string) => Promise<void>;
@@ -185,7 +202,7 @@ export function useGameState(options: UseGameStateOptions): UseGameStateReturn {
         : 1;
       const partySize = initialCreatures?.length || 1;
 
-      let encounterCreatures: any[] = [];
+      let encounterCreatures: Creature[] = [];
       const isEncounterMode = !campaignPreferences || campaignPreferences.mode === 'encounter';
       if (isEncounterMode) {
         devLog(`📡 Fetching ${difficulty} encounter for party level ${partyLevel}, size ${partySize}`);
@@ -209,18 +226,18 @@ export function useGameState(options: UseGameStateOptions): UseGameStateReturn {
 
       dispatch({
         type: 'GAME_CREATED',
-        gameId: (gameState as any).id,
+        gameId: gameState.id,
         gameState,
-        currentCreatureId: (gameState as any).currentRound.turnOrder[0],
+        currentCreatureId: gameState.currentRound.turnOrder[0],
       });
 
-      if ((gameState as any).gmSession) {
-        setGMSession((gameState as any).gmSession);
+      if (gameState.gmSession) {
+        setGMSession(gameState.gmSession);
       }
 
       // Auto-initialize GM session for campaign mode
       const isCampaignMode = campaignPreferences && campaignPreferences.mode !== 'encounter';
-      if (isCampaignMode && (gameState as any).id) {
+      if (isCampaignMode && gameState.id) {
         setGmInitializing(true);
         setGmInitStatus('Generating world...');
         try {
@@ -234,7 +251,7 @@ export function useGameState(options: UseGameStateOptions): UseGameStateReturn {
             setGmInitStatus(statusMessages[statusIdx]);
           }, 2500);
 
-          const gmRes = await api.initGMSession((gameState as any).id, campaignPreferences!);
+          const gmRes = await api.initGMSession(gameState.id, campaignPreferences!);
           clearInterval(statusInterval);
 
           if (gmRes.gmSession) setGMSession(gmRes.gmSession);
@@ -246,7 +263,7 @@ export function useGameState(options: UseGameStateOptions): UseGameStateReturn {
           setGmInitStatus('');
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       devError('❌ Game creation error:', error);
       dispatch({ type: 'SET_ERROR', error: api.extractErrorMessage(error, 'Failed to create game') });
     }
@@ -254,8 +271,8 @@ export function useGameState(options: UseGameStateOptions): UseGameStateReturn {
 
   // ─── Execute Action ────────────────────────────────────────
   const executeAction = useCallback(async (
-    action: any,
-    targetOrPosition?: any,
+    action: ExecutableAction,
+    targetOrPosition?: ActionTarget,
     overrideCreatureId?: string,
     heroPointsSpent?: number
   ): Promise<api.ActionResponse | undefined> => {
@@ -344,7 +361,7 @@ export function useGameState(options: UseGameStateOptions): UseGameStateReturn {
             d20: result.details.d20,
             bonus: result.details.bonus ?? 0,
             total: result.details.total ?? (result.details.d20 + (result.details.bonus ?? 0)),
-            result: result.details.result as any,
+            result: result.details.result as RollOutcome,
           },
         };
 
@@ -372,9 +389,9 @@ export function useGameState(options: UseGameStateOptions): UseGameStateReturn {
       }
 
       return response;
-    } catch (error: any) {
+    } catch (error: unknown) {
       devError('❌ Action execution error:', error);
-      dispatch({ type: 'SET_ERROR', error: error.message || 'Action failed' });
+      dispatch({ type: 'SET_ERROR', error: api.extractErrorMessage(error, 'Action failed') });
       return undefined;
     }
   }, [uiState.gameId, uiState.currentCreatureId, uiState.actionPoints, uiState.gameState, uiState.selectedTarget, playBattleAnimation]);
@@ -387,9 +404,9 @@ export function useGameState(options: UseGameStateOptions): UseGameStateReturn {
       const newGameState = await api.endTurn(uiState.gameId);
       const nextCreatureId = newGameState.currentRound.turnOrder[newGameState.currentRound.currentTurnIndex];
       dispatch({ type: 'TURN_ENDED', gameState: newGameState, nextCreatureId });
-    } catch (error: any) {
+    } catch (error: unknown) {
       devError('❌ End turn error:', error);
-      dispatch({ type: 'SET_ERROR', error: error.message || 'Failed to end turn' });
+      dispatch({ type: 'SET_ERROR', error: api.extractErrorMessage(error, 'Failed to end turn') });
     }
   }, [uiState.gameId, uiState.gameState]);
 
@@ -401,9 +418,9 @@ export function useGameState(options: UseGameStateOptions): UseGameStateReturn {
       await api.saveGame(uiState.gameId, saveName);
       devLog('✅ Game saved');
       dispatch({ type: 'SET_ERROR', error: null });
-    } catch (error: any) {
+    } catch (error: unknown) {
       devError('❌ Save error:', error);
-      dispatch({ type: 'SET_ERROR', error: error.message || 'Failed to save game' });
+      dispatch({ type: 'SET_ERROR', error: api.extractErrorMessage(error, 'Failed to save game') });
     } finally {
       setModalLoading(false);
     }
@@ -413,19 +430,19 @@ export function useGameState(options: UseGameStateOptions): UseGameStateReturn {
     setModalLoading(true);
     try {
       const loadedGameState = await api.loadGame(saveId);
-      devLog('✅ Game loaded:', (loadedGameState as any).id);
+      devLog('✅ Game loaded:', loadedGameState.id);
       dispatch({
         type: 'GAME_LOADED',
-        gameId: (loadedGameState as any).id,
+        gameId: loadedGameState.id,
         gameState: loadedGameState,
-        currentCreatureId: (loadedGameState as any).currentRound.turnOrder[(loadedGameState as any).currentRound.currentTurnIndex],
+        currentCreatureId: loadedGameState.currentRound.turnOrder[loadedGameState.currentRound.currentTurnIndex],
       });
-      if ((loadedGameState as any).gmSession) {
-        setGMSession((loadedGameState as any).gmSession);
+      if (loadedGameState.gmSession) {
+        setGMSession(loadedGameState.gmSession);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       devError('❌ Load error:', error);
-      dispatch({ type: 'SET_ERROR', error: error.message || 'Failed to load game' });
+      dispatch({ type: 'SET_ERROR', error: api.extractErrorMessage(error, 'Failed to load game') });
     } finally {
       setModalLoading(false);
     }
@@ -442,7 +459,7 @@ export function useGameState(options: UseGameStateOptions): UseGameStateReturn {
       devLog(`🎯 Importing ${creatures.length} characters from Pathbuilder...`);
       const gameState = await api.addCreatures(uiState.gameId, creatures);
       dispatch({ type: 'GAME_STATE_UPDATED', gameState });
-    } catch (error: any) {
+    } catch (error: unknown) {
       devError('❌ Import error:', error);
       dispatch({ type: 'SET_ERROR', error: api.extractErrorMessage(error, 'Failed to import characters') });
     } finally {
@@ -484,7 +501,7 @@ export function useGameState(options: UseGameStateOptions): UseGameStateReturn {
       } else if (response.success) {
         dispatch({ type: 'GAME_STATE_UPDATED', gameState: response.gameState });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       devError('🚶 Exploration move failed:', error);
       dispatch({ type: 'SET_ERROR', error: api.extractErrorMessage(error, 'Move failed') });
     }
@@ -501,9 +518,9 @@ export function useGameState(options: UseGameStateOptions): UseGameStateReturn {
         gameState: response.gameState,
         nextCreatureId: creatureId,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       devError('❌ Resume delay error:', error);
-      dispatch({ type: 'SET_ERROR', error: error.message || 'Failed to resume delay' });
+      dispatch({ type: 'SET_ERROR', error: api.extractErrorMessage(error, 'Failed to resume delay') });
     }
   }, [uiState.gameId, uiState.gameState]);
 

@@ -27,14 +27,14 @@
 
 .lu-modal {
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);
-  border: 2px solid #d4af37;
-  border-radius: 12px;
+  border: 2px solid var(--pf2e-gold);
+  border-radius: var(--pf2e-radius-xl);
   width: 700px;
   max-width: 95vw;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 0 40px rgba(212, 175, 55, 0.3), 0 8px 32px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 40px var(--pf2e-shadow-gold), var(--pf2e-shadow-lg);
   animation: lu-slideUp 0.4s ease-out;
 }
 
@@ -90,8 +90,8 @@
 
 .lu-close-btn:hover {
   color: #fff;
-  border-color: #d4af37;
-  background: rgba(212, 175, 55, 0.1);
+  border-color: var(--pf2e-gold);
+  background: var(--pf2e-gold-dim);
 }
 
 /* ── Body ── */

@@ -918,7 +918,7 @@ export function getAvailableReactions(
     if (cap.triggerType !== trigger.type) return false;
 
     // Creature must have the feat/special
-    const hasAbility = (reactor.feats ?? []).some((f: any) => {
+    const hasAbility = (reactor.feats ?? []).some((f) => {
       const name = typeof f === 'string' ? f : f?.name ?? '';
       return name.toLowerCase().includes(cap.name.toLowerCase());
     }) || (reactor.specials ?? []).some(s =>

@@ -3,9 +3,9 @@
   flex-direction: column;
   width: 100%;
   height: 100vh;
-  background: linear-gradient(135deg, #1a1210 0%, #0f0a08 100%);
-  color: #d0c3b4;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, var(--pf2e-bg-base) 0%, var(--pf2e-bg-deep) 100%);
+  color: var(--pf2e-text-primary);
+  font-family: var(--pf2e-font-body);
   overflow: auto;
 }
 
@@ -13,16 +13,16 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
+  padding: var(--pf2e-space-sm) var(--pf2e-space-md);
   background: rgba(0, 0, 0, 0.6);
-  border-bottom: 2px solid #d4af37;
+  border-bottom: 2px solid var(--pf2e-gold);
 }
 
 .combat-header h1 {
   margin: 0;
   font-size: 18px;
-  color: #ead8be;
-  font-family: 'Cinzel', 'Times New Roman', serif;
+  color: var(--pf2e-text-heading);
+  font-family: var(--pf2e-font-display);
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
 }
 
@@ -34,11 +34,11 @@
 
 .header-token-badge {
   font-size: 10px;
-  color: #d4af37;
+  color: var(--pf2e-gold);
   font-weight: 600;
   padding: 2px 8px;
-  background: rgba(212, 175, 55, 0.1);
-  border: 1px solid rgba(212, 175, 55, 0.25);
+  background: var(--pf2e-gold-dim);
+  border: 1px solid var(--pf2e-gold-border);
   border-radius: 10px;
   cursor: default;
   white-space: nowrap;
@@ -53,24 +53,24 @@
 .btn-primary {
   padding: 4px 8px;
   font-size: 11px;
-  background: #d4af37;
-  color: #1a1210;
+  background: var(--pf2e-gold);
+  color: var(--pf2e-bg-base);
   border: none;
   border-radius: 5px;
   cursor: pointer;
   font-weight: 600;
-  transition: all 0.3s ease;
+  transition: all var(--pf2e-transition-slow);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #e6c547;
+  background: var(--pf2e-gold-light);
   transform: scale(1.05);
-  box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+  box-shadow: 0 0 10px var(--pf2e-gold-glow);
 }
 
 .btn-primary:disabled {
   background: #4a3a2a;
-  color: #666;
+  color: var(--pf2e-text-dim);
   cursor: not-allowed;
 }
 
@@ -78,17 +78,17 @@
   padding: 2px 4px;
   font-size: 8px;
   background: #3a2a20;
-  color: #d0c3b4;
-  border: 1px solid #5a3a3a;
+  color: var(--pf2e-text-primary);
+  border: 1px solid var(--pf2e-border-light);
   border-radius: 5px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all var(--pf2e-transition-slow);
 }
 
 .btn-secondary:hover:not(:disabled) {
   background: #4a3a2a;
-  color: #ead8be;
-  border-color: #d4af37;
+  color: var(--pf2e-text-heading);
+  border-color: var(--pf2e-gold);
   transform: scale(1.05);
 }
 
@@ -107,11 +107,11 @@
   padding: 2px 6px;
   font-size: 16px;
   background: #3a2a20;
-  color: #d0c3b4;
-  border: 1px solid #5a3a3a;
+  color: var(--pf2e-text-primary);
+  border: 1px solid var(--pf2e-border-light);
   border-radius: 5px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all var(--pf2e-transition-slow);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -121,8 +121,8 @@
 
 .btn-settings:hover:not(:disabled) {
   background: #4a3a2a;
-  color: #ead8be;
-  border-color: #d4af37;
+  color: var(--pf2e-text-heading);
+  border-color: var(--pf2e-gold);
   transform: scale(1.05);
 }
 
@@ -138,9 +138,9 @@
   top: calc(100% + 6px);
   right: 0;
   background: rgba(18, 12, 10, 0.96);
-  border: 1px solid #3f2626;
-  border-radius: 6px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--pf2e-border);
+  border-radius: var(--pf2e-radius-md);
+  box-shadow: var(--pf2e-shadow-lg);
   display: flex;
   flex-direction: column;
   min-width: 140px;
@@ -150,22 +150,22 @@
 .settings-menu-item {
   padding: 8px 12px;
   background: transparent;
-  color: #d0c3b4;
+  color: var(--pf2e-text-primary);
   border: none;
   cursor: pointer;
   text-align: left;
   font-size: 12px;
-  transition: all 0.2s ease;
+  transition: all var(--pf2e-transition-base);
   white-space: nowrap;
 }
 
 .settings-menu-item:hover:not(:disabled) {
   background: rgba(212, 175, 55, 0.12);
-  color: #d4af37;
+  color: var(--pf2e-gold);
 }
 
 .settings-menu-item:disabled {
-  color: #666;
+  color: var(--pf2e-text-dim);
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -182,8 +182,8 @@
 .error-message {
   padding: 15px;
   background: rgba(200, 0, 0, 0.3);
-  color: #ff6666;
-  border: 1px solid #ff6666;
+  color: var(--pf2e-enemy);
+  border: 1px solid var(--pf2e-enemy);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -192,7 +192,7 @@
 .error-message button {
   background: none;
   border: none;
-  color: #ff6666;
+  color: var(--pf2e-enemy);
   font-size: 20px;
   cursor: pointer;
 }
@@ -226,7 +226,7 @@
   grid-column: 1 / -1;
   background: rgba(0, 0, 0, 0.6);
   border-radius: 0;
-  border-top: 2px solid #3f2626;
+  border-top: 2px solid var(--pf2e-border);
   padding: 0;
   min-height: 0;
   margin: 0 -10px;
@@ -251,6 +251,47 @@
   min-height: 0;
   overflow: auto;
   position: relative;
+}
+
+@media (min-width: 1920px) {
+  .combat-layout {
+    grid-template-columns: 180px 1fr 340px;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 1366px) {
+  .combat-layout {
+    grid-template-columns: 124px 1fr 220px;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 1280px) {
+  .combat-layout {
+    grid-template-columns: 110px 1fr 200px;
+    gap: 6px;
+    padding: 8px 8px 0 8px;
+  }
+
+  .left-panel,
+  .right-panel {
+    padding: 6px;
+    gap: 6px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .combat-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto 1fr auto;
+  }
+
+  .left-panel,
+  .right-panel,
+  .center-panel {
+    overflow: visible;
+  }
 }
 
 @media (max-width: 900px) {

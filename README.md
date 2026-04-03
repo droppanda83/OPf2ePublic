@@ -1,268 +1,95 @@
-# PF2e AI-Powered Tactical Combat Game
+# PF2e Rebirth
 
-A full-stack, AI-enhanced tactical combat system for Pathfinder 2nd Edition featuring real-time grid-based combat, modular rule engine, and ChatGPT integration for intelligent NPC decision-making.
+PF2e Rebirth is a Pathfinder 2e Remaster digital tabletop project with a TypeScript rules engine, React frontend, shared data catalogs, and an AI GM system under active development.
 
-## Features
+## Start Here
 
-🎲 **Core Combat System**
-- Turn-based combat with action economy (3 actions per turn)
-- Initiative rolling and turn order management
-- d20 attack rolls with damage resolution
-- Health tracking and condition system
+- New to the project: read [README.md](README.md) for overview and quick start.
+- Working on code locally: read [DEVELOPMENT.md](DEVELOPMENT.md) for setup, commands, and validation workflow.
+- Need roadmap status: read [PF2E_DEVELOPMENT_PLAN.md](PF2E_DEVELOPMENT_PLAN.md) for milestones and current priorities.
+- Bootstrapping a new assistant session: read [CONTEXT.md](CONTEXT.md) for current architecture and repository context.
+- Tracking open issues only: read [FIXES_TRACKER.md](FIXES_TRACKER.md).
+- Working on AI GM planning: read [AI-GM-DEVELOPMENT.md](AI-GM-DEVELOPMENT.md) as the separate AI track source of truth.
 
-🤖 **AI-Powered NPCs**
-- ChatGPT integration for tactical enemy decisions
-- Context-aware decision making
-- Constrained output for valid PF2e actions
+## Current Status
 
-🗺️ **Tactical Battlefield**
-- 20x20 grid-based combat arena
-- Terrain types (empty, difficult, impassable)
-- Real-time creature positioning
-- Visual health indicators
+- Core combat loop, turn order, action resolution, and creature data are implemented.
+- Shared content catalogs are large (spells, feats, bestiary, equipment) and actively expanding.
+- AI GM architecture exists and is being developed in a dedicated track.
+- Documentation has been consolidated so this file is the public entry point.
 
-📦 **Modular Rule Engine**
-- Pluggable rule modules for easy expansion
-- Action Economy, Movement, Combat, Conditions
-- Spell system with spell slots
-- Ability system with charges
-- Damage resistance/immunity system
+## Repository Layout
 
-⚡ **Full-Stack Architecture**
-- Node.js + Express backend with TypeScript
-- React + Vite frontend with TypeScript
-- Shared type system across frontend/backend
-- Monorepo workspace structure
+```text
+backend/    Express + TypeScript API and game engine
+frontend/   React + Vite interface
+shared/     Shared PF2e data and type definitions
+rules-engine/  Supporting rules modules/utilities
+```
 
 ## Quick Start
 
 ### Prerequisites
+
 - Node.js 18+
 - npm 9+
-- OpenAI API key (for AI features)
 
-### Installation
+### Install
 
 ```bash
-# Clone and install
-git clone <repo>
-cd OPf2ePublic
 npm install
-
-# Configure backend
-cp backend/.env.example backend/.env
-# Edit backend/.env and add your OpenAI API key
 ```
 
-### Development
+### Configure
+
+Create backend environment config:
 
 ```bash
-# Start both backend and frontend
-npm run dev
-
-# Or start individually
-npm run backend:dev    # http://localhost:5000
-npm run frontend:dev   # http://localhost:5173
+copy backend\\.env.example backend\\.env
 ```
 
-### Production Build
+Set at least:
+
+```env
+OPENAI_API_KEY=your_key_here
+PORT=5000
+```
+
+### Run Development
+
+```bash
+npm run dev
+```
+
+This runs workspace dev scripts (backend and frontend).
+
+### Build and Type-Check
 
 ```bash
 npm run build
 npm run type-check
-npm start
 ```
 
-## Project Structure
+## Key Scripts
 
-```
-├── backend/           # Express.js server + game engine
-│   ├── src/
-│   │   ├── index.ts   # REST API server
-│   │   ├── game/      # Game engine & rules
-│   │   └── ai/        # ChatGPT integration
-│   └── package.json
-├── frontend/          # React + Vite UI
-│   ├── src/
-│   │   ├── components/  # React components
-│   │   └── App.tsx
-│   └── package.json
-├── shared/            # Shared types & utilities
-│   ├── types.ts       # TypeScript interfaces
-│   └── package.json
-├── rules-engine/      # Modular rule system
-│   ├── moduleSystem.ts    # Core modules
-│   ├── specialModules.ts  # Spells/abilities
-│   └── package.json
-└── package.json       # Workspace config
-```
+- `npm run dev` - Run workspace dev scripts
+- `npm run build` - Build all workspaces
+- `npm run type-check` - Type-check all workspaces
+- `npm run test` - Run backend game tests via tsx
+- `npm run lint` - Lint backend, frontend, and shared
 
-## API Reference
+## Documentation Map
 
-### REST Endpoints
+- `README.md` - Public overview and quick start (this file)
+- `DEVELOPMENT.md` - Developer workflow and conventions
+- `CONTEXT.md` - Assistant/bootstrap context for future sessions
+- `PF2E_DEVELOPMENT_PLAN.md` - Canonical roadmap and milestone status
+- `FIXES_TRACKER.md` - Active unresolved fixes only
+- `AI-GM-DEVELOPMENT.md` - AI GM-specific plan (separate source of truth)
 
-```
-GET /health
-  Health check
-  Returns: { status: 'ok', timestamp }
+## Notes
 
-POST /api/game/create
-  Start new encounter
-  Body: { players, creatures, mapSize }
-  Returns: GameState
+- The AI GM subsystem is intentionally managed separately from general docs and implementation tasks.
+- Historical planning docs are retained as archival references and marked clearly.
 
-GET /api/game/:gameId
-  Get current game state
-  Returns: GameState
-
-POST /api/game/:gameId/action
-  Execute action
-  Body: { creatureId, actionId, targetId, targetPosition }
-  Returns: { gameState, result }
-```
-
-## Gaming
-
-1. **Create Game**: Click "Start New Combat"
-2. **Click Creatures**: Select targets from the grid
-3. **Take Actions**: Use action panel to strike, move, cast spells
-4. **AI Turns**: Enemies use ChatGPT to decide actions
-5. **Track Health**: Watch HP bars and conditions
-
-## Modular Rules System
-
-Extending the game is simple with pluggable modules:
-
-### Add a Rule Module
-
-```typescript
-import { BaseRuleModule } from 'pf2e-rules-engine';
-
-export class MyRuleModule extends BaseRuleModule {
-  name = 'MyRules';
-  version = '1.0.0';
-
-  validate(action: any): boolean {
-    return true; // or false if invalid
-  }
-
-  apply(actor: Creature, gameState: GameState, action: any): any {
-    // Implement your mechanic
-    return { success: true, message: '...' };
-  }
-}
-```
-
-### Add a Spell
-
-Edit `rules-engine/specialModules.ts`:
-
-```typescript
-this.spellDatabase.set('my-spell', {
-  id: 'my-spell',
-  name: 'My Spell',
-  level: 2,
-  school: 'evocation',
-  actionCost: 2,
-  duration: 0,
-  description: 'Description',
-  effect: { damage: 5 }
-});
-```
-
-## Development
-
-### Available Tasks
-
-- `npm run build` - Compile all TypeScript
-- `npm run dev` - Start dev servers
-- `npm run type-check` - Type validation
-- `npm run backend:dev` - Backend only
-- `npm run frontend:dev` - Frontend only
-
-### VS Code Integration
-
-- Press `Ctrl+Shift+B` for build task
-- Press `F5` for debugging (requires Chrome)
-- See `.vscode/tasks.json` and `.vscode/launch.json`
-
-### Documentation
-
-- [Development Guide](DEVELOPMENT.md) - Setup and workflow
-- [Copilot Instructions](.github/copilot-instructions.md) - Architecture details
-- [Shared Types](shared/types.ts) - Data structures
-
-## Configuration
-
-### Environment Variables
-
-`backend/.env`:
-```env
-OPENAI_API_KEY=sk-your-key-here
-PORT=5000
-NODE_ENV=development
-FRONTEND_URL=http://localhost:5173
-```
-
-### Customization
-
-- Change port: Edit `backend/.env`
-- Modify grid size: Edit encounter creation params
-- Adjust spell effects: Edit `specialModules.ts`
-- Add creatures: Use rule modules system
-
-## Roadmap
-
-- [ ] Database persistence  
-- [ ] WebSocket real-time multiplayer
-- [ ] Character sheet system
-- [ ] PF2e action economy enforcement
-- [ ] Spell library from official rules
-- [ ] Mobile-responsive UI
-- [ ] Campaign management
-- [ ] Audio effects and ambience
-
-## Troubleshooting
-
-**Port in use?**
-```bash
-npx kill-port 5000 5173
-```
-
-**Dependencies issues?**
-```bash
-rm -r node_modules package-lock.json
-npm install
-```
-
-**TypeScript errors?**
-```bash
-npm run type-check
-```
-
-**Build failed?**
-```bash
-npm run build -- --verbose
-```
-
-## Contributing
-
-1. Extend via rule modules (preferred)
-2. Add TypeScript types to shared/types.ts
-3. Test with `npm run build && npm run type-check`
-4. Update documentation
-
-## Support
-
-For detailed development information, see:
-- [Development Guide](DEVELOPMENT.md)
-- [Copilot Instructions](.github/copilot-instructions.md)
-
-## License
-
-MIT
-
----
-
-**Status**: MVP Complete - Ready for Active Development  
-**Last Updated**: February 2026
+Last updated: 2026-03-31

@@ -271,7 +271,7 @@ export const MAGIC_WARRIOR_FEATS: FeatEntry[] = [
     traits: ['Archetype'],
     actionCost: 'passive',
     prerequisites: ['Magic Warrior Dedication'],
-    mechanics: '1/day: nondetection on self (heightened to max spell level). Ends if mask removed. Same tradition as focus spells.',
+    mechanics: '1/day: nondetection on self (heightened to max spell rank). Ends if mask removed. Same tradition as focus spells.',
   },
 ];
 

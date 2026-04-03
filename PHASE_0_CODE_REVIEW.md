@@ -1,5 +1,10 @@
 # PHASE 0 CODE REVIEW
 
+Status: ARCHIVAL_HISTORY
+
+This is a completed historical review record and is not an active planning document.
+Use `PF2E_DEVELOPMENT_PLAN.md` and `FIXES_TRACKER.md` for current priorities.
+
 **Date**: 2026-02-10  
 **Sessions**: 1-3  
 **Status**: ✅ COMPLETE

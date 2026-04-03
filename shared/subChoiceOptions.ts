@@ -4,7 +4,6 @@
 type SubChoiceOption = { id: string; name: string; description?: string };
 
 export const ARCANE_CANTRIP_OPTIONS: SubChoiceOption[] = [
-  { id: "acid-splash", name: "Acid Splash" },
   { id: "ancient-dust", name: "Ancient Dust" },
   { id: "approximate", name: "Approximate" },
   { id: "bramble-bush", name: "Bramble Bush" },
@@ -144,7 +143,6 @@ export const OCCULT_CANTRIP_OPTIONS: SubChoiceOption[] = [
 ];
 
 export const PRIMAL_CANTRIP_OPTIONS: SubChoiceOption[] = [
-  { id: "acid-splash", name: "Acid Splash" },
   { id: "approximate", name: "Approximate" },
   { id: "bramble-bush", name: "Bramble Bush" },
   { id: "caustic-blast", name: "Caustic Blast" },

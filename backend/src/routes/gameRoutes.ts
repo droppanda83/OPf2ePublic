@@ -5,9 +5,10 @@
 import { Router, Request, Response } from 'express';
 import { AppContext } from '../appContext';
 import { createDefaultGMSession, getTensionBand } from '../ai/gmChatbot';
-import { generateAndApplyAtlasMap, fallbackPosition } from '../routeHelpers';
+import { generateAndApplyProceduralMap, fallbackPosition, applyMapTemplateToGame } from '../routeHelpers';
+import { getFoundryMapById, FOUNDRY_MAP_CATALOG } from 'pf2e-shared/foundryMapCatalog';
 import type { Creature } from '../routeHelpers';
-import type { GMChatMessage, GameLog, Difficulty } from 'pf2e-shared';
+import type { Bonus, Condition, GameLogEntry } from 'pf2e-shared';
 import type { MapGeneratorTheme } from 'pf2e-shared';
 
 export function createGameRoutes(ctx: AppContext): Router {
@@ -16,13 +17,13 @@ export function createGameRoutes(ctx: AppContext): Router {
   // Create game
   router.post('/api/game/create', (req: Request, res: Response) => {
     console.log('🎮 Game create endpoint hit');
-    const { players = [], creatures = [], mapSize, mapTheme, mapSubTheme, aiModel } = req.body;
+    const { players = [], creatures = [], mapSize, mapTheme, mapSubTheme, aiModel, foundryMapId } = req.body;
 
     // Debug logging
     console.log(`\n[BACKEND] ===== GAME CREATE REQUEST =====`);
     console.log(`[BACKEND] Players count: ${players?.length || 0}`);
     if (players && players.length > 0) {
-      players.forEach((p: any, i: number) => {
+      players.forEach((p: Partial<Creature>, i: number) => {
         console.log(`[BACKEND] Player ${i} (${p.name}):`, {
           hasSkills: !!p.skills, skillsCount: p.skills?.length,
           hasFeats: !!p.feats, featsCount: p.feats?.length,
@@ -35,10 +36,10 @@ export function createGameRoutes(ctx: AppContext): Router {
     }
     console.log(`[BACKEND] Creatures count: ${creatures?.length || 0}`);
     if (creatures && creatures.length > 0) {
-      creatures.forEach((c: any, i: number) => {
+      creatures.forEach((c: Partial<Creature>, i: number) => {
         console.log(`🦸 Creature ${i} (${c.name}):`, {
           equippedWeapon: c.equippedWeapon,
-          bonuses: c.bonuses?.map((b: any) => ({ value: b.value, applyTo: b.applyTo, source: b.source })),
+          bonuses: c.bonuses?.map((b: Bonus) => ({ value: b.value, applyTo: b.applyTo, source: b.source })),
           bonusesCount: c.bonuses?.length || 0,
         });
       });
@@ -51,13 +52,13 @@ export function createGameRoutes(ctx: AppContext): Router {
 
       // Debug: Log what comes OUT of createGame
       console.log(`[BACKEND] ===== GAME STATE CREATED =====`);
-      gameState.creatures.forEach((c: any, i: number) => {
+      gameState.creatures.forEach((c: Creature, i: number) => {
         console.log(`[BACKEND] GameState Creature ${i} (${c.name}):`, {
           hasSkills: !!c.skills, skillsCount: c.skills?.length,
-          skills: c.skills?.slice(0, 2).map((s: any) => `${s.name}(${s.proficiency})`),
+          skills: c.skills?.slice(0, 2).map((s) => `${s.name}(${s.proficiency})`),
           hasSpecials: !!c.specials, specialsCount: c.specials?.length, specials: c.specials,
           hasFeats: !!c.feats, featsCount: c.feats?.length,
-          feats: c.feats?.slice(0, 2).map((f: any) => `${f.name}(${f.type})`),
+          feats: c.feats?.slice(0, 2).map((f) => `${f.name}(${f.type})`),
           hasSpells: !!c.spells, spellsCount: c.spells?.length,
           hasFocusSpells: !!c.focusSpells, focusSpellsCount: c.focusSpells?.length, focusSpells: c.focusSpells,
         });
@@ -74,32 +75,59 @@ export function createGameRoutes(ctx: AppContext): Router {
             simpleWeapons: c.proficiencies?.simpleWeapons,
             unarmed: c.proficiencies?.unarmed,
           },
-          bonuses: c.bonuses?.map((b: any) => ({ value: b.value, applyTo: b.applyTo })),
+          bonuses: c.bonuses?.map((b: Bonus) => ({ value: b.value, applyTo: b.applyTo })),
         });
       });
 
-      // Encounter-mode map generation (atlas-based with procedural fallback)
-      const validThemes: string[] = ['dungeon', 'cave', 'wilderness', 'urban', 'indoor', 'ship', 'tower', 'bridge', 'caravan', 'sewers', 'castle', 'mine'];
-      console.log(`🗺️ [MAP DEBUG] mapTheme="${mapTheme}", mapSubTheme=${JSON.stringify(mapSubTheme)}, valid=${mapTheme ? validThemes.includes(mapTheme) : 'N/A'}`);
-      if (mapTheme && validThemes.includes(mapTheme)) {
-        try {
-          // Resolve sub-theme: if an array was sent, pick one at random
-          let resolvedSubTheme: string | undefined;
-          if (Array.isArray(mapSubTheme) && mapSubTheme.length > 0) {
-            resolvedSubTheme = mapSubTheme[Math.floor(Math.random() * mapSubTheme.length)];
-          } else if (typeof mapSubTheme === 'string' && mapSubTheme) {
-            resolvedSubTheme = mapSubTheme;
-          }
-          console.log(`🗺️ [MAP DEBUG] Calling generateAndApplyAtlasMap with theme="${mapTheme}", subTheme="${resolvedSubTheme}"`);
-          generateAndApplyAtlasMap(gameState, mapTheme as MapGeneratorTheme, undefined, undefined,
-            resolvedSubTheme ? { subTheme: resolvedSubTheme } : undefined);
-          console.log(`🗺️ Encounter: applied atlas ${mapTheme} map${resolvedSubTheme ? ` (sub: ${resolvedSubTheme})` : ''}`);
-          console.log(`🗺️ [MAP DEBUG] Map result: width=${gameState.map?.width}, height=${gameState.map?.height}, hasTiles=${!!gameState.map?.tiles}, tileRows=${gameState.map?.tiles?.length || 0}, overlays=${gameState.map?.overlays?.length || 0}, procedural=${gameState.map?.procedural}`);
-        } catch (mapErr) {
-          console.warn('⚠️ Atlas map generation failed, using default grid:', mapErr);
+      // Encounter-mode map selection
+      // Priority: foundryMapId (player-selected or random Foundry map) > procedural fallback
+      if (foundryMapId && typeof foundryMapId === 'string') {
+        let foundryMap;
+        if (foundryMapId === '__random__') {
+          // Pick a random Foundry map from the catalog
+          foundryMap = FOUNDRY_MAP_CATALOG.length > 0
+            ? FOUNDRY_MAP_CATALOG[Math.floor(Math.random() * FOUNDRY_MAP_CATALOG.length)]
+            : undefined;
+          if (foundryMap) console.log(`🎲 Random Foundry map selected: "${foundryMap.name}" (${foundryMap.id})`);
+        } else {
+          foundryMap = getFoundryMapById(foundryMapId);
         }
-      } else {
-        console.log(`🗺️ [MAP DEBUG] Skipping map generation — mapTheme="${mapTheme}" not valid or missing`);
+        if (foundryMap) {
+          try {
+            applyMapTemplateToGame(gameState, foundryMap);
+            console.log(`🗺️ Foundry map applied: "${foundryMap.name}" (${foundryMap.id}), theme=${foundryMap.theme}`);
+          } catch (mapErr) {
+            console.warn('⚠️ Foundry map application failed, falling back to atlas:', mapErr);
+          }
+        } else {
+          console.warn(`⚠️ Foundry map ID "${foundryMapId}" not found in catalog`);
+        }
+      }
+
+      // Fall back to procedural generation if no Foundry map was applied
+      if (!foundryMapId || !gameState.map?.mapImageUrl) {
+        const validThemes: string[] = ['dungeon', 'cave', 'wilderness', 'urban', 'indoor', 'ship', 'tower', 'bridge', 'caravan', 'sewers', 'castle', 'mine'];
+        console.log(`🗺️ [MAP DEBUG] mapTheme="${mapTheme}", mapSubTheme=${JSON.stringify(mapSubTheme)}, valid=${mapTheme ? validThemes.includes(mapTheme) : 'N/A'}`);
+        if (mapTheme && validThemes.includes(mapTheme)) {
+          try {
+            // Resolve sub-theme: if an array was sent, pick one at random
+            let resolvedSubTheme: string | undefined;
+            if (Array.isArray(mapSubTheme) && mapSubTheme.length > 0) {
+              resolvedSubTheme = mapSubTheme[Math.floor(Math.random() * mapSubTheme.length)];
+            } else if (typeof mapSubTheme === 'string' && mapSubTheme) {
+              resolvedSubTheme = mapSubTheme;
+            }
+            console.log(`🗺️ [MAP DEBUG] Calling generateAndApplyProceduralMap with theme="${mapTheme}", subTheme="${resolvedSubTheme}"`);
+            generateAndApplyProceduralMap(gameState, mapTheme as MapGeneratorTheme, undefined, undefined,
+              resolvedSubTheme ? { subTheme: resolvedSubTheme } : undefined);
+            console.log(`🗺️ Encounter: applied procedural ${mapTheme} map${resolvedSubTheme ? ` (sub: ${resolvedSubTheme})` : ''}`);
+            console.log(`🗺️ [MAP DEBUG] Map result: width=${gameState.map?.width}, height=${gameState.map?.height}, hasTiles=${!!gameState.map?.tiles}, tileRows=${gameState.map?.tiles?.length || 0}, overlays=${gameState.map?.overlays?.length || 0}, procedural=${gameState.map?.procedural}`);
+          } catch (mapErr) {
+            console.warn('⚠️ Procedural map generation failed, using default grid:', mapErr);
+          }
+        } else {
+          console.log(`🗺️ [MAP DEBUG] Skipping map generation — mapTheme="${mapTheme}" not valid or missing`);
+        }
       }
       if (aiModel && typeof aiModel === 'string' && aiModel.trim().length > 0) {
         if (!gameState.gmSession) {
@@ -151,25 +179,7 @@ export function createGameRoutes(ctx: AppContext): Router {
         hasHeroPointMessage: !!result.result?.details?.heroPointMessage,
       });
 
-      // GM Combat Narration: fire-and-forget
-      if (gameState.gmSession?.combatNarrationEnabled && gameState.log.length > 0) {
-        const latestEntry = gameState.log[gameState.log.length - 1];
-        if (latestEntry.type !== 'system') {
-          ctx.gmChatbot.narrateCombatEvent(latestEntry, gameState, gameState.gmSession)
-            .then(narrative => {
-              if (narrative) {
-                const narrationMsg: GMChatMessage = {
-                  id: `narration-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
-                  role: 'gm',
-                  content: narrative,
-                  timestamp: Date.now(),
-                };
-                gameState.gmSession!.chatHistory.push(narrationMsg);
-              }
-            })
-            .catch(err => console.warn('Combat narration failed (non-blocking):', err));
-        }
-      }
+      // Combat narration now handled by EventBus subscriber (narrationSubscriber.ts)
 
       const actor = gameState.creatures.find((c) => c.id === creatureId);
       if (actor) {
@@ -252,20 +262,20 @@ export function createGameRoutes(ctx: AppContext): Router {
       const gs = ctx.gameEngine.getGameState(gameId);
       const turnIdx = gs?.currentRound?.currentTurnIndex ?? -1;
       const turnCreatureId = gs?.currentRound?.turnOrder?.[turnIdx];
-      const turnCreature = gs?.creatures?.find((c: any) => c.id === turnCreatureId);
+      const turnCreature = gs?.creatures?.find((c: Creature) => c.id === turnCreatureId);
       console.log(`🤖 AI turn requested for game ${gameId}`);
       console.log(`🤖 Current turn: idx=${turnIdx}, creatureId=${turnCreatureId}, name=${turnCreature?.name}, type=${turnCreature?.type}, hp=${turnCreature?.currentHealth}/${turnCreature?.maxHealth}, pos=(${turnCreature?.positions?.x},${turnCreature?.positions?.y}), weapons=${turnCreature?.weaponInventory?.length ?? 0}`);
 
       const plannedActions = await ctx.aiManager.decideTurn(gameId, ctx.gameEngine);
-      console.log(`🤖 AI planned ${plannedActions.length} actions:`, plannedActions.map(a => `${a.action.actionId}(target=${a.action.targetId || 'none'}, pos=${a.action.targetPosition ? `${a.action.targetPosition.x},${a.action.targetPosition.y}` : 'none'}, weapon=${(a.action.details as any)?.weaponId || 'none'})`).join(' → '));
+      console.log(`🤖 AI planned ${plannedActions.length} actions:`, plannedActions.map(a => `${a.action.actionId}(target=${a.action.targetId || 'none'}, pos=${a.action.targetPosition ? `${a.action.targetPosition.x},${a.action.targetPosition.y}` : 'none'}, weapon=${(a.action.details as { weaponId?: string } | undefined)?.weaponId || 'none'})`).join(' → '));
 
       const executionResults: Array<{
         planned: unknown;
         result: { success: boolean; message: string } | Record<string, unknown>;
         reactionOpportunities: unknown[];
         stateSnapshot?: {
-          creatures: Array<{ id: string; name: string; positions: { x: number; y: number }; currentHealth: number; maxHealth: number; conditions: any[]; dead?: boolean }>;
-          log: any[];
+          creatures: Array<{ id: string; name: string; positions: { x: number; y: number }; currentHealth: number; maxHealth: number; conditions: Condition[]; dead?: boolean }>;
+          log: GameLogEntry[];
         };
       }> = [];
 
@@ -302,7 +312,7 @@ export function createGameRoutes(ctx: AppContext): Router {
 
           const midState = ctx.gameEngine.getGameState(gameId);
           const snapshot = midState ? {
-            creatures: midState.creatures.map((c: any) => ({
+            creatures: midState.creatures.map((c: Creature) => ({
               id: c.id, name: c.name,
               positions: { x: c.positions.x, y: c.positions.y },
               currentHealth: c.currentHealth, maxHealth: c.maxHealth,
@@ -359,27 +369,7 @@ export function createGameRoutes(ctx: AppContext): Router {
         console.warn('⚠️ Auto-startTurn after AI turn failed (non-blocking):', e);
       }
 
-      // GM Combat Narration for NPC actions: fire-and-forget
-      if (endedState?.gmSession?.combatNarrationEnabled && endedState.log?.length > 0) {
-        const recentEntries = endedState.log
-          .slice(-executionResults.length * 2)
-          .filter(e => e.type !== 'system');
-        if (recentEntries.length > 0) {
-          const combinedMessage = recentEntries.map(e => e.message).join(' | ');
-          const batchEntry: GameLog = { timestamp: Date.now(), type: 'action', message: combinedMessage };
-          ctx.gmChatbot.narrateCombatEvent(batchEntry, endedState, endedState.gmSession)
-            .then(narrative => {
-              if (narrative) {
-                const narrationMsg: GMChatMessage = {
-                  id: `narration-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
-                  role: 'gm', content: narrative, timestamp: Date.now(),
-                };
-                endedState.gmSession!.chatHistory.push(narrationMsg);
-              }
-            })
-            .catch(err => console.warn('NPC combat narration failed (non-blocking):', err));
-        }
-      }
+      // NPC combat narration now handled by EventBus subscriber (narrationSubscriber.ts)
 
       res.json({ plannedActions, executionResults, gameState: endedState, actionPoints });
     } catch (error) {
@@ -402,7 +392,7 @@ export function createGameRoutes(ctx: AppContext): Router {
     console.log(`   Creatures count: ${creatures?.length || 0}`);
 
     if (creatures && creatures.length > 0) {
-      creatures.forEach((c: any, idx: number) => {
+      creatures.forEach((c: Partial<Creature>, idx: number) => {
         console.log(`[Backend] Creature ${idx} received:`, {
           name: c.name, skills: c.skills, skillsCount: c.skills?.length,
           feats: c.feats, featsCount: c.feats?.length,
@@ -429,7 +419,7 @@ export function createGameRoutes(ctx: AppContext): Router {
       console.log(`   ✅ Found game: ${gameState.id}`);
       console.log(`🔍 Adding ${creatures.length} creatures to game ${gameId}`);
 
-      const newCreatures = creatures.map((creature: any) => ({
+      const newCreatures = creatures.map((creature: Partial<Creature>) => ({
         ...creature,
         id: creature.id || `creature-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
         positions: creature.positions || { x: 0, y: 0 },

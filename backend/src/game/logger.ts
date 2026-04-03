@@ -5,6 +5,6 @@
  */
 const DEBUG = process.env.DEBUG_COMBAT === 'true';
 
-export function debugLog(...args: any[]): void {
+export function debugLog(...args: unknown[]): void {
   if (DEBUG) console.log(...args);
 }

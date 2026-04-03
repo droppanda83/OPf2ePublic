@@ -5,7 +5,7 @@
  */
 
 import { EncounterMapTemplate, TerrainTile, MapFeature, Position } from './types';
-import { FOUNDRY_MAP_CATALOG } from './foundryEncounterMaps';
+import { FOUNDRY_MAP_CATALOG } from './foundryMapCatalog';
 
 // ─── Helper: Auto-generate tags from map metadata for GM AI selection ───
 
@@ -1119,7 +1119,7 @@ export function getMapById(id: string): EncounterMapTemplate | undefined {
 
 /** Get all available map themes */
 export function getMapThemes(): EncounterMapTemplate['theme'][] {
-  return ['dungeon', 'wilderness', 'urban', 'indoor', 'special'];
+  return [...new Set(ENCOUNTER_MAP_CATALOG.map(m => m.theme))];
 }
 
 /** Get maps that have a background image */

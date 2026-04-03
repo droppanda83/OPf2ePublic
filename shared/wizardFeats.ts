@@ -484,11 +484,11 @@ const RAW_WIZARD_CLASS_FEATS: FeatEntry[] = [
     category: 'class',
     level: 6,
     description:
-      "Your spell becomes volatile and explosive. If the next action you use is to Cast a Spell that deals damage to a single target and the spell successfully damages the target, it also deals splash damage equal to the spell's level to creatures within 5 feet of the target. This splash damage doesn't apply to the primary target. The splash damage type matches the spell's damage type.",
+      "Your spell becomes volatile and explosive. If the next action you use is to Cast a Spell that deals damage to a single target and the spell successfully damages the target, it also deals splash damage equal to the spell's rank to creatures within 5 feet of the target. This splash damage doesn't apply to the primary target. The splash damage type matches the spell's damage type.",
     implemented: 'full',
     traits: ['Uncommon', 'Cleric', 'Concentrate', 'Metamagic', 'Oracle', 'Sorcerer', 'Witch', 'Wizard'],
     actionCost: 1,
-    mechanics: 'Legacy (Knights of Lastwall). Metamagic. Single-target damage spell gains splash damage = spell level to adjacent creatures (not primary target).',
+    mechanics: 'Legacy (Knights of Lastwall). Metamagic. Single-target damage spell gains splash damage = spell rank to adjacent creatures (not primary target).',
   },
   {
     id: 'wizard-explosive-arrival',
@@ -577,7 +577,7 @@ const RAW_WIZARD_CLASS_FEATS: FeatEntry[] = [
     category: 'class',
     level: 8,
     description:
-      "You add a chaotic and unpredictable element to your spell. If the next action you use is to Cast a Spell that deals acid, cold, electricity, fire, or sonic damage, roll 1d6 to determine the spell's damage type and an additional effect: 1=Acid+Sickened 1, 2=Cold+Speed penalty, 3=Electricity+off-guard, 4=Fire+persistent fire damage equal to spell level, 5=Force+no extra, 6=Sonic+Deafened 2 rounds.",
+      "You add a chaotic and unpredictable element to your spell. If the next action you use is to Cast a Spell that deals acid, cold, electricity, fire, or sonic damage, roll 1d6 to determine the spell's damage type and an additional effect: 1=Acid+Sickened 1, 2=Cold+Speed penalty, 3=Electricity+off-guard, 4=Fire+persistent fire damage equal to spell rank, 5=Force+no extra, 6=Sonic+Deafened 2 rounds.",
     implemented: 'full',
     traits: ['Uncommon', 'Bard', 'Manipulate', 'Metamagic', 'Oracle', 'Sorcerer', 'Witch', 'Wizard'],
     actionCost: 1,

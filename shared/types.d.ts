@@ -809,6 +809,7 @@ export interface CampaignPreferences {
     aiModel?: string;
     mapTheme?: string;
     mapSubTheme?: string | string[];
+    foundryMapId?: string;
     mode?: 'campaign' | 'encounter';
     encounterBalance: 'easy' | 'moderate' | 'hard' | 'deadly';
     playerCount: number;
@@ -918,7 +919,7 @@ export interface GMSession {
     stashedMapId?: string;
 }
 /** Map theme values shared between EncounterMapTemplate and ProceduralMap */
-export type MapTheme = 'dungeon' | 'wilderness' | 'urban' | 'indoor' | 'special' | 'ship' | 'tower' | 'bridge' | 'caravan' | 'sewers' | 'castle' | 'mine';
+export type MapTheme = 'dungeon' | 'wilderness' | 'urban' | 'indoor' | 'special' | 'ship' | 'tower' | 'bridge' | 'caravan' | 'sewers' | 'castle' | 'mine' | 'cave';
 /** Encounter map template from the pre-made library */
 export interface EncounterMapTemplate {
     id: string;

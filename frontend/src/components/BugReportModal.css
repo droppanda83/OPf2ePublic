@@ -65,15 +65,15 @@
 
 /* ─── Modal ───────────────────────────────────────────── */
 .bug-report-modal {
-  background: #1a1f2e;
+  background: linear-gradient(135deg, var(--pf2e-bg-base) 0%, #0e0909 100%);
   border: 2px solid #e24a4a;
-  border-radius: 8px;
+  border-radius: var(--pf2e-radius-lg);
   width: 94%;
   max-width: 640px;
   max-height: 88vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--pf2e-shadow-lg);
   animation: bugSlideUp 0.25s ease;
 }
 

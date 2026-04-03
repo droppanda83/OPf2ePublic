@@ -14,8 +14,7 @@ export interface Weapon {
   damageFormula: string; // e.g., "1d6", "2d8+2"
   damageType: DamageType;
   type: 'melee' | 'ranged';
-  range?: number; // Range increment in squares (ranged weapons only, e.g., shortbow = 12 = 60ft)
-  reach?: number; // Melee reach in squares (default 1 = 5ft, reach weapons = 2 = 10ft)
+  range?: number; // Range in squares
   hands: number; // 1 or 2
   proficiencyCategory: 'unarmed' | 'simple' | 'martial' | 'advanced';
   rarity: 'common' | 'uncommon' | 'rare' | 'unique';

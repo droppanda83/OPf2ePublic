@@ -22,42 +22,42 @@
   gap: 12px;
   padding: 24px 48px;
   background: rgba(0, 0, 0, 0.75);
-  border: 2px solid rgba(255, 215, 0, 0.4);
+  border: 2px solid var(--pf2e-gold-glow);
   border-radius: 16px;
   backdrop-filter: blur(8px);
   animation: battle-anim-slam-in 0.4s cubic-bezier(0.22, 1.2, 0.36, 1);
 }
 
 .battle-anim__actor-name {
-  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-family: var(--pf2e-font-body);
   font-size: 1.6rem;
   font-weight: 800;
-  color: #FFD700;
+  color: var(--pf2e-gold);
   text-transform: uppercase;
   letter-spacing: 3px;
   text-shadow:
-    0 0 20px rgba(255, 215, 0, 0.5),
+    0 0 20px var(--pf2e-gold-glow),
     0 2px 8px rgba(0, 0, 0, 0.8);
   animation: battle-anim-glow-pulse 1.5s ease-in-out infinite;
 }
 
 .battle-anim__action-text {
-  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-family: var(--pf2e-font-body);
   font-size: 1.2rem;
   font-weight: 600;
-  color: #e0e0e0;
+  color: var(--pf2e-text-heading);
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
   text-align: center;
 }
 
 .battle-anim__arrow {
-  color: #FFD700;
+  color: var(--pf2e-gold);
   font-weight: 800;
   margin: 0 6px;
 }
 
 .battle-anim__target-name {
-  color: #FF6B6B;
+  color: var(--pf2e-enemy);
   font-weight: 700;
 }
 
@@ -76,7 +76,7 @@
 }
 
 .battle-anim__result-text {
-  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-family: var(--pf2e-font-body);
   font-size: 3rem;
   font-weight: 900;
   text-transform: uppercase;
@@ -97,10 +97,10 @@
 }
 
 .battle-anim__roll-total {
-  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-family: var(--pf2e-font-body);
   font-size: 1.1rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.72);
   letter-spacing: 2px;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
@@ -108,43 +108,43 @@
 /* ── Damage Result ── */
 
 .battle-anim__damage-number {
-  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-family: var(--pf2e-font-body);
   font-size: 4rem;
   font-weight: 900;
-  color: #FF6B6B;
+  color: var(--pf2e-enemy);
   text-shadow:
-    0 0 30px rgba(255, 60, 60, 0.6),
+    0 0 30px rgba(244, 67, 54, 0.6),
     0 4px 16px rgba(0, 0, 0, 0.8);
   animation: battle-anim-damage-slam 0.4s cubic-bezier(0.22, 1.2, 0.36, 1);
 }
 
 .battle-anim__damage-number--crit {
   font-size: 5rem;
-  color: #FFD700;
+  color: var(--pf2e-gold);
   text-shadow:
-    0 0 40px rgba(255, 215, 0, 0.7),
+    0 0 40px rgba(212, 175, 55, 0.7),
     0 0 80px rgba(255, 100, 0, 0.4),
     0 4px 16px rgba(0, 0, 0, 0.8);
   animation: battle-anim-crit-shake 0.6s ease-out, battle-anim-glow-pulse 0.6s ease-in-out infinite;
 }
 
 .battle-anim__damage-label {
-  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-family: var(--pf2e-font-body);
   font-size: 1.2rem;
   font-weight: 700;
-  color: #e0e0e0;
+  color: var(--pf2e-text-heading);
   text-transform: uppercase;
   letter-spacing: 2px;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
 }
 
 .battle-anim__crit-tag {
-  color: #FFD700;
+  color: var(--pf2e-gold);
   font-weight: 800;
 }
 
 .battle-anim__damage-target {
-  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-family: var(--pf2e-font-body);
   font-size: 1rem;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.6);
@@ -159,7 +159,7 @@
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.28);
   letter-spacing: 1px;
 }
 

@@ -16,7 +16,7 @@
 
 import { Bonus } from './bonuses';
 import { WORN_ITEMS, EquipmentEffect } from './wornItems';
-import { DamageResistance, DamageWeakness, ImmunityType } from './types';
+import { DamageResistance, DamageType, DamageWeakness, ImmunityType } from './types';
 
 // ─── Granted Strike Definition ───────────────────────
 
@@ -342,7 +342,7 @@ export function resolveEquipmentEffects(
 
         case 'resistance': {
           result.resistances.push({
-            type: eff.damageType as any,
+            type: eff.damageType as DamageType,
             value: eff.value,
             source: item.name,
           });
@@ -375,7 +375,7 @@ export function resolveEquipmentEffects(
 
         case 'weakness': {
           result.weaknesses.push({
-            type: eff.damageType as any,
+            type: eff.damageType as DamageType,
             value: eff.value,
           });
           break;
@@ -644,7 +644,7 @@ export function getEquipmentResistances(equippedItemIds: string[]): DamageResist
       const existing = resistMap.get(eff.damageType);
       if (!existing || eff.value > existing.value) {
         resistMap.set(eff.damageType, {
-          type: eff.damageType as any,
+          type: eff.damageType as DamageType,
           value: eff.value,
           source: item.name,
         });
@@ -780,7 +780,7 @@ export function getEquipmentWeaknesses(equippedItemIds: string[]): DamageWeaknes
     for (const eff of item.effects) {
       if (eff.type === 'weakness') {
         weaknesses.push({
-          type: eff.damageType as any,
+          type: eff.damageType as DamageType,
           value: eff.value,
         });
       }

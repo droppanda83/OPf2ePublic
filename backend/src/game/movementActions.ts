@@ -1,4 +1,4 @@
-import { Creature, GameState, Position, computePathCost, findExplorationPath } from 'pf2e-shared';
+import { Creature, GameState, Position, ActionResult, computePathCost, findExplorationPath } from 'pf2e-shared';
 import { getEffectiveSpeed } from './helpers';
 
 export interface MovementContext {
@@ -13,7 +13,7 @@ export function resolveMovementAction(
   gameState: GameState,
   targetPosition?: Position,
   actionId?: string
-): any {
+): ActionResult {
   if (!targetPosition) {
     return { success: false, message: 'No destination specified' };
   }
@@ -121,8 +121,9 @@ export function resolveMovementAction(
 
   // Compute the full path for step-by-step animation
   let path: Position[] | null = null;
-  const tiles = (gameState.map as any)?.tiles as string[][] | undefined;
-  const moveCostOverride = (gameState.map as any)?.moveCostOverride as (number | null)[][] | undefined;
+  const mapWithExtras = gameState.map as typeof gameState.map & { tiles?: string[][]; moveCostOverride?: (number | null)[][] };
+  const tiles = mapWithExtras?.tiles;
+  const moveCostOverride = mapWithExtras?.moveCostOverride;
   path = findExplorationPath(oldPos, targetPosition, {
     mapWidth,
     mapHeight,
@@ -154,7 +155,7 @@ export function resolveStepAction(
   actor: Creature,
   gameState: GameState,
   targetPosition?: Position
-): any {
+): ActionResult {
   if (!targetPosition) {
     return { success: false, message: 'No destination specified for Step action' };
   }
@@ -223,7 +224,7 @@ export function resolveStepAction(
   };
 }
 
-export function resolveStandAction(actor: Creature): any {
+export function resolveStandAction(actor: Creature): ActionResult {
   const proneCondition = actor.conditions?.find((c) => c.name === 'prone');
   if (!proneCondition) {
     return {
@@ -245,8 +246,8 @@ export function resolveCrawlAction(
   actor: Creature,
   gameState: GameState,
   targetPosition?: Position
-): any {
-  const isProne = (actor.conditions ?? []).some((c: any) => c.name === 'prone');
+): ActionResult {
+  const isProne = (actor.conditions ?? []).some((c) => c.name === 'prone');
   if (!isProne) {
     return { success: false, message: 'You must be prone to Crawl. You can just Stride instead.' };
   }

@@ -1,4 +1,4 @@
-import { Creature, CreatureWeapon, GameState, Position } from 'pf2e-shared';
+import { Creature, CreatureWeapon, GameState, Position, ActionResult } from 'pf2e-shared';
 
 export interface WeaponActionContext {
   calculateDistance: (from: Position, to: Position) => number;
@@ -29,7 +29,7 @@ export function resolveSelectedWeapon(actor: Creature, weaponId?: string): Creat
  * Draw a weapon (Interact action, 1 action). Move weapon from stowed -> held.
  * Must have free hands to hold it.
  */
-export function resolveDrawWeapon(actor: Creature, weaponId?: string): any {
+export function resolveDrawWeapon(actor: Creature, weaponId?: string): ActionResult {
   if (!actor.weaponInventory || !weaponId) {
     return { success: false, message: 'No weapon to draw.' };
   }
@@ -56,7 +56,7 @@ export function resolveDrawWeapon(actor: Creature, weaponId?: string): any {
 /**
  * Stow a weapon (Interact action, 1 action). Move weapon from held -> stowed.
  */
-export function resolveStowWeapon(actor: Creature, weaponId?: string): any {
+export function resolveStowWeapon(actor: Creature, weaponId?: string): ActionResult {
   if (!actor.weaponInventory || !weaponId) {
     return { success: false, message: 'No weapon to stow.' };
   }
@@ -74,7 +74,7 @@ export function resolveStowWeapon(actor: Creature, weaponId?: string): any {
 /**
  * Drop a weapon (free action). Move weapon from held -> dropped.
  */
-export function resolveDropWeapon(actor: Creature, gameState: GameState, weaponId?: string): any {
+export function resolveDropWeapon(actor: Creature, gameState: GameState, weaponId?: string): ActionResult {
   if (!actor.weaponInventory || !weaponId) {
     return { success: false, message: 'No weapon to drop.' };
   }
@@ -108,7 +108,7 @@ export function resolvePickUpWeapon(
   gameState: GameState,
   groundObjectId?: string,
   pickupDestination?: string
-): any {
+): ActionResult {
   if (!groundObjectId || !gameState.groundObjects || !actor.weaponInventory) {
     return { success: false, message: 'Cannot pick up weapon.' };
   }

@@ -8,14 +8,14 @@
   padding: 10px 14px;
   font-size: 14px;
   background: rgba(20, 20, 35, 0.9);
-  color: #d4af37;
+  color: var(--pf2e-gold);
   border: 1px dashed #4a4a6a;
-  border-radius: 6px;
+  border-radius: var(--pf2e-radius-md);
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color var(--pf2e-transition-base), background var(--pf2e-transition-base);
 }
 .eq-picker-trigger:hover {
-  border-color: #d4af37;
+  border-color: var(--pf2e-gold);
   background: rgba(40, 35, 50, 0.95);
 }
 
@@ -45,7 +45,7 @@
 .eq-picker-header h3 {
   margin: 0;
   font-size: 14px;
-  color: #d4af37;
+  color: var(--pf2e-gold);
   font-weight: 600;
 }
 .eq-picker-close {
@@ -78,7 +78,7 @@
   outline: none;
 }
 .eq-picker-search:focus {
-  border-color: #d4af37;
+  border-color: var(--pf2e-gold);
 }
 .eq-picker-sort {
   flex: 0 0 auto;

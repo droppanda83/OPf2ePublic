@@ -14,13 +14,13 @@
   gap: 8px;
   padding: 7px 14px;
   background: rgba(20, 12, 10, 0.92);
-  border: 1px solid rgba(160, 120, 80, 0.3);
+  border: 1px solid var(--pf2e-warm-border);
   border-radius: 24px;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--pf2e-shadow-md);
   backdrop-filter: blur(8px);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  transition: border-color var(--pf2e-transition-base), box-shadow var(--pf2e-transition-base);
+  font-family: var(--pf2e-font-body);
   max-width: 260px;
 }
 
@@ -81,14 +81,14 @@
   width: 340px;
   max-height: calc(100vh - 80px);
   background: rgba(18, 10, 8, 0.97);
-  border: 1px solid rgba(160, 120, 80, 0.3);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--pf2e-warm-border);
+  border-radius: var(--pf2e-radius-xl);
+  box-shadow: var(--pf2e-shadow-lg);
   backdrop-filter: blur(12px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--pf2e-font-body);
 }
 
 /* ─── Panel Header ────────────────────────────────────── */
@@ -104,8 +104,8 @@
 .mp-header-title {
   font-size: 0.95em;
   font-weight: 700;
-  color: #ead8be;
-  font-family: 'Cinzel', 'Times New Roman', serif;
+  color: var(--pf2e-text-heading);
+  font-family: var(--pf2e-font-display);
 }
 
 .mp-close {

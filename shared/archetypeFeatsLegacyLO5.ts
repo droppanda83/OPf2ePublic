@@ -32,7 +32,7 @@ export const HALCYON_SPEAKER_FEATS: FeatEntry[] = [
     traits: ['Archetype', 'Metamagic'],
     actionCost: 1,
     prerequisites: ['Halcyon Speaker Dedication'],
-    mechanics: 'Metamagic. Next Cast a Spell: arcane → Recall Knowledge +1 status (+2 if 7th+); primal → temp HP = spell level for 1 rd; halcyon → both.',
+    mechanics: 'Metamagic. Next Cast a Spell: arcane → Recall Knowledge +1 status (+2 if 7th+); primal → temp HP = spell rank for 1 rd; halcyon → both.',
   },
   {
     id: 'persistent-creation',
@@ -149,7 +149,7 @@ export const HALCYON_SPEAKER_FEATS: FeatEntry[] = [
     traits: ['Archetype'],
     actionCost: 'passive',
     prerequisites: ['Dualistic Synergy'],
-    mechanics: 'On Dualistic Synergy: choose acid/cold/electricity/fire. 1 foe within 30 ft takes spell-level damage of that type.',
+    mechanics: 'On Dualistic Synergy: choose acid/cold/electricity/fire. 1 foe within 30 ft takes spell-rank damage of that type.',
     subChoices: { label: 'Choose damage type', options: [
       { id: 'acid', name: 'Acid' },
       { id: 'cold', name: 'Cold' },
@@ -258,7 +258,7 @@ export const CRYSTAL_KEEPER_FEATS: FeatEntry[] = [
     source: 'Crystal Keeper (Archetype)',
     category: 'archetype',
     level: 6,
-    description: 'As long as you meditate before a gemstone worth at least 10 gp as part of your daily preparations, you are capable of seeing magic as flowing runes that reveal information about magic objects, and you can scribe a personal rune that represents you. You gain the read aura and sigil cantrips. You cast these cantrips as arcane innate spells at will. A cantrip is heightened to a spell level equal to half your level rounded up.',
+    description: 'As long as you meditate before a gemstone worth at least 10 gp as part of your daily preparations, you are capable of seeing magic as flowing runes that reveal information about magic objects, and you can scribe a personal rune that represents you. You gain the read aura and sigil cantrips. You cast these cantrips as arcane innate spells at will. A cantrip is heightened to a spell rank equal to half your level rounded up.',
     implemented: 'full',
     traits: ['Archetype'],
     actionCost: 'passive',

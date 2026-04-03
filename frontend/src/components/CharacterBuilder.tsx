@@ -22,7 +22,7 @@ import { EquipmentPicker, type PickerItem } from './EquipmentPicker';
 import {
   type CharacterBuilderProps, type BuilderState,
   HERITAGES, VERSATILE_HERITAGES, VERSATILE_HERITAGE_DESCRIPTIONS,
-  ANCESTRY_BOOSTS, ANCESTRIES, BACKGROUND_BOOSTS, BACKGROUNDS, getEffectiveSenses,
+  ANCESTRY_BOOSTS, ANCESTRIES, BACKGROUND_BOOSTS, BACKGROUNDS, BACKGROUND_DETAILS, getEffectiveSenses,
   SKILLS, SKILL_ABILITIES, BACKGROUND_SKILLS, CLASS_SKILLS,
   getClassProgression, CLASS_BOOSTS, getClassBoostOptions,
   BASE_PROFICIENCIES, CLASS_STARTING_PROFICIENCIES, CLASSES, SUPPORTED_CLASSES,
@@ -37,7 +37,7 @@ import {
   CHAMPION_CAUSES,
   RANGER_HUNTERS_EDGES,
   CLERIC_DOCTRINES,
-  CLASS_SPELLCASTING, isSpellcastingClass, validateAncestryCoverage,
+  CLASS_SPELLCASTING, isSpellcastingClass, validateAncestryCoverage, validateBackgroundCoverage,
 } from './characterBuilderData';
 import {
   computeAbilityScores, computeSkillProficiencies,
@@ -134,6 +134,7 @@ export const CharacterBuilder: React.FC<CharacterBuilderProps> = ({ onCharacterC
   );
 
   const ancestryCoverageIssues = validateAncestryCoverage();
+  const backgroundCoverageIssues = validateBackgroundCoverage();
 
   // ── Sync goldBudget with level when using default (instead of setState during render) ──
   useEffect(() => {
@@ -401,6 +402,15 @@ export const CharacterBuilder: React.FC<CharacterBuilderProps> = ({ onCharacterC
     if (character.ancestryBonusGeneralFeat) {
       pushFeat(character.ancestryBonusGeneralFeat, 'general', 1);
     }
+    const backgroundDetails = BACKGROUND_DETAILS[character.background];
+    if (backgroundDetails?.featId) {
+      const backgroundFeat = getFeatById(backgroundDetails.featId);
+      selectedFeats.push({
+        name: backgroundFeat?.name ?? backgroundDetails.featName,
+        level: backgroundFeat?.level ?? 1,
+        type: 'skill',
+      });
+    }
     // Free Archetype feats (text input until catalog is populated)
     if (character.optionalRules.freeArchetype) {
       Object.entries(character.archetypeFeats).forEach(([level, featName]) => {
@@ -439,8 +449,15 @@ export const CharacterBuilder: React.FC<CharacterBuilderProps> = ({ onCharacterC
       ancestry: character.ancestry,
       heritage: character.heritage,
       background: character.background,
+      backgroundDetails: {
+        description: BACKGROUND_DETAILS[character.background]?.description,
+        lore: BACKGROUND_SKILLS[character.background]?.lore,
+        trainedSkillOptions: BACKGROUND_SKILLS[character.background]?.skills,
+        featId: BACKGROUND_DETAILS[character.background]?.featId,
+        featName: BACKGROUND_DETAILS[character.background]?.featName,
+      },
       class: character.class,
-      abilities: finalScores as any,
+      abilities: finalScores,
       proficiencies,
       skills: skillsArray,
       feats: selectedFeats,
@@ -579,9 +596,9 @@ export const CharacterBuilder: React.FC<CharacterBuilderProps> = ({ onCharacterC
       if (sheet) {
         onCharacterCreated(sheet);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Character creation failed:', error);
-      setValidationErrors([`Creation error: ${error?.message || String(error)}`]);
+      setValidationErrors([`Creation error: ${error instanceof Error ? error.message : String(error)}`]);
     }
   };
 
@@ -1847,6 +1864,15 @@ export const CharacterBuilder: React.FC<CharacterBuilderProps> = ({ onCharacterC
   const renderBackgroundStep = () => (
     <div className="step-content">
       <h2>Choose Your Background</h2>
+
+      {backgroundCoverageIssues.length > 0 && (
+        <div style={{ marginBottom: '12px', padding: '10px 12px', borderRadius: '6px', backgroundColor: 'rgba(231, 76, 60, 0.15)', border: '1px solid rgba(231, 76, 60, 0.5)', color: '#ffb3aa', fontSize: '13px' }}>
+          <strong>Background data check found issues:</strong>
+          <ul style={{ margin: '8px 0 0 18px', padding: 0 }}>
+            {backgroundCoverageIssues.map(issue => <li key={issue}>{issue}</li>)}
+          </ul>
+        </div>
+      )}
       
       <div className="form-group">
         <label>Background</label>
@@ -1864,9 +1890,28 @@ export const CharacterBuilder: React.FC<CharacterBuilderProps> = ({ onCharacterC
         </select>
       </div>
 
+      <div style={{ marginTop: '12px', marginBottom: '16px', padding: '12px 16px', backgroundColor: 'rgba(100, 80, 120, 0.15)', borderRadius: '6px', border: '1px solid #6b5a8a', display: 'flex', gap: '20px', flexWrap: 'wrap', fontSize: '14px', color: '#ccc' }}>
+        <div>
+          <strong style={{ color: '#d4af37' }}>Skill Training:</strong>{' '}
+          {(BACKGROUND_SKILLS[character.background]?.skills || []).join(' or ')}
+        </div>
+        <div>
+          <strong style={{ color: '#d4af37' }}>Lore:</strong>{' '}
+          {BACKGROUND_SKILLS[character.background]?.lore || 'Lore'}
+        </div>
+        <div>
+          <strong style={{ color: '#d4af37' }}>Granted Feat:</strong>{' '}
+          {BACKGROUND_DETAILS[character.background]?.featName || 'Additional Lore'}
+        </div>
+      </div>
+
+      <div className="flavor-text" style={{ marginTop: '10px', fontStyle: 'italic', borderLeft: '4px solid #6b5a8a', paddingLeft: '10px' }}>
+        {BACKGROUND_DETAILS[character.background]?.description}
+      </div>
+
       <p className="flavor-text">
         Your background represents your life before becoming an adventurer.
-        It grants you training in skills and provides narrative flavor.
+        It grants you a trained skill, a Lore skill, and a background feat that now propagates into your built sheet.
       </p>
     </div>
   );
@@ -2651,9 +2696,9 @@ export const CharacterBuilder: React.FC<CharacterBuilderProps> = ({ onCharacterC
               } else {
                 setValidationErrors(['Export failed — please ensure your character name and class are set.']);
               }
-            } catch (error: any) {
+            } catch (error: unknown) {
               console.error('Export failed:', error);
-              setValidationErrors([`Export error: ${error?.message || String(error)}`]);
+              setValidationErrors([`Export error: ${error instanceof Error ? error.message : String(error)}`]);
             }
           }}
           style={{ fontSize: '13px' }}

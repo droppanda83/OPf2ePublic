@@ -13,7 +13,7 @@
     radial-gradient(1000px 520px at 96% 4%, rgba(76, 45, 18, 0.30) 0%, transparent 44%),
     radial-gradient(1200px 750px at 50% 120%, rgba(84, 18, 18, 0.34) 0%, transparent 58%),
     #070505;
-  font-family: 'Cinzel', 'Segoe UI', 'Times New Roman', serif;
+  font-family: var(--pf2e-font-display);
   color: #ece7da;
   padding: 20px;
   overflow: hidden;
@@ -25,10 +25,10 @@
   height: 100%;
   max-height: 100%;
   background: linear-gradient(180deg, rgba(25, 14, 14, 0.97) 0%, rgba(14, 9, 9, 0.97) 100%);
-  border: 1px solid rgba(160, 120, 80, 0.25);
+  border: 1px solid var(--pf2e-warm-border-strong);
   border-radius: 16px;
   padding: 30px;
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--pf2e-shadow-xl);
   display: flex;
   flex-direction: column;
 }
@@ -41,9 +41,9 @@
   text-align: center;
   font-size: 2em;
   margin: 0 0 8px 0;
-  color: #ead8be;
+  color: var(--pf2e-text-heading);
   text-shadow: 0 2px 12px rgba(200, 150, 80, 0.3);
-  font-family: 'Cinzel', 'Times New Roman', serif;
+  font-family: var(--pf2e-font-display);
   letter-spacing: 0.8px;
 }
 
@@ -118,7 +118,7 @@
 .menu-btn-label {
   font-size: 1.15em;
   font-weight: 700;
-  color: #ead8be;
+  color: var(--pf2e-text-heading);
   display: block;
 }
 

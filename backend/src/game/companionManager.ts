@@ -25,6 +25,7 @@ import {
   createDefaultAbilities,
   createDefaultProficiencies,
 } from 'pf2e-shared';
+import { getTokenArtUrl } from '../services/tokenArtService';
 import { debugLog } from './logger';
 
 // ─── ID Generation ──────────────────────────────────────
@@ -147,7 +148,7 @@ export function spawnCompanion(
     damageWeaknesses: [],
     specials: ['minion'],
     feats: [],
-    tokenImageUrl: undefined,
+    tokenImageUrl: getTokenArtUrl(template.name, ['animal', 'beast']),
 
     // CompanionCreature fields
     companionType: 'animal-companion',

@@ -66,7 +66,7 @@ export const BuilderStepLevel1: React.FC<BuilderStepLevel1Props> = ({ character,
   // NOW add classAutoSkillChoice so additional pick dropdowns exclude it
   if (character.classAutoSkillChoice) alreadyTrained.add(character.classAutoSkillChoice);
 
-  // Available skills for additional picks: any core skill not already trained
+  // Available skills for additional picks: each core skill not already trained
   const availableForPick = coreSkills.filter(s => !alreadyTrained.has(s));
   const pickFallback = availableForPick.length === 0;
   const pickOptions = pickFallback ? coreSkills : availableForPick;
@@ -301,7 +301,7 @@ export const BuilderStepLevel1: React.FC<BuilderStepLevel1Props> = ({ character,
             getSelectableAncestryFeats(character.ancestry, Math.floor(slotLevel), character.heritageType === 'versatile' ? character.heritage : undefined),
             selectedAncestryFeatIds,
             (id) => {
-              const updates: any = { ...character, ancestryFeats: { ...character.ancestryFeats, [slotLevel]: id } };
+              const updates = { ...character, ancestryFeats: { ...character.ancestryFeats, [slotLevel]: id } };
               // Clear bonus feat selections if the granting feat is deselected
               if (character.ancestryFeats[slotLevel] === 'natural-ambition' && id !== 'natural-ambition') {
                 updates.ancestryBonusClassFeat = '';

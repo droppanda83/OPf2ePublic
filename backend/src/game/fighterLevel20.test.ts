@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameEngine } from './engine';
+import type { Creature } from 'pf2e-shared';
 
-function makeFighter(name: string, withSupremacy: boolean): any {
+function makeFighter(name: string, withSupremacy: boolean): Creature {
   return {
     name,
     type: 'player' as const,
@@ -41,10 +42,10 @@ function makeFighter(name: string, withSupremacy: boolean): any {
     feats: withSupremacy
       ? ['Weapon Supremacy', 'Boundless Reprisals', 'Ultimate Flexibility']
       : ['Boundless Reprisals', 'Ultimate Flexibility'],
-  };
+  } as Creature;
 }
 
-function makeTarget(): any {
+function makeTarget(): Creature {
   return {
     name: 'AC Dummy',
     type: 'creature' as const,
@@ -79,7 +80,7 @@ function makeTarget(): any {
       spellAttack: 'untrained',
       spellDC: 'untrained',
     },
-  };
+  } as Creature;
 }
 
 function runStrike(withSupremacy: boolean) {
@@ -97,7 +98,10 @@ function runStrike(withSupremacy: boolean) {
   assert.ok(target, 'target dummy should exist');
 
   const out = engine.executeAction(game.id, fighter.id, 'strike', target.id, undefined, fighter.equippedWeapon);
-  const details: any = out?.result?.details;
+  const details = out?.result?.details as {
+    bonus?: number;
+    damage?: { weaponSpecializationBonus?: number; abilityMod?: number };
+  } | undefined;
 
   assert.ok(details, 'attack should include roll details');
   assert.equal(typeof details.bonus, 'number', 'attack bonus should be numeric');

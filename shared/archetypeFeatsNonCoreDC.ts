@@ -968,7 +968,7 @@ export const RUNELORD_FEATS: FeatEntry[] = [
     traits: ['Archetype'],
     prerequisites: ['Runelord Dedication'],
     description:
-      'During your daily preparations, you can indulge in your associated sin or meditate on its values (and risks). When you do, you gain one additional spell slot of any spell level up to two levels below the highest-level wizard spell you can cast. You can prepare only one of your curriculum spells in this slot.',
+      'During your daily preparations, you can indulge in your associated sin or meditate on its values (and risks). When you do, you gain one additional spell slot of any spell rank up to two ranks below the highest-rank wizard spell you can cast. You can prepare only one of your curriculum spells in this slot.',
     implemented: 'full' as const,
     actionCost: 'passive' as const,
     mechanics:

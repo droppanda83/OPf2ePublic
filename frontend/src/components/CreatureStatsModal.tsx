@@ -1,5 +1,6 @@
 import React from 'react';
 import { Creature } from '../../../shared/types';
+import type { AbilityName } from '../../../shared/bonuses';
 import { calculateAC, calculateAttackBonus } from '../../../shared/ac';
 import { WEAPON_CATALOG } from '../../../shared/weapons';
 
@@ -20,7 +21,8 @@ export const CreatureStatsModal: React.FC<CreatureStatsModalProps> = ({ creature
   const weapon = creature.equippedWeapon ? WEAPON_CATALOG[creature.equippedWeapon] : null;
   const weaponName = weapon?.name || 'Unarmed Strike';
   const weaponDamage = weapon?.damageFormula || '1d4';
-  const strMod = (creature.abilities as any)?.strength ?? 0;
+  const strMod = creature.abilities?.strength ?? 0;
+  const abilityKeys: AbilityName[] = ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'];
   
   // Calculate actual attack bonus
   const attackBonus = calculateAttackBonus(creature);
@@ -166,7 +168,7 @@ export const CreatureStatsModal: React.FC<CreatureStatsModalProps> = ({ creature
               gap: '10px',
             }}
           >
-            {['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'].map((ability) => (
+            {abilityKeys.map((ability) => (
               <div
                 key={ability}
                 style={{
@@ -179,8 +181,8 @@ export const CreatureStatsModal: React.FC<CreatureStatsModalProps> = ({ creature
               >
                 <div style={{ fontSize: '11px', color: '#888', marginBottom: '2px' }}>{ability.substring(0, 3).toUpperCase()}</div>
                 <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#00d4aa' }}>
-                  {(creature.abilities as any)?.[ability] ?? 0 >= 0 ? '+' : ''}
-                  {(creature.abilities as any)?.[ability] ?? 0}
+                  {(creature.abilities?.[ability] ?? 0) >= 0 ? '+' : ''}
+                  {creature.abilities?.[ability] ?? 0}
                 </div>
               </div>
             ))}

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useDiceRoller, type DieType, type DieResult } from './DiceRollerContext';
+import { DICE_THEMES, getStoredTheme, setStoredTheme, type DiceTheme } from './DiceRoller3D';
 import './DiceQuickRoll.css';
 
 const DIE_OPTIONS: { type: DieType; label: string; max: number; color: string }[] = [
@@ -16,6 +17,7 @@ const DiceQuickRoll: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [selectedDie, setSelectedDie] = useState<DieType>('d20');
   const [count, setCount] = useState(1);
+  const [theme, setTheme] = useState<DiceTheme>(getStoredTheme);
   const popupRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click
@@ -112,6 +114,28 @@ const DiceQuickRoll: React.FC = () => {
                 disabled={count >= 10}
                 onClick={() => setCount(c => Math.min(10, c + 1))}
               >+</button>
+            </div>
+          </div>
+
+          {/* Theme selector */}
+          <div className="dqr-theme-row">
+            <label className="dqr-count-label">Dice Theme</label>
+            <div className="dqr-theme-options">
+              {(Object.entries(DICE_THEMES) as [DiceTheme, typeof DICE_THEMES[DiceTheme]][]).map(([key, cfg]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`dqr-theme-btn ${theme === key ? 'selected' : ''}`}
+                  style={{
+                    background: cfg.bgColors.d20,
+                    color: cfg.numberColor,
+                  }}
+                  onClick={() => { setTheme(key); setStoredTheme(key); }}
+                  title={cfg.label}
+                >
+                  {cfg.label.split(' ')[0]}
+                </button>
+              ))}
             </div>
           </div>
 

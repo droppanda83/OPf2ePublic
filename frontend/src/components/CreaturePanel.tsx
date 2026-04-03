@@ -31,10 +31,10 @@ const CreaturePanel: React.FC<CreaturePanelProps> = ({ creatures, currentRound, 
               transition: 'background-color 0.2s',
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as any).style.backgroundColor = creature.id === currentCreatureId ? '#1a2a3a' : '#222a3a';
+              e.currentTarget.style.backgroundColor = creature.id === currentCreatureId ? '#1a2a3a' : '#222a3a';
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as any).style.backgroundColor = creature.id === currentCreatureId ? '#1a2a3a' : '#1a1f2a';
+              e.currentTarget.style.backgroundColor = creature.id === currentCreatureId ? '#1a2a3a' : '#1a1f2a';
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

@@ -123,86 +123,25 @@ for (const [key, val] of Object.entries(TILE_PALETTE)) {
   PALETTE_TO_TYPE.set(val, key as TileType);
 }
 
-// ─── LPC Atlas Texture System ───────────────────────────────
-//
-// Uses the Liberated Pixel Cup (LPC) spritesheet atlases for terrain
-// rendering.  Each atlas is a 1024×1024 PNG containing 32×32 px tiles
-// in a 32-column × 32-row grid.
-//
-// Tile coordinates below were identified by colour-sampling the
-// atlases.  Objects keep their procedural look; only terrain surfaces
-// use atlas tiles so the two styles blend nicely.
+// ─── Atlas Texture System (disabled — using Foundry VTT maps) ───
+// Atlas loading and texture rendering has been removed.
+// All atlas-dependent draw functions gracefully fall back to programmatic rendering.
 
-const ATLAS_TILE_PX = 32; // source tile size in the atlas image
-
-/** Cached atlas HTMLImageElements (loaded lazily on first render). */
+const ATLAS_TILE_PX = 32;
 let terrainAtlas: HTMLImageElement | null = null;
 let baseOutAtlas: HTMLImageElement | null = null;
-let atlasLoadStarted = false;
-let atlasReady = false;
-
-/** Kick off atlas loading (idempotent).  Returns `true` once both are decoded. */
-function ensureAtlasLoaded(): boolean {
-  if (atlasReady) return true;
-  if (atlasLoadStarted) {
-    atlasReady = !!(terrainAtlas?.complete && baseOutAtlas?.complete);
-    return atlasReady;
-  }
-  atlasLoadStarted = true;
-
-  terrainAtlas = new Image();
-  terrainAtlas.src = '/textures/terrain_atlas.png';
-
-  baseOutAtlas = new Image();
-  baseOutAtlas.src = '/textures/base_out_atlas.png';
-
-  return false;
-}
-
-/** Returns a Promise that resolves once both atlas sheets are loaded. */
-export function preloadAtlas(): Promise<void> {
-  ensureAtlasLoaded();
-  return new Promise<void>((resolve) => {
-    const check = () => {
-      if (terrainAtlas?.complete && baseOutAtlas?.complete) {
-        atlasReady = true;
-        resolve();
-      } else {
-        requestAnimationFrame(check);
-      }
-    };
-    check();
-  });
-}
 
 // ─── Extra Atlas Loading (for overlay stamps from other atlas sheets) ───
 
-/** Map of atlas name → image URL for non-core atlases. */
-const EXTRA_ATLAS_URLS: Record<string, string> = {
-  'lpc_exterior':    '/textures/lpc_exterior_tiles.png',
-  'lpc_outside_obj': '/textures/lpc_outside_objects.png',
-  'lpc_terrain_out': '/textures/lpc_terrain_outside.png',
-  'house_inside':    '/textures/house_inside.png',
-  'lpc_interior':    '/textures/lpc_interior.png',
-  'lpc_interior2':   '/textures/lpc_interior_2.png',
-  'lpc_effects':     '/textures/lpc_effects.png',
-  'lpc_items':       '/textures/lpc_items.png',
-  'lpc_greek':       '/textures/lpc_greek_architecture.png',
-  'dungeon_floors':  '/textures/dungeon_walls_floors.png',
-};
+/** Map of atlas name → image URL for non-core atlases (disabled). */
+const EXTRA_ATLAS_URLS: Record<string, string> = {};
 
 /** Cache for lazily-loaded extra atlas images. */
 const extraAtlasCache: Record<string, HTMLImageElement> = {};
 
-/** Get (or lazy-load) an extra atlas image by name. Returns null if name unknown. */
-function getExtraAtlas(name: string): HTMLImageElement | null {
-  if (extraAtlasCache[name]) return extraAtlasCache[name];
-  const url = EXTRA_ATLAS_URLS[name];
-  if (!url) return null;
-  const img = new Image();
-  img.src = url;
-  extraAtlasCache[name] = img;
-  return img;
+/** Get (or lazy-load) an extra atlas image by name. Returns null (atlas disabled). */
+function getExtraAtlas(_name: string): HTMLImageElement | null {
+  return null;
 }
 
 type AtlasRef = {
@@ -1568,9 +1507,6 @@ export function renderTileMap(
   tiles: TileType[][],
   options: Partial<TileRendererOptions> = {},
 ): void {
-  // Kick off atlas loading (idempotent — fast no-op after first call)
-  ensureAtlasLoaded();
-
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const { cellSize, seed } = opts;
   const height = tiles.length;

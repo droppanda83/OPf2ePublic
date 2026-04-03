@@ -1,16 +1,16 @@
 import React from 'react';
 import './BattleGrid.css';
-import { renderTileMap, preloadAtlas, renderTreeOverhangs } from '../rendering/TileRenderer';
+import { renderTileMap, renderTreeOverhangs } from '../rendering/TileRenderer';
 import type { TileType } from '../../../shared/mapGenerator';
 import { calculatePartyLineOfSight, getVisionRange } from '../../../shared/mapGenerator';
 import type { LightingLevel } from '../../../shared/mapGenerator';
-import type { GameState, Creature, GroundObject } from '../../../shared/types';
+import type { Action, GameState, Creature, Position } from '../../../shared/types';
 
 interface BattleGridProps {
   gameState: GameState;
   creatures?: Creature[];
   selectedTarget: string | null;
-  selectedAction: any | null;
+  selectedAction: (Action & { range?: number; aoe?: unknown; aoeRadius?: number }) | null;
   movementInfo: {
     costMap: Map<string, number>;
     maxDistance: number;
@@ -33,12 +33,6 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = React.useRef<HTMLCanvasElement>(null);
   const revealedCellsRef = React.useRef<Set<string>>(new Set());
-  const [atlasLoaded, setAtlasLoaded] = React.useState(false);
-
-  // Preload LPC atlas textures and re-render canvas once ready
-  React.useEffect(() => {
-    preloadAtlas().then(() => setAtlasLoaded(true));
-  }, []);
 
   // Debug logging for AoE spell selection and targeting
   React.useEffect(() => {
@@ -163,7 +157,7 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
       if (!obj?.position) continue;
       const key = `${obj.position.x},${obj.position.y}`;
       const names = map.get(key) || [];
-      names.push(obj?.weapon?.display || (obj?.weapon as any)?.name || 'Ground Object');
+      names.push(obj?.weapon?.display || 'Ground Object');
       map.set(key, names);
     }
     return map;
@@ -184,6 +178,7 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.imageSmoothingEnabled = true;
 
+    const mapWithElevation = gameState.map as typeof gameState.map & { elevation?: number[][] };
     renderTileMap(ctx, tiles!, {
       cellSize,
       showGrid: true,
@@ -194,19 +189,19 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
       // Adjust ambient light based on map lighting level:
       // bright → well-lit (0.85), dim → moderate (0.38), dark → very low (0.12)
       ambientLight: lightingLevel === 'bright' ? 0.85 : lightingLevel === 'dark' ? 0.12 : 0.38,
-      elevation: (gameState.map as any)?.elevation,
-      showElevation: !!(gameState.map as any)?.elevation,
+      elevation: mapWithElevation.elevation,
+      showElevation: !!mapWithElevation.elevation,
       showCoverQuality: true,
       fogOfWar: !!visibleCells,
       visibleCells: visibleCells ?? undefined,
       revealedCells: revealedCells.size > 0 ? revealedCells : undefined,
       overlays: overlays,
     });
-  }, [hasTiles, tiles, overlays, gridWidthPx, gridHeightPx, cellSize, visibleCells, atlasLoaded, lightingLevel]);
+  }, [hasTiles, tiles, overlays, gridWidthPx, gridHeightPx, cellSize, visibleCells, lightingLevel]);
 
   // Render tree canopy overhangs onto an overlay canvas above creature tokens
   React.useEffect(() => {
-    if (!hasTiles || !overlayCanvasRef.current || !atlasLoaded) return;
+    if (!hasTiles || !overlayCanvasRef.current) return;
     const canvas = overlayCanvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -222,7 +217,7 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
       visibleCells: visibleCells ?? undefined,
       revealedCells: revealedCells.size > 0 ? revealedCells : undefined,
     });
-  }, [hasTiles, tiles, gridWidthPx, gridHeightPx, cellSize, atlasLoaded, visibleCells]);
+  }, [hasTiles, tiles, gridWidthPx, gridHeightPx, cellSize, visibleCells]);
 
   const formatMovementCostDisplay = (value: number): string => {
     if (!Number.isFinite(value)) {
@@ -234,7 +229,7 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
   };
 
   // Calculate distance between two positions using Euclidean distance (circular range)
-  const calculateDistance = (pos1: any, pos2: any) => {
+  const calculateDistance = (pos1: Position, pos2: Position) => {
     const dx = pos1.x - pos2.x;
     const dy = pos1.y - pos2.y;
     return Math.sqrt(dx * dx + dy * dy);
@@ -245,7 +240,7 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
   const currentCreature = gameState.creatures.find((c: Creature) => c.id === currentCreatureId);
 
   // Determine if a creature is a valid target
-  const isValidTarget = (creature: any) => {
+  const isValidTarget = (creature: Creature) => {
     if (!selectedAction) return true;
     if (creature.id === currentCreatureId) {
       return false; // Can't target self
@@ -276,7 +271,7 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
 
   const renderCreatures = () => {
     return gameState.creatures
-      .filter((creature: any) => {
+      .filter((creature: Creature) => {
         // Always show player creatures; hide enemies/NPCs in fog
         if (creature.type === 'player') return true;
         if (!visibleCells) return true; // No fog active, show all
@@ -290,7 +285,7 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
         }
         return false;
       })
-      .map((creature: any) => {
+      .map((creature: Creature) => {
       const isSelected = creature.id === selectedTarget || (selectedAction?.aoe && selectedTarget === `${creature.positions.x}-${creature.positions.y}`);
       const isDefeated = creature.currentHealth <= 0;
       const isValid = isValidTarget(creature);
@@ -491,7 +486,7 @@ const BattleGrid: React.FC<BattleGridProps> = ({ gameState, selectedTarget, sele
     const [centerX, centerY] = selectedTarget.split('-').map(Number);
     const radius = selectedAction.aoeRadius || 0;
     return gameState.creatures
-      .filter((creature: any) => {
+                .filter((creature: Creature) => {
         if (creature.id === currentCreature?.id) return false;
         const dx = creature.positions.x - centerX;
         const dy = creature.positions.y - centerY;

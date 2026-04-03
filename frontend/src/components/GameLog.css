@@ -2,9 +2,9 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: rgba(0, 0, 0, 0.3);
-  border-left: 3px solid #d4af37;
-  border-radius: 8px;
+  background: var(--pf2e-bg-panel);
+  border-left: 3px solid var(--pf2e-gold);
+  border-radius: var(--pf2e-radius-lg);
   padding: 10px;
   flex: 1;
   min-height: 0;
@@ -14,7 +14,7 @@
 .game-log h3 {
   margin: 0;
   font-size: 14px;
-  color: #d4af37;
+  color: var(--pf2e-gold);
   flex-shrink: 0;
 }
 
@@ -29,16 +29,17 @@
 
 .log-entry {
   padding: 6px;
-  background: rgba(0, 0, 0, 0.2);
-  border-left: 3px solid #666;
-  border-radius: 3px;
+  background: var(--pf2e-bg-card);
+  border-left: 3px solid var(--pf2e-text-dim);
+  border-radius: var(--pf2e-radius-sm);
   font-size: 11px;
   line-height: 1.3;
   flex-shrink: 0;
+  transition: background var(--pf2e-transition-base), border-color var(--pf2e-transition-base), transform var(--pf2e-transition-fast);
 }
 
 .log-entry.action {
-  border-left-color: #b8860b;
+  border-left-color: var(--pf2e-gold);
 }
 
 .log-entry.action::before {
@@ -46,7 +47,7 @@
 }
 
 .log-entry.damage {
-  border-left-color: #f44336;
+  border-left-color: var(--pf2e-error);
 }
 
 .log-entry.damage::before {
@@ -54,7 +55,7 @@
 }
 
 .log-entry.condition {
-  border-left-color: #FFC107;
+  border-left-color: var(--pf2e-condition);
 }
 
 .log-entry.condition::before {
@@ -62,8 +63,8 @@
 }
 
 .log-entry.death {
-  border-left-color: #8b1a1a;
-  background: rgba(139, 26, 26, 0.1);
+  border-left-color: var(--pf2e-crit-failure);
+  background: rgba(183, 28, 28, 0.14);
 }
 
 .log-entry.death::before {
@@ -71,7 +72,7 @@
 }
 
 .log-entry.system {
-  border-left-color: #4CAF50;
+  border-left-color: var(--pf2e-success);
 }
 
 .log-entry.system::before {
@@ -80,12 +81,59 @@
 
 .log-timestamp {
   font-size: 10px;
-  color: #888;
+  color: var(--pf2e-text-muted);
   margin-right: 5px;
 }
 
 .log-message {
-  color: #ddd;
+  color: var(--pf2e-text-primary);
+}
+
+/* Damage type color coding hooks */
+.log-entry.damage[data-damage-type='slashing'] { border-left-color: var(--pf2e-dmg-slashing); }
+.log-entry.damage[data-damage-type='piercing'] { border-left-color: var(--pf2e-dmg-piercing); }
+.log-entry.damage[data-damage-type='bludgeoning'] { border-left-color: var(--pf2e-dmg-bludgeoning); }
+.log-entry.damage[data-damage-type='fire'] { border-left-color: var(--pf2e-dmg-fire); }
+.log-entry.damage[data-damage-type='cold'] { border-left-color: var(--pf2e-dmg-cold); }
+.log-entry.damage[data-damage-type='electricity'] { border-left-color: var(--pf2e-dmg-electricity); }
+.log-entry.damage[data-damage-type='acid'] { border-left-color: var(--pf2e-dmg-acid); }
+.log-entry.damage[data-damage-type='sonic'] { border-left-color: var(--pf2e-dmg-sonic); }
+.log-entry.damage[data-damage-type='force'] { border-left-color: var(--pf2e-dmg-force); }
+.log-entry.damage[data-damage-type='mental'] { border-left-color: var(--pf2e-dmg-mental); }
+.log-entry.damage[data-damage-type='poison'] { border-left-color: var(--pf2e-dmg-poison); }
+.log-entry.damage[data-damage-type='spirit'] { border-left-color: var(--pf2e-dmg-spirit); }
+.log-entry.damage[data-damage-type='vitality'] { border-left-color: var(--pf2e-dmg-vitality); }
+.log-entry.damage[data-damage-type='void'] { border-left-color: var(--pf2e-dmg-void); }
+.log-entry.damage[data-damage-type='bleed'] { border-left-color: var(--pf2e-dmg-bleed); }
+
+/* Rarity border hooks */
+.log-entry[data-rarity='uncommon'] {
+  border-left-width: 4px;
+  border-left-color: var(--pf2e-rarity-uncommon);
+}
+
+.log-entry[data-rarity='rare'] {
+  border-left-width: 4px;
+  border-left-color: var(--pf2e-rarity-rare);
+}
+
+.log-entry[data-rarity='unique'] {
+  border-left-width: 4px;
+  border-left-color: var(--pf2e-rarity-unique);
+}
+
+/* Condition severity hooks */
+.log-entry.condition[data-severity='1'] {
+  border-left-color: var(--pf2e-condition);
+}
+
+.log-entry.condition[data-severity='2'] {
+  border-left-color: var(--pf2e-condition-severe);
+}
+
+.log-entry.condition[data-severity='3'] {
+  border-left-color: var(--pf2e-condition-critical);
+  box-shadow: inset 0 0 0 1px rgba(244, 67, 54, 0.25);
 }
 
 .log-output::-webkit-scrollbar {
@@ -98,12 +146,12 @@
 }
 
 .log-output::-webkit-scrollbar-thumb {
-  background: rgba(184, 134, 11, 0.5);
+  background: var(--pf2e-gold-glow);
   border-radius: 3px;
 }
 
 .log-output::-webkit-scrollbar-thumb:hover {
-  background: rgba(184, 134, 11, 0.7);
+  background: rgba(212, 175, 55, 0.7);
 }
 
 /* Hover details */
@@ -113,7 +161,8 @@
 }
 
 .log-entry.has-details:hover {
-  background: rgba(184, 134, 11, 0.08);
+  background: rgba(212, 175, 55, 0.08);
+  transform: translateY(-1px);
 }
 
 .log-detail-hint {
@@ -124,26 +173,26 @@
 .log-tooltip {
   position: fixed;
   z-index: 1000;
-  background: #1a1410;
-  border: 1px solid #3a2a20;
-  border-radius: 6px;
+  background: var(--pf2e-bg-base);
+  border: 1px solid var(--pf2e-border);
+  border-radius: var(--pf2e-radius-md);
   padding: 10px 14px;
   font-size: 12px;
   line-height: 1.6;
-  color: #ddd;
+  color: var(--pf2e-text-primary);
   white-space: pre;
   min-width: 280px;
   max-width: 400px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  box-shadow: var(--pf2e-shadow-lg);
   pointer-events: none;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--pf2e-font-mono);
 }
 
 .tooltip-header {
-  color: #d4af37;
+  color: var(--pf2e-gold);
   font-weight: bold;
   margin-top: 4px;
-  border-bottom: 1px solid #3a2a20;
+  border-bottom: 1px solid var(--pf2e-border);
   padding-bottom: 2px;
   margin-bottom: 2px;
 }
@@ -153,19 +202,19 @@
 }
 
 .tooltip-line {
-  color: #bbb;
+  color: var(--pf2e-text-muted);
 }
 
 /* ─── Narrative Text ─────────────────────────────────── */
 
 .log-narrative {
   font-size: 10px;
-  color: #d4b06a;
+  color: var(--pf2e-warm-text);
   font-style: italic;
   margin-top: 2px;
   padding: 3px 6px;
-  background: rgba(240, 192, 64, 0.06);
-  border-left: 2px solid rgba(240, 192, 64, 0.3);
+  background: rgba(212, 175, 55, 0.06);
+  border-left: 2px solid rgba(212, 175, 55, 0.3);
   border-radius: 0 4px 4px 0;
   line-height: 1.4;
 }

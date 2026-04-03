@@ -42,10 +42,11 @@ Object.defineProperty(exports, "getCreatureByName", { enumerable: true, get: fun
 Object.defineProperty(exports, "pickRandom", { enumerable: true, get: function () { return bestiary_1.pickRandom; } });
 __exportStar(require("./encounterBuilder"), exports);
 __exportStar(require("./encounterMaps"), exports);
-// foundryEncounterMaps removed – FOUNDRY_MAP_CATALOG had zero consumers (274 KB dead code)
+// foundryEncounterMaps removed – replaced by foundryMapCatalog with comprehensive Foundry VTT map data
+__exportStar(require("./foundryMapCatalog"), exports);
+__exportStar(require("./campaignMapTracker"), exports);
 __exportStar(require("./feats"), exports);
 __exportStar(require("./mapGenerator"), exports);
-__exportStar(require("./atlasMapGenerator"), exports);
 __exportStar(require("./creatureTokens"), exports);
 // Companion / Familiar / Eidolon catalogs
 __exportStar(require("./companions"), exports);

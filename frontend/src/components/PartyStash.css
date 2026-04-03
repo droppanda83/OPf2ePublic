@@ -68,13 +68,13 @@
 
 .treasury-label {
   font-size: 0.88em;
-  color: #c49a6c;
+  color: var(--pf2e-warm-text);
   font-weight: 600;
 }
 
 .treasury-amount {
   font-size: 1.05em;
-  color: #ead8be;
+  color: var(--pf2e-text-heading);
   font-weight: 700;
   letter-spacing: 0.5px;
 }
@@ -91,17 +91,17 @@
   border: 1px solid rgba(160, 120, 80, 0.25);
   border-radius: 5px;
   background: rgba(25, 14, 10, 0.5);
-  color: #c49a6c;
+  color: var(--pf2e-warm-text);
   font-size: 0.78em;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--pf2e-transition-fast);
 }
 
 .treasury-btn:hover {
   background: rgba(50, 30, 20, 0.8);
-  border-color: rgba(200, 150, 80, 0.5);
-  color: #ead8be;
+  border-color: var(--pf2e-warm-border-strong);
+  color: var(--pf2e-text-heading);
 }
 
 .treasury-btn.subtract {

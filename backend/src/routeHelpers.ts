@@ -9,14 +9,11 @@ import {
   getCreatureXP, XP_PER_LEVEL,
   generateMap, proceduralMapToTemplate,
   createDefaultAbilities, createDefaultProficiencies,
-  findExplorationPath, getCreatureByName, getCreatureTokenUrl,
-  parseAtlasData, generateAtlasMap, atlasMapToGameData,
+  findExplorationPath, getCreatureByName,
 } from 'pf2e-shared';
-import type { EncounterMapTemplate, Creature } from 'pf2e-shared';
+import type { EncounterMapTemplate, Creature, GameState, GMSession, GMChatMessage } from 'pf2e-shared';
 import type { TileType, MapGeneratorTheme } from 'pf2e-shared';
-import type { AtlasMapTheme, AtlasData, MapGenOptions } from 'pf2e-shared';
-import * as fs from 'fs';
-import * as path from 'path';
+import { getTokenArtUrl } from './services/tokenArtService';
 
 // ─── Spawn-position collision tracker ────────────────────────
 
@@ -48,7 +45,7 @@ export function fallbackPosition(index: number, width: number, height: number, e
 
 // ─── Map application ─────────────────────────────────────────
 
-export function applyMapTemplateToGame(gameState: any, mapTemplate: EncounterMapTemplate, tiles?: TileType[][], overlays?: any[], moveCostOverride?: (number | null)[][]) {
+export function applyMapTemplateToGame(gameState: GameState, mapTemplate: EncounterMapTemplate, tiles?: TileType[][], overlays?: unknown[], moveCostOverride?: (number | null)[][]) {
   // Determine ambient lighting based on map theme:
   // - Outdoor / open themes → bright (daylight / clear sky)
   // - Enclosed but lit themes → dim (torchlit, ambient light)
@@ -111,11 +108,11 @@ export function applyMapTemplateToGame(gameState: any, mapTemplate: EncounterMap
 // ─── Procedural map generation ───────────────────────────────
 
 export function generateAndApplyProceduralMap(
-  gameState: any,
+  gameState: GameState,
   theme: MapGeneratorTheme,
   width?: number,
   height?: number,
-  options?: Record<string, any>,
+  options?: Record<string, unknown>,
 ): EncounterMapTemplate & { tiles: TileType[][] } {
   const seed = Date.now();
   const procMap = generateMap(theme, width ?? 30, height ?? 20, seed, options);
@@ -137,105 +134,6 @@ export function generateAndApplyProceduralMap(
   return { ...template, tiles: result.tiles };
 }
 
-// ─── Atlas-based map generation ──────────────────────────────
-
-/** Cached parsed atlas data (loaded once, reused for all map generations) */
-let cachedAtlasData: AtlasData | null = null;
-
-/** Themes the atlas generator can handle */
-const ATLAS_THEMES: AtlasMapTheme[] = ['wilderness', 'dungeon', 'indoor', 'cave', 'urban'];
-
-/** Map shared MapGeneratorTheme to the closest atlas theme */
-function mapToAtlasTheme(theme: MapGeneratorTheme): AtlasMapTheme {
-  if (ATLAS_THEMES.includes(theme as AtlasMapTheme)) return theme as AtlasMapTheme;
-  const mapping: Partial<Record<MapGeneratorTheme, AtlasMapTheme>> = {
-    ship: 'urban',
-    tower: 'dungeon',
-    bridge: 'wilderness',
-    caravan: 'wilderness',
-    sewers: 'dungeon',
-    castle: 'indoor',
-    mine: 'cave',
-  };
-  return mapping[theme] || 'wilderness';
-}
-
-/**
- * Load atlas data from the published JSON files in frontend/public/.
- * The data is cached after first load.
- */
-function loadAtlasData(): AtlasData | null {
-  if (cachedAtlasData) return cachedAtlasData;
-
-  try {
-    // Resolve paths relative to the backend root (../../frontend/public/)
-    const backendDir = path.resolve(__dirname, '..', '..');
-    const publicDir = path.join(backendDir, 'frontend', 'public');
-    const setsPath = path.join(publicDir, 'approved-atlas-sets.json');
-    const metadataPath = path.join(publicDir, 'atlas-metadata.json');
-
-    if (!fs.existsSync(setsPath) || !fs.existsSync(metadataPath)) {
-      console.warn('⚠️ Atlas data files not found, falling back to procedural generator');
-      return null;
-    }
-
-    const setsJson = JSON.parse(fs.readFileSync(setsPath, 'utf-8'));
-    const metadataJson = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
-    cachedAtlasData = parseAtlasData(setsJson, metadataJson);
-    console.log(`🗺️ Atlas data loaded: ${cachedAtlasData.terrains.length} terrains, ${cachedAtlasData.objects.length} objects`);
-    return cachedAtlasData;
-  } catch (err) {
-    console.warn('⚠️ Failed to load atlas data:', err);
-    return null;
-  }
-}
-
-/**
- * Generate an atlas-based map and apply it to the game state.
- * Falls back to the procedural generator if atlas data is unavailable.
- */
-export function generateAndApplyAtlasMap(
-  gameState: any,
-  theme: MapGeneratorTheme,
-  width?: number,
-  height?: number,
-  options?: Record<string, any>,
-): EncounterMapTemplate & { tiles: TileType[][] } {
-  const atlasData = loadAtlasData();
-
-  // Fallback to procedural if no atlas data
-  if (!atlasData) {
-    return generateAndApplyProceduralMap(gameState, theme, width, height, options);
-  }
-
-  const atlasTheme = mapToAtlasTheme(theme);
-  const playerCount = gameState.creatures?.filter((c: Creature) => c.type === 'player').length ?? 4;
-  const enemyCount = gameState.creatures?.filter((c: Creature) => c.type !== 'player').length ?? 4;
-
-  const mapOpts: MapGenOptions = {
-    width: width ?? 30,
-    height: height ?? 20,
-    theme: atlasTheme,
-    subTheme: options?.subTheme,
-    seed: Date.now(),
-    density: options?.density || 'normal',
-    season: options?.season,
-  };
-
-  try {
-    const generated = generateAtlasMap(mapOpts, atlasData);
-    const gameData = atlasMapToGameData(generated, playerCount, enemyCount);
-
-    applyMapTemplateToGame(gameState, gameData.template, gameData.tiles, gameData.overlays, gameData.moveCostOverride);
-
-    console.log(`🗺️ Generated atlas ${atlasTheme} map: "${gameData.template.name}" (${gameData.template.width}x${gameData.template.height}) with ${gameData.overlays.length} overlays in ${generated.genTimeMs}ms`);
-    return { ...gameData.template, tiles: gameData.tiles };
-  } catch (err) {
-    console.warn(`⚠️ Atlas map generation failed for theme "${atlasTheme}", falling back to procedural:`, err);
-    return generateAndApplyProceduralMap(gameState, theme, width, height, options);
-  }
-}
-
 // ─── Theme inference ─────────────────────────────────────────
 
 export function toneToMapTheme(tone?: string): MapGeneratorTheme {
@@ -250,14 +148,14 @@ export function toneToMapTheme(tone?: string): MapGeneratorTheme {
   return map[tone || ''] || 'dungeon';
 }
 
-export function inferMapThemeFromChat(session?: any, fallbackTone?: string): { theme: MapGeneratorTheme; subTheme?: string; options?: Record<string, any> } {
+export function inferMapThemeFromChat(session?: GMSession, fallbackTone?: string): { theme: MapGeneratorTheme; subTheme?: string; options?: Record<string, unknown> } {
   if (!session?.chatHistory || session.chatHistory.length === 0) {
     return { theme: toneToMapTheme(fallbackTone) };
   }
 
   const recentMessages = session.chatHistory
     .slice(-8)
-    .map((m: any) => (m.content || '').toLowerCase())
+    .map((m: GMChatMessage) => (m.content || '').toLowerCase())
     .join(' ');
 
   const themeScores: Record<MapGeneratorTheme, number> = {
@@ -265,9 +163,9 @@ export function inferMapThemeFromChat(session?: any, fallbackTone?: string): { t
     ship: 0, tower: 0, bridge: 0, caravan: 0, sewers: 0, castle: 0, mine: 0,
   };
 
-  const subThemeScores: Record<string, { theme: MapGeneratorTheme; subTheme: string; score: number; options?: Record<string, any> }> = {};
+  const subThemeScores: Record<string, { theme: MapGeneratorTheme; subTheme: string; score: number; options?: Record<string, unknown> }> = {};
 
-  const addSubScore = (keywords: string[], theme: MapGeneratorTheme, subTheme: string, opts?: Record<string, any>) => {
+  const addSubScore = (keywords: string[], theme: MapGeneratorTheme, subTheme: string, opts?: Record<string, unknown>) => {
     const key = `${theme}:${subTheme}`;
     if (!subThemeScores[key]) subThemeScores[key] = { theme, subTheme, score: 0, options: opts };
     for (const w of keywords) {
@@ -356,7 +254,7 @@ export function inferMapThemeFromChat(session?: any, fallbackTone?: string): { t
     }
   }
 
-  let bestSub: { subTheme: string; options?: Record<string, any> } | undefined;
+  let bestSub: { subTheme: string; options?: Record<string, unknown> } | undefined;
   let bestSubScore = 0;
   for (const [, entry] of Object.entries(subThemeScores)) {
     if (entry.theme === bestTheme && entry.score > bestSubScore && entry.score >= 3) {
@@ -382,7 +280,7 @@ export function normalizeDifficulty(d?: string): Difficulty {
   return map[d.toLowerCase()] || 'moderate';
 }
 
-export function getCampaignEnemyTags(gmSession?: any): string[] | undefined {
+export function getCampaignEnemyTags(gmSession?: GMSession): string[] | undefined {
   if (!gmSession?.campaignPreferences) return undefined;
   const { tone, themes } = gmSession.campaignPreferences;
   const tags: string[] = [...(themes || [])];
@@ -402,7 +300,7 @@ export function getCampaignEnemyTags(gmSession?: any): string[] | undefined {
   return tags.length > 0 ? tags : undefined;
 }
 
-export function buildEncounterEnemies(gameState: any, difficulty: Difficulty, mapTemplate?: EncounterMapTemplate): Creature[] {
+export function buildEncounterEnemies(gameState: GameState, difficulty: Difficulty, mapTemplate?: EncounterMapTemplate): Creature[] {
   const players = gameState.creatures.filter((c: Creature) => c.type === 'player');
   const partySize = Math.max(1, players.length);
   const partyLevel = Math.max(1, Math.round(players.reduce((sum: number, c: Creature) => sum + (c.level || 1), 0) / partySize));
@@ -411,7 +309,7 @@ export function buildEncounterEnemies(gameState: any, difficulty: Difficulty, ma
   const width = mapTemplate?.width || gameState.map?.width || 20;
   const height = mapTemplate?.height || gameState.map?.height || 20;
 
-  return encounter.creatures.map((creature: any, idx: number) => {
+  return encounter.creatures.map((creature: Creature, idx: number) => {
     const suggested = mapTemplate?.startingZones?.enemies?.[idx]
       || fallbackPosition(idx, width, height, true);
 
@@ -446,6 +344,7 @@ export function buildEncounterEnemies(gameState: any, difficulty: Difficulty, ma
       damageImmunities: creature.damageImmunities || [],
       damageWeaknesses: creature.damageWeaknesses || [],
       skills: creature.skills || [],
+      tokenImageUrl: creature.tokenImageUrl || getTokenArtUrl(creature.name || 'unknown', creature.tags || []),
       _map: gameState.map,
     } as Creature;
   });
@@ -457,7 +356,7 @@ export {
   getMapsByTheme, getMapById, getMapThemes, pickRandomMap,
   getCreatureXP, XP_PER_LEVEL,
   createDefaultAbilities, createDefaultProficiencies,
-  findExplorationPath, getCreatureByName, getCreatureTokenUrl,
+  findExplorationPath, getCreatureByName,
 };
 export type { EncounterMapTemplate, Creature, TileType, MapGeneratorTheme };
 export { Difficulty, buildEncounter } from 'pf2e-shared';

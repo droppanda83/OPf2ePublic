@@ -1,0 +1,264 @@
+{
+  "generatedAt": "2026-03-30T23:19:42.908Z",
+  "summary": {
+    "totalCreatures": 1695,
+    "matchedToFoundry": 1695,
+    "unmatched": 0,
+    "duplicateIds": 0,
+    "duplicateNames": 0,
+    "totalIssues": 0,
+    "totalWarnings": 28,
+    "creaturesWithIssues": 0,
+    "creaturesWithWarnings": 24,
+    "dndContamination": 0,
+    "issueCounts": {},
+    "warningCounts": {
+      "AC 7 very low for level -1": 1,
+      "AC is 7": 1,
+      "AC 9 very low for level 1": 1,
+      "AC is 9": 1,
+      "AC 8 very low for level 1": 2,
+      "AC is 8": 2,
+      "AC 12 very low for level 2": 1,
+      "AC 10 very low for level 3": 2,
+      "AC 14 very low for level 4": 1,
+      "AC 12 very low for level 5": 3,
+      "AC 13 very low for level 6": 1,
+      "AC 14 very low for level 6": 1,
+      "AC 12 very low for level 6": 1,
+      "AC 14 very low for level 7": 3,
+      "AC 15 very low for level 7": 1,
+      "AC 16 very low for level 9": 1,
+      "AC 25 very low for level 12": 1,
+      "AC 20 very low for level 13": 1,
+      "HP 85 extremely low for level 14": 1,
+      "HP 104 extremely low for level 15": 1,
+      "Attack bonus 25 very low for level 19": 1
+    }
+  },
+  "issues": [],
+  "warnings": [
+    {
+      "id": "gutter-ooze",
+      "name": "Gutter Ooze",
+      "level": -1,
+      "issues": [],
+      "warnings": [
+        "AC 7 very low for level -1 (expected 12-20)",
+        "AC is 7 (unusually low)"
+      ]
+    },
+    {
+      "id": "amoeba-swarm",
+      "name": "Amoeba Swarm",
+      "level": 1,
+      "issues": [],
+      "warnings": [
+        "AC 9 very low for level 1 (expected 14-22)",
+        "AC is 9 (unusually low)"
+      ]
+    },
+    {
+      "id": "giant-amoeba",
+      "name": "Giant Amoeba",
+      "level": 1,
+      "issues": [],
+      "warnings": [
+        "AC 8 very low for level 1 (expected 14-22)",
+        "AC is 8 (unusually low)"
+      ]
+    },
+    {
+      "id": "sewer-ooze",
+      "name": "Sewer Ooze",
+      "level": 1,
+      "issues": [],
+      "warnings": [
+        "AC 8 very low for level 1 (expected 14-22)",
+        "AC is 8 (unusually low)"
+      ]
+    },
+    {
+      "id": "slime-mold",
+      "name": "Slime Mold",
+      "level": 2,
+      "issues": [],
+      "warnings": [
+        "AC 12 very low for level 2 (expected 16-24)"
+      ]
+    },
+    {
+      "id": "gelatinous-cube",
+      "name": "Gelatinous Cube",
+      "level": 3,
+      "issues": [],
+      "warnings": [
+        "AC 10 very low for level 3 (expected 17-26)"
+      ]
+    },
+    {
+      "id": "string-slime",
+      "name": "String Slime",
+      "level": 3,
+      "issues": [],
+      "warnings": [
+        "AC 10 very low for level 3 (expected 17-26)"
+      ]
+    },
+    {
+      "id": "gray-ooze",
+      "name": "Gray Ooze",
+      "level": 4,
+      "issues": [],
+      "warnings": [
+        "AC 14 very low for level 4 (expected 19-28)"
+      ]
+    },
+    {
+      "id": "globster",
+      "name": "Globster",
+      "level": 5,
+      "issues": [],
+      "warnings": [
+        "AC 12 very low for level 5 (expected 20-29)"
+      ]
+    },
+    {
+      "id": "ochre-jelly",
+      "name": "Ochre Jelly",
+      "level": 5,
+      "issues": [],
+      "warnings": [
+        "AC 12 very low for level 5 (expected 20-29)"
+      ]
+    },
+    {
+      "id": "tomb-jelly",
+      "name": "Tomb Jelly",
+      "level": 5,
+      "issues": [],
+      "warnings": [
+        "AC 12 very low for level 5 (expected 20-29)"
+      ]
+    },
+    {
+      "id": "fire-jellyfish-swarm",
+      "name": "Fire Jellyfish Swarm",
+      "level": 6,
+      "issues": [],
+      "warnings": [
+        "AC 13 very low for level 6 (expected 22-31)"
+      ]
+    },
+    {
+      "id": "sargassum-heap",
+      "name": "Sargassum Heap",
+      "level": 6,
+      "issues": [],
+      "warnings": [
+        "AC 14 very low for level 6 (expected 22-31)"
+      ]
+    },
+    {
+      "id": "verdurous-ooze",
+      "name": "Verdurous Ooze",
+      "level": 6,
+      "issues": [],
+      "warnings": [
+        "AC 12 very low for level 6 (expected 22-31)"
+      ]
+    },
+    {
+      "id": "black-pudding",
+      "name": "Black Pudding",
+      "level": 7,
+      "issues": [],
+      "warnings": [
+        "AC 14 very low for level 7 (expected 23-32)"
+      ]
+    },
+    {
+      "id": "giant-jellyfish",
+      "name": "Giant Jellyfish",
+      "level": 7,
+      "issues": [],
+      "warnings": [
+        "AC 15 very low for level 7 (expected 23-32)"
+      ]
+    },
+    {
+      "id": "living-tar",
+      "name": "Living Tar",
+      "level": 7,
+      "issues": [],
+      "warnings": [
+        "AC 14 very low for level 7 (expected 23-32)"
+      ]
+    },
+    {
+      "id": "slithering-pit",
+      "name": "Slithering Pit",
+      "level": 7,
+      "issues": [],
+      "warnings": [
+        "AC 14 very low for level 7 (expected 23-32)"
+      ]
+    },
+    {
+      "id": "doldrums-heap",
+      "name": "Doldrums Heap",
+      "level": 9,
+      "issues": [],
+      "warnings": [
+        "AC 16 very low for level 9 (expected 25-35)"
+      ]
+    },
+    {
+      "id": "omox",
+      "name": "Omox",
+      "level": 12,
+      "issues": [],
+      "warnings": [
+        "AC 25 very low for level 12 (expected 29-39)"
+      ]
+    },
+    {
+      "id": "carnivorous-blob",
+      "name": "Carnivorous Blob",
+      "level": 13,
+      "issues": [],
+      "warnings": [
+        "AC 20 very low for level 13 (expected 30-41)"
+      ]
+    },
+    {
+      "id": "ozthoom-shadow-double",
+      "name": "Ozthoom Shadow Double",
+      "level": 14,
+      "issues": [],
+      "warnings": [
+        "HP 85 extremely low for level 14 (expected 200-340)"
+      ]
+    },
+    {
+      "id": "totum-font",
+      "name": "Totum Font",
+      "level": 15,
+      "issues": [],
+      "warnings": [
+        "HP 104 extremely low for level 15 (expected 220-360)"
+      ]
+    },
+    {
+      "id": "sturzstromer",
+      "name": "Sturzstromer",
+      "level": 19,
+      "issues": [],
+      "warnings": [
+        "Attack bonus 25 very low for level 19 (expected 29-44)"
+      ]
+    }
+  ],
+  "duplicateIds": [],
+  "duplicateNames": []
+}

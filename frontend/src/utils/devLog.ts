@@ -7,16 +7,16 @@
 const isDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
 
 /** General debug log — only in dev mode */
-export function devLog(...args: any[]): void {
+export function devLog(...args: unknown[]): void {
   if (isDev) console.log(...args);
 }
 
 /** Warning log — only in dev mode */
-export function devWarn(...args: any[]): void {
+export function devWarn(...args: unknown[]): void {
   if (isDev) console.warn(...args);
 }
 
 /** Error log — always active (errors should always be visible) */
-export function devError(...args: any[]): void {
+export function devError(...args: unknown[]): void {
   console.error(...args);
 }

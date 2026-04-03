@@ -32,9 +32,9 @@ try {
 
   Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', 'npm run dev' -WorkingDirectory $backendDir -WindowStyle Normal
   Start-Sleep -Seconds 3
-  Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', 'npm run preview -- --port 5180 --host localhost' -WorkingDirectory $frontendDir -WindowStyle Normal
+  Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', 'npm run dev' -WorkingDirectory $frontendDir -WindowStyle Normal
   Start-Sleep -Seconds 4
-  Start-Process 'http://localhost:5180/'
+  Start-Process 'http://localhost:5173/'
 }
 catch {
   throw

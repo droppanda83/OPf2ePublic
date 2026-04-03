@@ -7,11 +7,32 @@ import { Creature, Position, DamageType } from '../../../shared/types';
 import type { ProficiencyRank } from '../../../shared/bonuses';
 import { resolveSpellId } from '../../../shared/spells';
 
+type PathbuilderTradition = 'arcane' | 'divine' | 'occult' | 'primal';
+type PathbuilderCastingType = 'prepared' | 'spontaneous' | 'innate';
+
+function toTradition(value: unknown, fallback: PathbuilderTradition): PathbuilderTradition {
+  if (typeof value !== 'string') return fallback;
+  const normalized = value.toLowerCase();
+  if (normalized === 'arcane' || normalized === 'divine' || normalized === 'occult' || normalized === 'primal') {
+    return normalized;
+  }
+  return fallback;
+}
+
+function toCastingType(value: unknown, fallback: PathbuilderCastingType): PathbuilderCastingType {
+  if (typeof value !== 'string') return fallback;
+  const normalized = value.toLowerCase();
+  if (normalized === 'prepared' || normalized === 'spontaneous' || normalized === 'innate') {
+    return normalized;
+  }
+  return fallback;
+}
+
 /**
  * Parse Pathbuilder JSON and convert to Creature
  * Handles the actual Pathbuilder 2e export format
  */
-export function parsePathbuilderCharacter(data: any): Creature {
+export function parsePathbuilderCharacter(data: unknown): Creature {
   // Handle both raw data and stringified data
   let character = typeof data === 'string' ? JSON.parse(data) : data;
 
@@ -52,8 +73,8 @@ export function parsePathbuilderCharacter(data: any): Creature {
   // Calculate feat bonuses (especially Toughness which adds +1 HP/level)
   let featHpBonus = 0;
   if (character.feats && Array.isArray(character.feats)) {
-    character.feats.forEach((feat: any) => {
-      const featName = feat[0]?.toLowerCase() || '';
+    character.feats.forEach((feat: unknown) => {
+      const featName = Array.isArray(feat) && typeof feat[0] === 'string' ? feat[0].toLowerCase() : '';
       if (featName.includes('toughness')) {
         // Toughness adds +1 HP per level
         featHpBonus += character.level || 1;
@@ -222,7 +243,7 @@ export function parsePathbuilderCharacter(data: any): Creature {
   // Extract feats from Pathbuilder format: [name, null, type, level, ...]
   const feats: { name: string; type: string; level: number }[] = [];
   if (character.feats && Array.isArray(character.feats)) {
-    character.feats.forEach((feat: any) => {
+    character.feats.forEach((feat: unknown) => {
       if (Array.isArray(feat) && feat[0]) {
         feats.push({
           name: feat[0],
@@ -318,7 +339,7 @@ export function parsePathbuilderCharacter(data: any): Creature {
   // Extract lores
   const lores: { name: string; bonus: number }[] = [];
   if (character.lores && Array.isArray(character.lores)) {
-    character.lores.forEach((lore: any) => {
+    character.lores.forEach((lore: unknown) => {
       if (Array.isArray(lore)) {
         const loreName = lore[0] || 'Unknown';
         const loreRaw = lore[1] || 0;
@@ -343,7 +364,7 @@ export function parsePathbuilderCharacter(data: any): Creature {
   
   // Check spellCasters for additional focus points
   if (character.spellCasters && Array.isArray(character.spellCasters)) {
-    character.spellCasters.forEach((spellCaster: any) => {
+    character.spellCasters.forEach((spellCaster: unknown) => {
       if (spellCaster.focusPoints) {
         maxFocusPoints = Math.max(maxFocusPoints, spellCaster.focusPoints);
       }
@@ -433,7 +454,7 @@ export function parsePathbuilderCharacter(data: any): Creature {
   console.log('[pathbuilderImport] Will focusSpells be added to creature?', focusSpells.length > 0 ? 'YES' : 'NO');
 
   // Get spells if any - enhanced extraction with metadata
-  let keyAbility = 'wisdom';
+  let keyAbility: Creature['keyAbility'] = 'wisdom';
   let spells: string[] = []; // Fallback for backward compatibility
   let spellcasters: Array<{
     tradition: 'arcane' | 'divine' | 'occult' | 'primal';
@@ -450,7 +471,7 @@ export function parsePathbuilderCharacter(data: any): Creature {
   }> = [];
 
   if (character.spellCasters && character.spellCasters.length > 0) {
-    const abilityMap: Record<string, string> = {
+    const abilityMap: Record<string, Creature['keyAbility']> = {
       'str': 'strength',
       'dex': 'dexterity',
       'con': 'constitution',
@@ -459,23 +480,25 @@ export function parsePathbuilderCharacter(data: any): Creature {
       'cha': 'charisma'
     };
 
-    character.spellCasters.forEach((spellCaster: any, index: number) => {
+    character.spellCasters.forEach((spellCaster: unknown, index: number) => {
+      if (!spellCaster || typeof spellCaster !== 'object') return;
+      const caster = spellCaster as Record<string, unknown>;
       console.log(`[pathbuilderImport] SpellCaster ${index} raw data:`, JSON.stringify(spellCaster, null, 2).substring(0, 1000));
       console.log(`[pathbuilderImport] SpellCaster ${index} keys:`, Object.keys(spellCaster));
-      console.log(`[pathbuilderImport] SpellCaster ${index} tradition field:`, spellCaster.tradition);
-      console.log(`[pathbuilderImport] SpellCaster ${index} magicTradition field:`, spellCaster.magicTradition);
-      console.log(`[pathbuilderImport] SpellCaster ${index} name field:`, spellCaster.name);
-      console.log(`[pathbuilderImport] SpellCaster ${index} type field:`, spellCaster.type);
+      console.log(`[pathbuilderImport] SpellCaster ${index} tradition field:`, caster.tradition);
+      console.log(`[pathbuilderImport] SpellCaster ${index} magicTradition field:`, caster.magicTradition);
+      console.log(`[pathbuilderImport] SpellCaster ${index} name field:`, caster.name);
+      console.log(`[pathbuilderImport] SpellCaster ${index} type field:`, caster.type);
       
-      const key = spellCaster.ability || 'wis';
+      const key = typeof caster.ability === 'string' ? caster.ability : 'wis';
       keyAbility = abilityMap[key] || 'wisdom';
 
       // Determine tradition - Pathbuilder uses 'magicTradition' field
-      let tradition: 'arcane' | 'divine' | 'occult' | 'primal' = 'arcane';
-      if (spellCaster.magicTradition) {
-        tradition = spellCaster.magicTradition.toLowerCase() as any;
-      } else if (spellCaster.tradition) {
-        tradition = spellCaster.tradition.toLowerCase() as any;
+      let tradition: PathbuilderTradition = 'arcane';
+      if (caster.magicTradition) {
+        tradition = toTradition(caster.magicTradition, tradition);
+      } else if (caster.tradition) {
+        tradition = toTradition(caster.tradition, tradition);
       } else if (character.class) {
         const classStr = character.class.toLowerCase();
         if (classStr.includes('cleric') || classStr.includes('champion')) tradition = 'divine';
@@ -486,10 +509,10 @@ export function parsePathbuilderCharacter(data: any): Creature {
       }
 
       // Determine casting type - Pathbuilder uses 'spellcastingType' field
-      let castingType: 'prepared' | 'spontaneous' | 'innate' = 'spontaneous';
-      if (spellCaster.spellcastingType) {
-        castingType = spellCaster.spellcastingType.toLowerCase() as any;
-      } else if (spellCaster.innate === true) {
+      let castingType: PathbuilderCastingType = 'spontaneous';
+      if (caster.spellcastingType) {
+        castingType = toCastingType(caster.spellcastingType, castingType);
+      } else if (caster.innate === true) {
         castingType = 'innate';
       }
 
@@ -501,16 +524,21 @@ export function parsePathbuilderCharacter(data: any): Creature {
         traits?: string[];
       }> = [];
 
-      if (spellCaster.spells && Array.isArray(spellCaster.spells)) {
-        spellCaster.spells.forEach((levelData: any, levelIndex: number) => {
-          if (levelData.list && Array.isArray(levelData.list)) {
-            levelData.list.forEach((spellData: any) => {
-              const spellName = typeof spellData === 'string' ? spellData : spellData.name;
+      if (caster.spells && Array.isArray(caster.spells)) {
+        caster.spells.forEach((levelData: unknown, levelIndex: number) => {
+          if (!levelData || typeof levelData !== 'object') return;
+          const levelEntry = levelData as { list?: unknown[] };
+          if (levelEntry.list && Array.isArray(levelEntry.list)) {
+            levelEntry.list.forEach((spellData: unknown) => {
+              const spellRecord = (spellData && typeof spellData === 'object') ? spellData as Record<string, unknown> : null;
+              const spellName = typeof spellData === 'string'
+                ? spellData
+                : (typeof spellRecord?.name === 'string' ? spellRecord.name : 'Unknown Spell');
               spellsByLevel.push({
                 name: spellName,
                 level: levelIndex,
-                usage: (spellData.usage as 'at-will' | 'once-per-day' | 'twice-per-day' | 'three-times-per-day' | 'once-per-week' | undefined) || undefined,
-                traits: spellData.traits || undefined
+                usage: spellRecord?.usage as 'at-will' | 'once-per-day' | 'twice-per-day' | 'three-times-per-day' | 'once-per-week' | undefined,
+                traits: Array.isArray(spellRecord?.traits) ? (spellRecord?.traits as string[]) : undefined
               });
               
               // Also populate fallback simple spells array
@@ -532,8 +560,9 @@ export function parsePathbuilderCharacter(data: any): Creature {
 
       // Build spell slots array from perDay (Pathbuilder's format)
       const slots: Array<{ level: number; available: number; max: number }> = [];
-      if (spellCaster.perDay && Array.isArray(spellCaster.perDay)) {
-        spellCaster.perDay.forEach((count: number, levelIndex: number) => {
+      if (caster.perDay && Array.isArray(caster.perDay)) {
+        caster.perDay.forEach((count: unknown, levelIndex: number) => {
+          if (typeof count !== 'number') return;
           if (count > 0) {
             slots.push({
               level: levelIndex,
@@ -542,13 +571,15 @@ export function parsePathbuilderCharacter(data: any): Creature {
             });
           }
         });
-      } else if (spellCaster.slots && Array.isArray(spellCaster.slots)) {
-        spellCaster.slots.forEach((slotData: any, levelIndex: number) => {
+      } else if (caster.slots && Array.isArray(caster.slots)) {
+        caster.slots.forEach((slotData: unknown, levelIndex: number) => {
+          if (!slotData || typeof slotData !== 'object') return;
+          const slot = slotData as { available?: number; max?: number };
           if (slotData) {
             slots.push({
               level: levelIndex,
-              available: slotData.available || slotData.max || 0,
-              max: slotData.max || 0
+              available: slot.available || slot.max || 0,
+              max: slot.max || 0
             });
           }
         });
@@ -647,7 +678,7 @@ export function parsePathbuilderCharacter(data: any): Creature {
     deathSaveSuccesses: 0,
     deathSaveMadeThisTurn: false,
     wounded: 0,
-    keyAbility: keyAbility as any,
+    keyAbility,
     spells,
     spellcasters: spellcasters.length > 0 ? spellcasters : undefined,
     damageResistances: [],
@@ -718,7 +749,7 @@ function numToProfRank(value: number): ProficiencyRank {
 /**
  * Validate Pathbuilder JSON format
  */
-export function validatePathbuilderJSON(data: any): { valid: boolean; error?: string } {
+export function validatePathbuilderJSON(data: unknown): { valid: boolean; error?: string } {
   if (!data) {
     return { valid: false, error: 'Empty data' };
   }
@@ -726,7 +757,7 @@ export function validatePathbuilderJSON(data: any): { valid: boolean; error?: st
   if (typeof data === 'string') {
     try {
       data = JSON.parse(data);
-    } catch (e: any) {
+    } catch (_e: unknown) {
       return { valid: false, error: 'Invalid JSON format' };
     }
   }

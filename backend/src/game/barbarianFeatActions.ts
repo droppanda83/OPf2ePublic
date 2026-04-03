@@ -5,6 +5,7 @@
 
 import {
   Creature,
+  ActionResult,
   GameState,
   CreatureWeapon,
   Position,
@@ -39,7 +40,7 @@ import type { FeatActionContext } from './featActions';
 
 function hasNamedFeat(creature: Creature, needle: string): boolean {
   const lowerNeedle = needle.toLowerCase().trim();
-  return (creature.feats ?? []).some((feat: any) => {
+  return (creature.feats ?? []).some((feat: { name: string; type: string; level: number }) => {
     if (typeof feat === 'string') {
       return feat.toLowerCase().trim().includes(lowerNeedle);
     }
@@ -60,7 +61,7 @@ function getClassDC(actor: Creature): number {
   return 10 + keyAbilMod + profBonus;
 }
 
-function requiresRage(actor: Creature, featName: string): any | null {
+function requiresRage(actor: Creature, featName: string): ActionResult | null {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging to use ${featName}.`, errorCode: 'NOT_IN_STATE' };
   }
@@ -82,7 +83,7 @@ export function resolveFuriousFinish(
   targetId?: string,
   weaponId?: string,
   heroPointsSpent?: number,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Furious Finish')) {
     return { success: false, message: `${actor.name} does not have Furious Finish.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -143,7 +144,7 @@ export function resolveBashingCharge(
   targetId?: string,
   weaponId?: string,
   heroPointsSpent?: number,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Bashing Charge')) {
     return { success: false, message: `${actor.name} does not have Bashing Charge.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -175,7 +176,7 @@ export function resolveOversizedThrow(
   targetId?: string,
   _weaponId?: string,
   heroPointsSpent?: number,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Oversized Throw')) {
     return { success: false, message: `${actor.name} does not have Oversized Throw.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -248,7 +249,7 @@ export function resolveScarsOfSteel(
   ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Scars of Steel')) {
     return { success: false, message: `${actor.name} does not have Scars of Steel.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -280,7 +281,7 @@ export function resolveSpiritualGuides(
   ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Spiritual Guides')) {
     return { success: false, message: `${actor.name} does not have Spiritual Guides.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -314,7 +315,7 @@ export function resolveDragonsRageBreath(
   actor: Creature,
   gameState: GameState,
   targetId?: string,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, "Dragon's Rage Breath")) {
     return { success: false, message: `${actor.name} does not have Dragon's Rage Breath.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -368,7 +369,7 @@ export function resolveGiantsStature(
   ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, "Giant's Stature")) {
     return { success: false, message: `${actor.name} does not have Giant's Stature.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -407,7 +408,7 @@ export function resolveInnerStrength(
   ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Inner Strength')) {
     return { success: false, message: `${actor.name} does not have Inner Strength.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -435,7 +436,7 @@ export function resolveMageHunter(
   targetId?: string,
   weaponId?: string,
   heroPointsSpent?: number,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Mage Hunter')) {
     return { success: false, message: `${actor.name} does not have Mage Hunter.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -458,7 +459,7 @@ export function resolveScouringRage(
   ctx: FeatActionContext,
   actor: Creature,
   gameState: GameState,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Scouring Rage')) {
     return { success: false, message: `${actor.name} does not have Scouring Rage.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -499,7 +500,7 @@ export function resolveSpiritsInterference(
   ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, "Spirits' Interference")) {
     return { success: false, message: `${actor.name} does not have Spirits' Interference.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -538,7 +539,7 @@ export function resolveDisarmingAssault(
   targetId?: string,
   weaponId?: string,
   heroPointsSpent?: number,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Disarming Assault')) {
     return { success: false, message: `${actor.name} does not have Disarming Assault.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -582,7 +583,7 @@ export function resolveFollowUpAssault(
   targetId?: string,
   weaponId?: string,
   heroPointsSpent?: number,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Follow-up Assault')) {
     return { success: false, message: `${actor.name} does not have Follow-up Assault.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -613,7 +614,7 @@ export function resolveFriendlyToss(
   actor: Creature,
   gameState: GameState,
   targetId?: string,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Friendly Toss')) {
     return { success: false, message: `${actor.name} does not have Friendly Toss.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -643,7 +644,7 @@ export function resolveRenewedVigor(
   ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Renewed Vigor')) {
     return { success: false, message: `${actor.name} does not have Renewed Vigor.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -671,7 +672,7 @@ export function resolveShareRage(
   actor: Creature,
   gameState: GameState,
   targetId?: string,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Share Rage')) {
     return { success: false, message: `${actor.name} does not have Share Rage.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -740,7 +741,7 @@ export function resolveThrash(
   gameState: GameState,
   targetId?: string,
   weaponId?: string,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Thrash')) {
     return { success: false, message: `${actor.name} does not have Thrash.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -826,7 +827,7 @@ export function resolveComeAndGetMe(
   ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Come and Get Me')) {
     return { success: false, message: `${actor.name} does not have Come and Get Me.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -860,7 +861,7 @@ export function resolveFuriousSprint(
   ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Furious Sprint')) {
     return { success: false, message: `${actor.name} does not have Furious Sprint.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -889,7 +890,7 @@ export function resolveResoundingBlow(
   targetId?: string,
   weaponId?: string,
   heroPointsSpent?: number,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Resounding Blow')) {
     return { success: false, message: `${actor.name} does not have Resounding Blow.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -923,7 +924,7 @@ export function resolveSilencingStrike(
   targetId?: string,
   weaponId?: string,
   heroPointsSpent?: number,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Silencing Strike')) {
     return { success: false, message: `${actor.name} does not have Silencing Strike.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -957,7 +958,7 @@ export function resolveTerrifyingHowl(
   ctx: FeatActionContext,
   actor: Creature,
   gameState: GameState,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Terrifying Howl')) {
     return { success: false, message: `${actor.name} does not have Terrifying Howl.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -1018,7 +1019,7 @@ export function resolveFuriousGrab(
   actor: Creature,
   gameState: GameState,
   targetId?: string,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Furious Grab')) {
     return { success: false, message: `${actor.name} does not have Furious Grab.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -1064,7 +1065,7 @@ export function resolvePredatorsPounce(
   targetId?: string,
   weaponId?: string,
   heroPointsSpent?: number,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, "Predator's Pounce")) {
     return { success: false, message: `${actor.name} does not have Predator's Pounce.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -1091,7 +1092,7 @@ export function resolveSpiritsWrath(
   actor: Creature,
   gameState: GameState,
   targetId?: string,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, "Spirit's Wrath")) {
     return { success: false, message: `${actor.name} does not have Spirit's Wrath.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -1163,7 +1164,7 @@ export function resolveUnbalancingSweep(
   ctx: FeatActionContext,
   actor: Creature,
   gameState: GameState,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Unbalancing Sweep')) {
     return { success: false, message: `${actor.name} does not have Unbalancing Sweep.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -1226,7 +1227,7 @@ export function resolveGiantsLunge(
   ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, "Giant's Lunge")) {
     return { success: false, message: `${actor.name} does not have Giant's Lunge.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -1254,7 +1255,7 @@ export function resolveImpalingThrust(
   targetId?: string,
   weaponId?: string,
   heroPointsSpent?: number,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Impaling Thrust')) {
     return { success: false, message: `${actor.name} does not have Impaling Thrust.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -1305,7 +1306,7 @@ export function resolveDesperateWrath(
   ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Desperate Wrath')) {
     return { success: false, message: `${actor.name} does not have Desperate Wrath.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -1347,7 +1348,7 @@ export function resolvePenetratingProjectile(
   targetId?: string,
   weaponId?: string,
   heroPointsSpent?: number,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Penetrating Projectile')) {
     return { success: false, message: `${actor.name} does not have Penetrating Projectile.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -1380,7 +1381,7 @@ export function resolveViciousEvisceration(
   targetId?: string,
   weaponId?: string,
   heroPointsSpent?: number,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Vicious Evisceration')) {
     return { success: false, message: `${actor.name} does not have Vicious Evisceration.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -1422,7 +1423,7 @@ export function resolveQuakingStomp(
   ctx: FeatActionContext,
   actor: Creature,
   gameState: GameState,
-): any {
+): ActionResult {
   if (!ctx.hasFeat(actor, 'Quaking Stomp')) {
     return { success: false, message: `${actor.name} does not have Quaking Stomp.`, errorCode: 'FEAT_NOT_AVAILABLE' };
   }
@@ -1478,7 +1479,7 @@ export function resolveBarrelingCharge(
   gameState: GameState,
   targetId?: string,
   weaponId?: string,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging to use Barreling Charge.`, errorCode: 'NOT_RAGING' };
   }
@@ -1528,7 +1529,7 @@ export function resolveBrutalBully(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   const strMod = actor.abilities ? Math.floor((actor.abilities.strength - 10) / 2) : 0;
   return {
     success: true,
@@ -1548,7 +1549,7 @@ export function resolveOverpoweringCharge(
   gameState: GameState,
   targetId?: string,
   weaponId?: string,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging to use Overpowering Charge.`, errorCode: 'NOT_RAGING' };
   }
@@ -1605,7 +1606,7 @@ export function resolveAwesomeBlow(
   actor: Creature,
   gameState: GameState,
   targetId?: string,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging.`, errorCode: 'NOT_RAGING' };
   }
@@ -1658,7 +1659,7 @@ export function resolveWhirlwindToss(
   actor: Creature,
   gameState: GameState,
   targetId?: string,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging.`, errorCode: 'NOT_RAGING' };
   }
@@ -1733,7 +1734,7 @@ export function resolveTitansStature(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging.`, errorCode: 'NOT_RAGING' };
   }
@@ -1770,7 +1771,7 @@ export function resolveDragonTransformation(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging.`, errorCode: 'NOT_RAGING' };
   }
@@ -1804,7 +1805,7 @@ export function resolveDragonsRageWings(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging.`, errorCode: 'NOT_RAGING' };
   }
@@ -1843,7 +1844,7 @@ export function resolveImpressiveLanding(
   _ctx: FeatActionContext,
   actor: Creature,
   gameState: GameState,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging.`, errorCode: 'NOT_RAGING' };
   }
@@ -1908,7 +1909,7 @@ export function resolveTangleOfBattle(
   gameState: GameState,
   targetId?: string,
   weaponId?: string,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging.`, errorCode: 'NOT_RAGING' };
   }
@@ -1940,7 +1941,7 @@ export function resolveEmbraceThePain(
   gameState: GameState,
   targetId?: string,
   weaponId?: string,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging.`, errorCode: 'NOT_RAGING' };
   }
@@ -1986,7 +1987,7 @@ export function resolveVengefulStrike(
   gameState: GameState,
   targetId?: string,
   weaponId?: string,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging.`, errorCode: 'NOT_RAGING' };
   }
@@ -2031,7 +2032,7 @@ export function resolveFuriousVengeance(
   gameState: GameState,
   targetId?: string,
   weaponId?: string,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging.`, errorCode: 'NOT_RAGING' };
   }
@@ -2067,7 +2068,7 @@ export function resolvePerfectClarity(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging.`, errorCode: 'NOT_RAGING' };
   }
@@ -2101,7 +2102,7 @@ export function resolveShatteringBlows(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging.`, errorCode: 'NOT_RAGING' };
   }
@@ -2139,7 +2140,7 @@ export function resolveRagingResistance(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging.`, errorCode: 'NOT_RAGING' };
   }
@@ -2184,7 +2185,7 @@ export function resolveInstinctiveStrike(
   actor: Creature,
   gameState: GameState,
   targetId?: string,
-): any {
+): ActionResult {
   if (!actor.rageActive) {
     return { success: false, message: `${actor.name} must be raging.`, errorCode: 'NOT_RAGING' };
   }
@@ -2224,7 +2225,7 @@ export function resolveMightyRage(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!actor.conditions) actor.conditions = [];
   actor.conditions = actor.conditions.filter(c => c.name !== 'mighty-rage');
   actor.conditions.push({
@@ -2255,7 +2256,7 @@ export function resolveQuickTempered(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   // Check requirements: not encumbered
   const isEncumbered = (actor.conditions ?? []).some(c => c.name === 'encumbered');
   if (isEncumbered) {
@@ -2302,7 +2303,7 @@ export function resolveInstinct(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   const instinct = (actor.barbarianInstinct ?? 'fury').toLowerCase();
   if (!actor.conditions) actor.conditions = [];
   actor.conditions = actor.conditions.filter(c => c.source !== 'instinct');
@@ -2329,7 +2330,7 @@ export function resolveRevitalizingRage(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!actor.conditions) actor.conditions = [];
   actor.conditions = actor.conditions.filter(c => c.name !== 'revitalizing-rage');
   actor.conditions.push({
@@ -2356,7 +2357,7 @@ export function resolveAdrenalineRush(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   const rageCheck = requiresRage(actor, 'Adrenaline Rush');
   if (rageCheck) return rageCheck;
 
@@ -2395,7 +2396,7 @@ export function resolveDraconicArrogance(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   const rageCheck = requiresRage(actor, 'Draconic Arrogance');
   if (rageCheck) return rageCheck;
 
@@ -2435,7 +2436,7 @@ export function resolveRagingAthlete(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   const rageCheck = requiresRage(actor, 'Raging Athlete');
   if (rageCheck) return rageCheck;
 
@@ -2468,7 +2469,7 @@ export function resolveSupernaturalSenses(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   const rageCheck = requiresRage(actor, 'Supernatural Senses');
   if (rageCheck) return rageCheck;
 
@@ -2499,7 +2500,7 @@ export function resolveAnimalSkin(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   const rageCheck = requiresRage(actor, 'Animal Skin');
   if (rageCheck) return rageCheck;
 
@@ -2548,7 +2549,7 @@ export function resolveNocturnalSenses(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   const rageCheck = requiresRage(actor, 'Nocturnal Senses');
   if (rageCheck) return rageCheck;
 
@@ -2609,7 +2610,7 @@ export function resolveAnimalisticBrutality(
   _targetId?: string,
   _weaponId?: string,
   traitChoice?: string,
-): any {
+): ActionResult {
   const rageCheck = requiresRage(actor, 'Animalistic Brutality');
   if (rageCheck) return rageCheck;
 
@@ -2655,7 +2656,7 @@ export function resolveFuriousBully(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   const rageCheck = requiresRage(actor, 'Furious Bully');
   if (rageCheck) return rageCheck;
 
@@ -2698,7 +2699,7 @@ export function resolveSunderSpell(
   gameState: GameState,
   targetId?: string,
   weaponId?: string,
-): any {
+): ActionResult {
   const rageCheck = requiresRage(actor, 'Sunder Spell');
   if (rageCheck) return rageCheck;
 
@@ -2740,7 +2741,7 @@ export function resolveSunderSpell(
 
   // On hit: counteract check
   const counteractRank = Math.ceil(actor.level / 2);
-  const attackRoll = strikeResult.details?.attackRoll?.total ?? (rollD20() + calculateAttackBonus(actor, ctx.resolveSelectedWeapon(actor) ?? undefined as any));
+  const attackRoll = strikeResult.details?.attackRoll?.total ?? (rollD20() + calculateAttackBonus(actor, ctx.resolveSelectedWeapon(actor) ?? (undefined as unknown as CreatureWeapon)));
 
   // Find active spell conditions on target
   const spellConditions = (target.conditions ?? []).filter(c =>
@@ -2783,7 +2784,7 @@ export function resolveSunderEnchantment(
   _ctx: FeatActionContext,
   actor: Creature,
   _gameState: GameState,
-): any {
+): ActionResult {
   if (!actor.conditions) actor.conditions = [];
   actor.conditions = actor.conditions.filter(c => c.name !== 'sunder-enchantment');
   actor.conditions.push({

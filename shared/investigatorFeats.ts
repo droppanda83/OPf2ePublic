@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Investigator Class Features & Feats — PF2e Remastered (Player Core 2)
  * Source: https://2e.aonprd.com/Classes.aspx?ID=13 (internal ID 59)
  *
@@ -679,7 +679,7 @@ export const INVESTIGATOR_CLASS_FEATS: FeatEntry[] = [
     source: 'Impossible Lands',
     category: 'class',
     level: 8,
-    description: 'You have mastered a magical technique for moving through dangerous woodlands unseen. You can cast pass without trace as an innate primal spell heightened to a spell level equal to half your level rounded up.',
+    description: 'You have mastered a magical technique for moving through dangerous woodlands unseen. You can cast pass without trace as an innate primal spell heightened to a spell rank equal to half your level rounded up.',
     implemented: 'full',
     traits: ['Rare', 'Gunslinger', 'Investigator', 'Ranger'],
     actionCost: 'passive',

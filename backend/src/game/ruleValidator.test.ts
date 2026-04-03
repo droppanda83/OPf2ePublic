@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateAction, getActionCost } from './ruleValidator';
-import type { Creature, GameState } from 'pf2e-shared';
+import type { Creature, GameState, WeaponSlot } from 'pf2e-shared';
 
 // ─── Fixture Helpers ─────────────────────────────────────────
 
@@ -162,10 +162,23 @@ test('validateAction: free actions work with 0 remaining actions', () => {
 // ─── Validate: Valid strike ──────────────────────────────────
 
 test('validateAction: valid strike against adjacent enemy passes', () => {
+  const weaponInventory: WeaponSlot[] = [{
+    weapon: {
+      id: 'longsword',
+      display: 'Longsword',
+      attackType: 'melee',
+      damageDice: '1d8',
+      damageType: 'slashing',
+      hands: 1,
+      traits: [],
+      weaponCatalogId: 'longsword',
+    },
+    state: 'held',
+  }];
   const actor = makeCreature({
     actionsRemaining: 3, positions: { x: 0, y: 0 },
     equippedWeapon: 'longsword',
-    weaponInventory: [{ weapon: { id: 'longsword', name: 'Longsword', damage: '1d8', damageType: 'slashing', rangeIncrement: 0, traits: [], weaponCategory: 'martial', group: 'sword', hands: '1' }, state: 'held' }] as any,
+    weaponInventory,
   });
   const enemy = makeEnemy({ positions: { x: 1, y: 0 } });
   const gs = makeGameState([actor, enemy]);

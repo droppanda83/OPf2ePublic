@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Gunslinger Class Features & Feats — PF2e Remastered (Guns & Gears)
  * Source: https://2e.aonprd.com/Classes.aspx?ID=20
  *
@@ -719,7 +719,7 @@ export const GUNSLINGER_CLASS_FEATS: FeatEntry[] = [
     source: 'Impossible Lands',
     category: 'class',
     level: 8,
-    description: 'You have mastered a magical technique for moving through dangerous woodlands unseen. You can cast pass without trace as an innate primal spell heightened to a spell level equal to half your level rounded up.',
+    description: 'You have mastered a magical technique for moving through dangerous woodlands unseen. You can cast pass without trace as an innate primal spell heightened to a spell rank equal to half your level rounded up.',
     implemented: 'full',
     traits: ['Rare', 'Gunslinger', 'Investigator', 'Ranger'],
     actionCost: 'passive',

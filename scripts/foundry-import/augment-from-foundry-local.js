@@ -25,7 +25,7 @@ const BESTIARY_SOURCE_FILE = path.join(SOURCE_DIR, 'bestiary.source.json');
 const FEATS_SOURCE_FILE = path.join(SOURCE_DIR, 'feats.source.json');
 
 const MAX_SPELLS = Number(process.env.MAX_SPELLS || 2000);
-const MAX_CREATURES = Number(process.env.MAX_CREATURES || 800);
+const MAX_CREATURES = Number(process.env.MAX_CREATURES || 5000);
 const MAX_FEATS = Number(process.env.MAX_FEATS || 2000);
 
 const VALID_DAMAGE_TYPES = new Set([
@@ -397,7 +397,7 @@ function convertCreature(foundry, filePath) {
     name: String(foundry.name || path.basename(filePath, '.json')),
     level,
     hp: Math.max(1, Number.isFinite(hp) ? hp : 1),
-    ac: Math.max(10, Number.isFinite(ac) ? ac : 10),
+    ac: Number.isFinite(ac) ? ac : 10,
     speed: Math.max(5, Number.isFinite(speed) ? speed : 5),
     abilities: {
       str: Number(abilities.str?.mod ?? 0),
@@ -413,6 +413,69 @@ function convertCreature(foundry, filePath) {
     description: firstSentence(stripHtml(details.publicNotes || details.blurb || ''), 300) || 'Creature imported from Foundry PF2e data.',
   };
 
+  // ── Perception, Saves, Senses, Languages, Rarity, Size ──
+  const perception = system.perception || {};
+  const perceptionMod = Number(perception.mod);
+  if (Number.isFinite(perceptionMod)) creature.perception = perceptionMod;
+
+  const saves = system.saves || {};
+  const fort = Number(saves.fortitude?.value);
+  const ref = Number(saves.reflex?.value);
+  const will = Number(saves.will?.value);
+  if (Number.isFinite(fort)) creature.fortitudeSave = fort;
+  if (Number.isFinite(ref)) creature.reflexSave = ref;
+  if (Number.isFinite(will)) creature.willSave = will;
+
+  const senses = [];
+  if (Array.isArray(perception.senses)) {
+    for (const s of perception.senses) {
+      const sType = String(s?.type || '').toLowerCase();
+      if (!sType) continue;
+      let label = sType.replace(/-/g, ' ');
+      if (s.acuity && s.acuity !== 'precise') label += ` (${s.acuity})`;
+      if (s.range) label += ` ${s.range} feet`;
+      senses.push(label);
+    }
+  }
+  if (perception.details) {
+    senses.push(String(perception.details).trim());
+  }
+  if (senses.length > 0) creature.senses = senses;
+
+  const langValues = Array.isArray(details.languages?.value)
+    ? details.languages.value.map((l) => String(l).trim()).filter(Boolean)
+    : [];
+  if (details.languages?.details) {
+    langValues.push(String(details.languages.details).trim());
+  }
+  if (langValues.length > 0) creature.languages = langValues;
+
+  const rarity = String(system.traits?.rarity || '').toLowerCase();
+  if (['uncommon', 'rare', 'unique'].includes(rarity)) creature.rarity = rarity;
+
+  const sizeVal = String(system.traits?.size?.value || '').toLowerCase();
+  const SIZE_MAP = { tiny: 'tiny', sm: 'small', med: 'medium', lg: 'large', huge: 'huge', grg: 'gargantuan' };
+  if (SIZE_MAP[sizeVal]) creature.size = SIZE_MAP[sizeVal];
+
+  // ── Skills ──
+  const foundrySkills = system.skills || {};
+  const SKILL_NAMES = {
+    acrobatics: 'Acrobatics', arcana: 'Arcana', athletics: 'Athletics',
+    crafting: 'Crafting', deception: 'Deception', diplomacy: 'Diplomacy',
+    intimidation: 'Intimidation', medicine: 'Medicine', nature: 'Nature',
+    occultism: 'Occultism', performance: 'Performance', religion: 'Religion',
+    society: 'Society', stealth: 'Stealth', survival: 'Survival',
+    thievery: 'Thievery',
+  };
+  const skillEntries = [];
+  for (const [key, data] of Object.entries(foundrySkills)) {
+    const bonus = Number(data?.base ?? data?.value);
+    if (!Number.isFinite(bonus)) continue;
+    const name = SKILL_NAMES[key] || key.charAt(0).toUpperCase() + key.slice(1);
+    skillEntries.push({ name, bonus });
+  }
+  if (skillEntries.length > 0) creature.skills = skillEntries;
+
   const traitValues = Array.isArray(system.traits?.value)
     ? system.traits.value.map((t) => String(t).toLowerCase())
     : [];
@@ -422,11 +485,11 @@ function convertCreature(foundry, filePath) {
     ? foundry.items.filter((it) => it && it.type === 'melee')
     : [];
 
-  let bestAttackBonus = creature.attackBonus;
+  let bestAttackBonus = 0;
   for (let index = 0; index < meleeItems.length; index += 1) {
     const item = meleeItems[index];
     const itemSystem = item.system || {};
-    const bonus = Number(itemSystem.bonus?.value ?? level + 6);
+    const bonus = Number(itemSystem.bonus?.value);
     if (Number.isFinite(bonus) && bonus > bestAttackBonus) bestAttackBonus = bonus;
 
     const rollEntry = itemSystem.damageRolls && typeof itemSystem.damageRolls === 'object'
@@ -474,7 +537,7 @@ function convertCreature(foundry, filePath) {
     });
   }
 
-  creature.attackBonus = bestAttackBonus;
+  creature.attackBonus = bestAttackBonus > 0 ? bestAttackBonus : Math.max(level + 6, 4);
 
   const resistances = Array.isArray(attrs.resistances) ? attrs.resistances : [];
   const weaknesses = Array.isArray(attrs.weaknesses) ? attrs.weaknesses : [];
