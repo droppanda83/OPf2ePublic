@@ -7885,7 +7885,7 @@ export class RulesEngine {
         // ÔöÇÔöÇÔöÇ Companion / Familiar / Eidolon Actions ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
         case 'spawn-companion': {
           const speciesId = targetId || 'wolf';
-          const maturity = (weaponId as any) || 'young';
+          const maturity = weaponId || 'young';
           return spawnCompanion(actor, speciesId, gameState, maturity);
         }
         case 'command-companion': {
@@ -7898,7 +7898,7 @@ export class RulesEngine {
         }
         case 'mature-companion': {
           if (!targetId) return fail('Must specify companion to mature.');
-          const newMaturity = (weaponId as any) || 'mature';
+          const newMaturity = weaponId || 'mature';
           const specialization = pickupDestination;
           return matureCompanion(targetId, newMaturity, gameState, specialization);
         }
@@ -7974,8 +7974,8 @@ export class RulesEngine {
     heroPointsSpent?: number
   ): any {
     // First, check if the actor has Vicious Swing
-    const specials = (actor as any).specials;
-    const feats = (actor as any).feats;
+    const specials = actor.specials;
+    const feats = actor.feats;
     const hasViciousStrike = Array.isArray(specials)
       ? specials.some((entry: any) => typeof entry === 'string'
         && entry.toLowerCase().includes('vicious swing'))
@@ -11131,7 +11131,7 @@ export class RulesEngine {
       return name.includes('reactive strike') || name.includes('attack of opportunity');
     }) ?? false;
 
-    const specials = (actor as any).specials;
+    const specials = actor.specials;
     const specialsMatch = Array.isArray(specials)
       ? specials.some((entry: any) => typeof entry === 'string' && entry.toLowerCase().includes('reactive strike'))
       : false;
@@ -12681,7 +12681,7 @@ export class RulesEngine {
     });
     
     // Check specials array (exact match)
-    const hasSpecial = (creature as any).specials?.some((s: any) => 
+    const hasSpecial = creature.specials?.some((s: any) => 
       typeof s === 'string' && s.toLowerCase().trim() === lowerFeatName
     );
     
@@ -12889,7 +12889,7 @@ export class RulesEngine {
       const name = typeof f === 'string' ? f : f?.name;
       if (typeof name === 'string' && name.toLowerCase().includes('flexible flurry')) {
         // Store reference to weapon-specific MAP tracking
-        (actor as any).mapByWeapon = mapByWeapon;
+        actor.mapByWeapon = mapByWeapon;
       }
     });
 
@@ -13019,7 +13019,7 @@ export class RulesEngine {
     });
 
     // Mark that the fighter has an extra reaction this round
-    (actor as any).extraReactionsAvailable = 1;
+    actor.extraReactionsAvailable = 1;
 
     return {
       success: true,
