@@ -214,6 +214,105 @@ export class RulesEngine {
     r['hunt-prey'] = () => fail('Hunt Prey is not implemented yet.');
     r['devise-a-stratagem'] = () => fail('Devise a Stratagem is not implemented yet.');
 
+    // Fighter feats (Level 1-4)
+    r['power-attack'] = (ctx) => this.resolvePowerAttack(ctx.actor, ctx.gameState, ctx.targetId, ctx.weaponId, ctx.heroPointsSpent);
+    r['sudden-charge'] = (ctx) => this.resolveSuddenCharge(ctx.actor, ctx.gameState, ctx.targetId, ctx.weaponId, ctx.targetPosition, ctx.heroPointsSpent);
+    r['double-slice'] = (ctx) => this.resolveDoubleSlice(ctx.actor, ctx.gameState, ctx.targetId, ctx.heroPointsSpent);
+    r['intimidating-strike'] = (ctx) => this.resolveIntimidatingStrike(ctx.actor, ctx.gameState, ctx.targetId, ctx.weaponId, ctx.heroPointsSpent);
+    r['exacting-strike'] = (ctx) => this.resolveExactingStrike(ctx.actor, ctx.gameState, ctx.targetId, ctx.weaponId, ctx.heroPointsSpent);
+    r['snagging-strike'] = (ctx) => this.resolveSnaggingStrike(ctx.actor, ctx.gameState, ctx.targetId, ctx.weaponId, ctx.heroPointsSpent);
+    r['knockdown'] = (ctx) => this.resolveKnockdown(ctx.actor, ctx.gameState, ctx.targetId, ctx.weaponId, ctx.heroPointsSpent);
+    r['aggressive-block'] = () => fail('Aggressive Block is not fully implemented yet.');
+    r['brutish-shove'] = (ctx) => this.resolveBrutishShove(ctx.actor, ctx.gameState, ctx.targetId, ctx.heroPointsSpent);
+    r['combat-grab'] = () => fail('Combat Grab is not fully implemented yet.');
+    r['dueling-parry'] = (ctx) => this.resolveDuelingParry(ctx.actor);
+    r['lunge'] = (ctx) => this.resolveLunge(ctx.actor, ctx.gameState, ctx.targetId, ctx.weaponId, ctx.heroPointsSpent);
+    r['swipe'] = () => fail('Swipe is not fully implemented yet.');
+    r['twin-parry'] = (ctx) => this.resolveTwinParry(ctx.actor);
+    r['shatter-defenses'] = (ctx) => this.resolveShatterDefenses(ctx.actor, ctx.gameState, ctx.targetId, ctx.weaponId, ctx.heroPointsSpent);
+
+    // Fighter feats (Level 6+)
+    r['armor-specialization'] = (ctx) => this.resolveArmorSpecialization(ctx.actor);
+    r['fearless'] = (ctx) => this.resolveFearless(ctx.actor);
+    r['guardians-deflection'] = () => fail('Guardian\'s Deflection is not fully implemented yet.');
+    r['weapon-mastery'] = (ctx) => this.resolveWeaponMastery(ctx.actor);
+    r['flexible-flurry'] = (ctx) => this.resolveFlexibleFlurry(ctx.actor);
+    r['dueling-riposte'] = () => fail('Dueling Riposte is not fully implemented yet.');
+    r['iron-will'] = (ctx) => this.resolveIronWill(ctx.actor, ctx.heroPointsSpent);
+    r['reflexive-shield'] = (ctx) => this.resolveReflexiveShield(ctx.actor);
+    r['attack-of-opportunity-reactive'] = (ctx) => this.resolveReactiveStrike(ctx.actor, ctx.gameState, ctx.targetId);
+    r['improved-reflexes'] = (ctx) => this.resolveImprovedReflexes(ctx.actor);
+    r['reaction-enhancement'] = (ctx) => this.resolveReactionEnhancement(ctx.actor);
+
+    // Extended fighter feats (all levels)
+    r['reactive-shield'] = (ctx) => this.resolveReactiveShield(ctx.actor);
+    r['cleaving-finish'] = (ctx) => this.resolveCleavingFinish(ctx.actor, ctx.gameState, ctx.targetId, ctx.weaponId, ctx.heroPointsSpent);
+    r['whirlwind-strike'] = () => fail('Whirlwind Strike requires complex AoE logic (deferred).');
+    r['intimidating-prowess'] = (ctx) => this.resolveIntimidatingProwess(ctx.actor, ctx.gameState, ctx.targetId, ctx.heroPointsSpent);
+    r['shield-warden'] = (ctx) => this.resolveShieldWarden(ctx.actor, ctx.gameState, ctx.targetId);
+    r['weapon-supremacy'] = (ctx) => this.resolveWeaponSupremacy(ctx.actor);
+    r['legendary-weapon'] = (ctx) => this.resolveLegendaryWeapon(ctx.actor);
+    r['berserk-striker'] = (ctx) => this.resolveBerserkStrike(ctx.actor, ctx.heroPointsSpent);
+    r['reactive-assault'] = (ctx) => this.resolveReactiveAssault(ctx.actor, ctx.gameState, ctx.targetId, ctx.weaponId, ctx.heroPointsSpent);
+    r['close-quarters-shot'] = (ctx) => this.resolveCloseQuartersShot(ctx.actor, ctx.gameState, ctx.targetId, ctx.weaponId, ctx.heroPointsSpent);
+    r['blade-ally'] = (ctx) => this.resolveBladeAlly(ctx.actor);
+    r['versatile-heritage'] = (ctx) => this.resolveVersatileHeritage(ctx.actor, ctx.weaponId);
+    r['duelists-expertise'] = (ctx) => this.resolveDuelistsExpertise(ctx.actor);
+
+    // Psychic dedication actions
+    r['warp-step-amped'] = (ctx) => this.resolveWarpStepAmped(ctx.actor, ctx.gameState, ctx.targetPosition);
+    r['teleport'] = (ctx) => this.resolveTeleportAction(ctx.actor, ctx.gameState, ctx.targetPosition);
+
+    // Companion / Familiar / Eidolon actions
+    r['spawn-companion'] = (ctx) => {
+      const speciesId = ctx.targetId || 'wolf';
+      const maturity = ctx.weaponId || 'young';
+      return spawnCompanion(ctx.actor, speciesId, ctx.gameState, maturity);
+    };
+    r['command-companion'] = (ctx) => {
+      if (!ctx.targetId) return fail('Must specify companion to command.');
+      return commandCompanion(ctx.actor, ctx.targetId, ctx.gameState);
+    };
+    r['companion-support'] = (ctx) => {
+      if (!ctx.targetId) return fail('Must specify companion for support.');
+      return companionSupport(ctx.actor, ctx.targetId, ctx.gameState);
+    };
+    r['mature-companion'] = (ctx) => {
+      if (!ctx.targetId) return fail('Must specify companion to mature.');
+      const newMaturity = ctx.weaponId || 'mature';
+      const specialization = ctx.pickupDestination;
+      return matureCompanion(ctx.targetId, newMaturity, ctx.gameState, specialization);
+    };
+    r['dismiss-companion'] = (ctx) => {
+      if (!ctx.targetId) return fail('Must specify companion to dismiss.');
+      return dismissCompanion(ctx.targetId, ctx.gameState, 'dismissed');
+    };
+    r['spawn-familiar'] = (ctx) => {
+      const familiarName = ctx.pickupDestination || 'Familiar';
+      return spawnFamiliar(ctx.actor, ctx.gameState, familiarName);
+    };
+    r['select-familiar-abilities'] = (ctx) => {
+      if (!ctx.targetId) return fail('Must specify abilities to select.');
+      const abilityIds = ctx.targetId.split(',').map(s => s.trim());
+      return selectFamiliarAbilities(ctx.actor, abilityIds, ctx.gameState);
+    };
+    r['dismiss-familiar'] = (ctx) => dismissFamiliar(ctx.actor, ctx.gameState);
+    r['familiar-deliver-spell'] = (ctx) => {
+      if (!ctx.targetId) return fail('Must specify spell delivery target.');
+      return familiarDeliverSpell(ctx.actor, ctx.targetId, ctx.gameState);
+    };
+    r['manifest-eidolon'] = (ctx) => manifestEidolon(ctx.actor, ctx.gameState, ctx.targetPosition);
+    r['act-together'] = (ctx) => {
+      const summonerActions = (parseInt(ctx.weaponId || '1', 10) as 1 | 2) || 1;
+      return actTogether(ctx.actor, ctx.gameState, summonerActions);
+    };
+    r['command-eidolon'] = (ctx) => commandEidolon(ctx.actor, ctx.gameState);
+    r['dismiss-eidolon'] = (ctx) => dismissEidolon(ctx.actor, ctx.gameState);
+    r['apply-evolution'] = (ctx) => {
+      if (!ctx.targetId) return fail('Must specify evolution to apply.');
+      return applyEvolution(ctx.actor, ctx.targetId, ctx.gameState);
+    };
+
     return r;
   }
 
@@ -399,7 +498,7 @@ export class RulesEngine {
       }
     }
 
-    // Route to specific action type via registry, then legacy switch fallback
+    // Route to specific action type via registry, then feat map, then spell fallback
     const ctx: ActionContext = { actionId, actor, gameState, targetId, targetPosition, weaponId, pickupDestination, heroPointsSpent, readyActionId, itemId, spellId };
     const registeredHandler = this.actionRegistry[actionId];
     if (registeredHandler) return registeredHandler(ctx);
@@ -408,239 +507,70 @@ export class RulesEngine {
     const featResolver = featActionMap[actionId];
     if (featResolver) return featResolver(this.getFeatActionContext(), actor, gameState, targetId, targetPosition);
 
-    // Legacy switch for actions not yet migrated to registry
-    switch (actionId) {
-      // ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
-      // PHASE 5.2: FIGHTER FEATS (Level 1-4)
-      // ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
-      case 'power-attack':
-        return this.resolvePowerAttack(actor, gameState, targetId, weaponId, heroPointsSpent);
-      case 'sudden-charge':
-        return this.resolveSuddenCharge(actor, gameState, targetId, weaponId, targetPosition, heroPointsSpent);
-      case 'double-slice':
-        return this.resolveDoubleSlice(actor, gameState, targetId, heroPointsSpent);
-      case 'intimidating-strike':
-        return this.resolveIntimidatingStrike(actor, gameState, targetId, weaponId, heroPointsSpent);
-      case 'exacting-strike':
-        return this.resolveExactingStrike(actor, gameState, targetId, weaponId, heroPointsSpent);
-      case 'snagging-strike':
-        return this.resolveSnaggingStrike(actor, gameState, targetId, weaponId, heroPointsSpent);
-      case 'knockdown':
-        return this.resolveKnockdown(actor, gameState, targetId, weaponId, heroPointsSpent);
-      case 'aggressive-block':
-        return fail('Aggressive Block is not fully implemented yet.');
-      case 'brutish-shove':
-        return this.resolveBrutishShove(actor, gameState, targetId, heroPointsSpent);
-      case 'combat-grab':
-        return fail('Combat Grab is not fully implemented yet.');
-      case 'dueling-parry':
-        return this.resolveDuelingParry(actor);
-      case 'lunge':
-        return this.resolveLunge(actor, gameState, targetId, weaponId, heroPointsSpent);
-      case 'swipe':
-        return fail('Swipe is not fully implemented yet.');
-      case 'twin-parry':
-        return this.resolveTwinParry(actor);
-      case 'shatter-defenses':
-        return this.resolveShatterDefenses(actor, gameState, targetId, weaponId, heroPointsSpent);
-      // ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
-      // PHASE 5.2+: FIGHTER FEATS (Level 6+)
-      // ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
-      case 'armor-specialization':
-        return this.resolveArmorSpecialization(actor);
-      case 'fearless':
-        return this.resolveFearless(actor);
-      case 'guardians-deflection':
-        return fail('Guardian\'s Deflection is not fully implemented yet.');
-      case 'weapon-mastery':
-        return this.resolveWeaponMastery(actor);
-      case 'flexible-flurry':
-        return this.resolveFlexibleFlurry(actor);
-      case 'dueling-riposte':
-        return fail('Dueling Riposte is not fully implemented yet.');
-      case 'iron-will':
-        return this.resolveIronWill(actor, heroPointsSpent);
-      case 'reflexive-shield':
-        return this.resolveReflexiveShield(actor);
-      case 'attack-of-opportunity-reactive':
-        return this.resolveReactiveStrike(actor, gameState, targetId);
-      case 'improved-reflexes':
-        return this.resolveImprovedReflexes(actor);
-      case 'reaction-enhancement':
-        return this.resolveReactionEnhancement(actor);
-      // ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
-      // PHASE 5.3: EXTENDED FIGHTER FEATS (All Levels)
-      // ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
-      case 'reactive-shield':
-        return this.resolveReactiveShield(actor);
-      case 'cleaving-finish':
-        return this.resolveCleavingFinish(actor, gameState, targetId, weaponId, heroPointsSpent);
-      case 'whirlwind-strike':
-        return fail('Whirlwind Strike requires complex AoE logic (deferred).');
-      case 'intimidating-prowess':
-        return this.resolveIntimidatingProwess(actor, gameState, targetId, heroPointsSpent);
-      case 'shield-warden':
-        return this.resolveShieldWarden(actor, gameState, targetId);
-      case 'weapon-supremacy':
-        return this.resolveWeaponSupremacy(actor);
-      case 'legendary-weapon':
-        return this.resolveLegendaryWeapon(actor);
-      case 'berserk-striker':
-        return this.resolveBerserkStrike(actor, heroPointsSpent);
-      case 'reactive-assault':
-        return this.resolveReactiveAssault(actor, gameState, targetId, weaponId, heroPointsSpent);
-      case 'close-quarters-shot':
-        return this.resolveCloseQuartersShot(actor, gameState, targetId, weaponId, heroPointsSpent);
-      case 'blade-ally':
-        return this.resolveBladeAlly(actor);
-      case 'versatile-heritage':
-        return this.resolveVersatileHeritage(actor, weaponId);
-      case 'duelists-expertise':
-        return this.resolveDuelistsExpertise(actor);
-      // ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
-      // PHASE 6: PSYCHIC DEDICATION ACTIONS
-      // ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
-      case 'warp-step-amped': {
-        // Amped Warp Step: costs 1 focus point, cast as 1 action
-        // PF2e: "Space contracts with hardly a thought, letting you Cast the Spell as a single action."
-        // At heightened 4th+: can teleport (range = 2├ù Speed after bonus)
-        const warpSpell = getSpell('warp-step');
-        if (!warpSpell) return fail('Warp Step spell not found.');
-        const ampCastCheck = this.canCastAndConsumeSlot(actor, warpSpell);
-        if (!ampCastCheck.canCast) return fail(ampCastCheck.message || 'Cannot cast spell');
-        return this.resolveWarpStep(actor, gameState, ampCastCheck.heightenedRank ?? 1, targetPosition, true);
-      }
-      case 'teleport': {
-        // Execute a pending teleport from Warp Step (Amped Heightened 4th)
-        // Used when the player casts warp-step-amped without a target position first,
-        // then chooses where to teleport as a follow-up action
-        const teleportCondition = actor.conditions?.find(c => c.name === 'warp-step-teleport');
-        if (!teleportCondition) {
-          return fail(`${actor.name} has no pending teleport available.`);
-        }
-        if (!targetPosition) {
-          return fail('No teleport destination specified.');
-        }
-        const teleportRange = teleportCondition.value ?? 0;
-        const dist = this.calculateDistance(actor.positions, targetPosition);
-        if (dist > teleportRange) {
-          return {
-            success: false,
-            message: `Cannot teleport ${(dist * 5).toFixed(0)}ft ÔÇö max range is ${(teleportRange * 5).toFixed(0)}ft.`,
-            errorCode: 'OUT_OF_RANGE',
-          };
-        }
-        // Validate bounds
-        const mw = gameState.map?.width ?? 0;
-        const mh = gameState.map?.height ?? 0;
-        if (targetPosition.x < 0 || targetPosition.y < 0 || targetPosition.x >= mw || targetPosition.y >= mh) {
-          return fail(`Teleport destination outside map bounds.`, 'OUT_OF_BOUNDS');
-        }
-        // Validate not occupied (multi-tile aware)
-        const teleportOccupied = new Set<string>();
-        gameState.creatures
-          .filter(c => c.id !== actor.id && c.currentHealth > 0)
-          .forEach(c => { for (const k of getOccupiedKeys(c)) teleportOccupied.add(k); });
-        const isOccupied = teleportOccupied.has(`${targetPosition.x},${targetPosition.y}`);
-        if (isOccupied) {
-          return fail(`Teleport destination occupied.`, 'DESTINATION_OCCUPIED');
-        }
-        // Check immobilization
-        const immob = actor.conditions?.find(c =>
-          ['immobilized', 'grabbed', 'restrained', 'paralyzed'].includes(c.name)
-        );
-        if (immob) {
-          return fail(`${actor.name} cannot teleport while ${immob.name}!`, 'IMMOBILIZED');
-        }
-        // Execute teleport
-        const oldTeleportPos = { x: actor.positions.x, y: actor.positions.y };
-        actor.positions = { x: targetPosition.x, y: targetPosition.y };
-        // Remove the teleport condition (used up)
-        actor.conditions = (actor.conditions ?? []).filter(c => c.name !== 'warp-step-teleport');
-        this.cleanupStaleFlankingConditions(gameState);
-        const teleportDistFt = (dist * 5).toFixed(0);
-        return {
-          success: true,
-          message: `­ƒîÇ ${actor.name} teleports from (${oldTeleportPos.x}, ${oldTeleportPos.y}) to (${targetPosition.x}, ${targetPosition.y}) [${teleportDistFt}ft]!\n­ƒîÇ Teleportation ÔÇö no reactions triggered!`,
-          oldPosition: oldTeleportPos,
-          newPosition: targetPosition,
-          teleportDistance: dist,
-          isTeleport: true,
-        };
-      }
-            // ÔöÇÔöÇ Monk class feats ÔöÇÔöÇ
-      // ÔöÇÔöÇ Gunslinger class feats ÔöÇÔöÇ
-
-
-        // ÔöÇÔöÇÔöÇ Companion / Familiar / Eidolon Actions ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
-        case 'spawn-companion': {
-          const speciesId = targetId || 'wolf';
-          const maturity = weaponId || 'young';
-          return spawnCompanion(actor, speciesId, gameState, maturity);
-        }
-        case 'command-companion': {
-          if (!targetId) return fail('Must specify companion to command.');
-          return commandCompanion(actor, targetId, gameState);
-        }
-        case 'companion-support': {
-          if (!targetId) return fail('Must specify companion for support.');
-          return companionSupport(actor, targetId, gameState);
-        }
-        case 'mature-companion': {
-          if (!targetId) return fail('Must specify companion to mature.');
-          const newMaturity = weaponId || 'mature';
-          const specialization = pickupDestination;
-          return matureCompanion(targetId, newMaturity, gameState, specialization);
-        }
-        case 'dismiss-companion': {
-          if (!targetId) return fail('Must specify companion to dismiss.');
-          return dismissCompanion(targetId, gameState, 'dismissed');
-        }
-        case 'spawn-familiar': {
-          const familiarName = pickupDestination || 'Familiar';
-          return spawnFamiliar(actor, gameState, familiarName);
-        }
-        case 'select-familiar-abilities': {
-          // targetId = comma-separated ability IDs
-          if (!targetId) return fail('Must specify abilities to select.');
-          const abilityIds = targetId.split(',').map(s => s.trim());
-          return selectFamiliarAbilities(actor, abilityIds, gameState);
-        }
-        case 'dismiss-familiar': {
-          return dismissFamiliar(actor, gameState);
-        }
-        case 'familiar-deliver-spell': {
-          if (!targetId) return fail('Must specify spell delivery target.');
-          return familiarDeliverSpell(actor, targetId, gameState);
-        }
-        case 'manifest-eidolon': {
-          return manifestEidolon(actor, gameState, targetPosition);
-        }
-        case 'act-together': {
-          // weaponId repurposed as summonerActions count ('1' or '2')
-          const summonerActions = (parseInt(weaponId || '1', 10) as 1 | 2) || 1;
-          return actTogether(actor, gameState, summonerActions);
-        }
-        case 'command-eidolon': {
-          return commandEidolon(actor, gameState);
-        }
-        case 'dismiss-eidolon': {
-          return dismissEidolon(actor, gameState);
-        }
-        case 'apply-evolution': {
-          if (!targetId) return fail('Must specify evolution to apply.');
-          return applyEvolution(actor, targetId, gameState);
-        }
-
-        // Spell handling - check if spell exists
-      default:
-        // Try to resolve as a spell
-        const spell = getSpell(actionId);
-        if (spell) {
-          return this.resolveSpell(actor, gameState, spell, targetId, targetPosition);
-        }
-        return fail('Unknown action');
+    // Spell fallback — try to resolve as a spell
+    const spell = getSpell(actionId);
+    if (spell) {
+      return this.resolveSpell(actor, gameState, spell, targetId, targetPosition);
     }
+    return fail('Unknown action');
+  }
+
+  private resolveWarpStepAmped(actor: Creature, gameState: GameState, targetPosition?: Position): any {
+    const warpSpell = getSpell('warp-step');
+    if (!warpSpell) return fail('Warp Step spell not found.');
+    const ampCastCheck = this.canCastAndConsumeSlot(actor, warpSpell);
+    if (!ampCastCheck.canCast) return fail(ampCastCheck.message || 'Cannot cast spell');
+    return this.resolveWarpStep(actor, gameState, ampCastCheck.heightenedRank ?? 1, targetPosition, true);
+  }
+
+  private resolveTeleportAction(actor: Creature, gameState: GameState, targetPosition?: Position): any {
+    const teleportCondition = actor.conditions?.find(c => c.name === 'warp-step-teleport');
+    if (!teleportCondition) {
+      return fail(`${actor.name} has no pending teleport available.`);
+    }
+    if (!targetPosition) {
+      return fail('No teleport destination specified.');
+    }
+    const teleportRange = teleportCondition.value ?? 0;
+    const dist = this.calculateDistance(actor.positions, targetPosition);
+    if (dist > teleportRange) {
+      return {
+        success: false,
+        message: `Cannot teleport ${(dist * 5).toFixed(0)}ft — max range is ${(teleportRange * 5).toFixed(0)}ft.`,
+        errorCode: 'OUT_OF_RANGE',
+      };
+    }
+    const mw = gameState.map?.width ?? 0;
+    const mh = gameState.map?.height ?? 0;
+    if (targetPosition.x < 0 || targetPosition.y < 0 || targetPosition.x >= mw || targetPosition.y >= mh) {
+      return fail(`Teleport destination outside map bounds.`, 'OUT_OF_BOUNDS');
+    }
+    const teleportOccupied = new Set<string>();
+    gameState.creatures
+      .filter(c => c.id !== actor.id && c.currentHealth > 0)
+      .forEach(c => { for (const k of getOccupiedKeys(c)) teleportOccupied.add(k); });
+    if (teleportOccupied.has(`${targetPosition.x},${targetPosition.y}`)) {
+      return fail(`Teleport destination occupied.`, 'DESTINATION_OCCUPIED');
+    }
+    const immob = actor.conditions?.find(c =>
+      ['immobilized', 'grabbed', 'restrained', 'paralyzed'].includes(c.name)
+    );
+    if (immob) {
+      return fail(`${actor.name} cannot teleport while ${immob.name}!`, 'IMMOBILIZED');
+    }
+    const oldTeleportPos = { x: actor.positions.x, y: actor.positions.y };
+    actor.positions = { x: targetPosition.x, y: targetPosition.y };
+    actor.conditions = (actor.conditions ?? []).filter(c => c.name !== 'warp-step-teleport');
+    this.cleanupStaleFlankingConditions(gameState);
+    const teleportDistFt = (dist * 5).toFixed(0);
+    return {
+      success: true,
+      message: `${actor.name} teleports from (${oldTeleportPos.x}, ${oldTeleportPos.y}) to (${targetPosition.x}, ${targetPosition.y}) [${teleportDistFt}ft]!\nTeleportation — no reactions triggered!`,
+      oldPosition: oldTeleportPos,
+      newPosition: targetPosition,
+      teleportDistance: dist,
+      isTeleport: true,
+    };
   }
 
   private resolveStrike(
