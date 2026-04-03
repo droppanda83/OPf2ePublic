@@ -1132,7 +1132,7 @@ export function resolveHaste(ctx: SpellContext, actor: Creature, gameState: Game
   });
 
   let message = `ÔÜí ${actor.name} casts Haste${heightenedRank > 1 ? ` (Rank ${heightenedRank})` : ''} on ${target.name}!\n`;
-  message += `Ô£¿ ${target.name} is **quickened** (extra action each turn for Strike or Stride only)!`;
+  message += `Ô£¿ ${target.name} is **quickened** (extra action each turn for Stride, Strike, or Step only)!`;
 
   return {
     success: true,

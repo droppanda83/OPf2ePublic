@@ -127,17 +127,18 @@ function calculateRangeIncrementPenalty(distanceSq: number, rangeIncrementFt: nu
 /**
  * Initialize the dying condition on a creature that just dropped to 0 HP.
  * Centralizes the logic that was previously duplicated across 5+ locations.
- * PF2e: When reduced to 0 HP, gain dying (value = wounded value, min 1).
+ * PF2e: When reduced to 0 HP, gain dying 1 (+ wounded value if wounded).
+ * Wounded is NOT incremented here — it increases when dying is LOST.
  */
 function initDying(creature: Creature): string {
   creature.dying = true;
-  creature.wounded = (creature.wounded ?? 0) + 1;
   creature.deathSaveFailures = 0;
   creature.deathSaveSuccesses = 0;
-  const dyingValue = creature.wounded;
+  const woundedValue = creature.wounded ?? 0;
+  const dyingValue = 1 + woundedValue;
   creature.conditions = creature.conditions || [];
   creature.conditions.push({ name: 'dying', duration: 'permanent', value: dyingValue });
-  return ` ­ƒÆÇ ${creature.name} is DYING! (Wounded ${creature.wounded})`;
+  return ` ­ƒÆÇ ${creature.name} is DYING! (dying ${dyingValue}${woundedValue > 0 ? `, wounded ${woundedValue}` : ''})`;
 }
 
 export class RulesEngine {
@@ -345,7 +346,9 @@ export class RulesEngine {
   }
 
   /**
-   * Process persistent damage (fire burns, bleed, etc.) at the start of a creature's turn
+   * Process persistent damage (fire burns, bleed, etc.) at the end of a creature's turn.
+   * PF2e (Player Core pg. 445): "You take persistent damage at the end of each of your turns.
+   * After you take the damage, roll a DC 15 flat check to see if you recover."
    * Returns array of log entries for this creature's persistent damage
    */
   processPersistentDamage(creature: Creature): any[] {
@@ -387,14 +390,23 @@ export class RulesEngine {
         // Apply damage to creature
         creature.currentHealth -= finalDamage;
 
-        // Decrement duration
-        if (typeof condition.duration === 'number') {
-          condition.duration--;
-        }
-
         let statusMessage = '';
         if (creature.currentHealth <= 0 && !creature.dying) {
           statusMessage = initDying(creature);
+        }
+
+        // PF2e: DC 15 flat check to recover from persistent damage (rolled after taking damage)
+        const recoveryRoll = rollD20();
+        const recovered = recoveryRoll >= 15;
+        if (recovered) {
+          condition.duration = 0; // Mark for removal
+          statusMessage += ` | Recovery check: ${recoveryRoll} vs DC 15 — recovered!`;
+        } else {
+          // Decrement duration as fallback timer
+          if (typeof condition.duration === 'number') {
+            condition.duration--;
+          }
+          statusMessage += ` | Recovery check: ${recoveryRoll} vs DC 15 — still burning`;
         }
 
         entries.push({
@@ -407,13 +419,15 @@ export class RulesEngine {
           modifierValue,
           finalDamage,
           rollResults,
+          recoveryRoll,
+          recovered,
           durationRemaining: typeof condition.duration === 'number' ? condition.duration : 0,
           message: `­ƒÆÑ ${creature.name} takes ${finalDamage} ${condition.damageType} damage from ${condition.source}${statusMessage}`,
         });
       }
     });
 
-    // Remove expired conditions
+    // Remove expired/recovered conditions
     creature.conditions = creature.conditions.filter((c) => {
       if (c.isPersistentDamage && typeof c.duration === 'number') {
         return c.duration > 0;
@@ -470,7 +484,7 @@ export class RulesEngine {
     }
 
     if (typeof heroPointsSpent === 'number' && heroPointsSpent > 0) {
-      const availableHeroPoints = actor.heroPoints ?? 1;
+      const availableHeroPoints = actor.heroPoints ?? 0;
       if (heroPointsSpent < 0 || heroPointsSpent > 3) {
         return fail(`Invalid hero point spend: ${heroPointsSpent}. Must be 0-3.`);
       }
@@ -1780,7 +1794,7 @@ export class RulesEngine {
     heroPointsUsed?: number;
   } {
     // Validation: can't spend 0 or more than available
-    const availableHP = creature.heroPoints ?? 1;
+    const availableHP = creature.heroPoints ?? 0;
     
     if (heroPointsSpent === 0) {
       return ok(`${creature.name} keeps the roll of ${currentRoll.total}.`, { heroPointsUsed: 0 });
@@ -1834,7 +1848,7 @@ export class RulesEngine {
     const newResult = 'pending'; // Will be calculated when we know the DC
 
     // Deduct hero points
-    creature.heroPoints = (creature.heroPoints ?? 1) - heroPointsSpent;
+    creature.heroPoints = (creature.heroPoints ?? 0) - heroPointsSpent;
 
     return {
       success: true,
@@ -1865,7 +1879,7 @@ export class RulesEngine {
       };
     }
 
-    const availableHP = creature.heroPoints ?? 1;
+    const availableHP = creature.heroPoints ?? 0;
     if (availableHP === 0) {
       return {
         success: false,
